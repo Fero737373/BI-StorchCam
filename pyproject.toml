@@ -1,0 +1,11 @@
+[project]
+name = "bi-storchcam"
+version = "0.1.0"
+description = "Bielefeld Infoscreen mit Livestream, Wetter und moBiel-Abfahrten"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-only" }
+authors = [{ name = "BI-StorchCam Contributors" }]
+
+[project.scripts]
+bi-storchcam = "bi_storchcam.app:main"

@@ -1,0 +1,35 @@
+{
+  "app": {
+    "name": "BI-StorchCam",
+    "language": "de"
+  },
+  "video": {
+    "url": "https://www.youtube.com/watch?v=mRECZ-PJ2So",
+    "fullscreen": true
+  },
+  "location": {
+    "query": "Bielefeld",
+    "label": "Bielefeld",
+    "latitude": 52.0302,
+    "longitude": 8.5325
+  },
+  "transit": {
+    "provider": "vrr",
+    "station_id": "23005489",
+    "station_name": "Gellershagen Schneiderstraße",
+    "refresh_seconds": 15,
+    "max_rows": 5
+  },
+  "weather": {
+    "refresh_seconds": 300
+  },
+  "ui": {
+    "opacity_top": 0.82,
+    "opacity_weather": 0.78,
+    "opacity_bus": 0.88,
+    "top_clock_font_size": 34,
+    "weather_font_size": 15,
+    "bus_font_size": 12,
+    "bus_header_font_size": 14
+  }
+}
