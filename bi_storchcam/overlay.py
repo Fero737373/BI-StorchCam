@@ -59,21 +59,21 @@ class OverlayApp:
             top_h,
             top_w,
             top_x,
-            float(self._ui("opacity_top", 0.82)),
+            1.0,
         )
         self.weather_win = self._build_window(
             weather_y,
             weather_h,
             weather_w,
             weather_x,
-            float(self._ui("opacity_weather", 0.78)),
+            1.0,
         )
         self.bus_win = self._build_window(
             bus_y,
             bus_h,
             bus_w,
             bus_x,
-            float(self._ui("opacity_bus", 0.88)),
+            1.0,
         )
 
         self.time_label = tk.Label(

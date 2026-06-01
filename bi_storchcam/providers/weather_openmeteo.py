@@ -71,7 +71,9 @@ def get_weather(latitude: float, longitude: float) -> Weather:
 
 
 def format_weather(label: str, weather: Weather) -> str:
-    short_label = label.split(",")[0].strip() or "Bielefeld"
+    short_label = label.split(",")[0].strip()
+    if not short_label or short_label.isdigit():
+        short_label = "Bielefeld"
     return (
         f"{short_label} | {weather.condition} | {weather.temperature} °C | "
         f"gefühlt {weather.feels_like} °C | Wind {weather.wind_kmh} km/h | "
