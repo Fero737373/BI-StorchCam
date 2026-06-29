@@ -1,35 +1,76 @@
 {
   "app": {
     "name": "BI-StorchCam",
-    "language": "de"
+    "language": "de",
+    "timezone": "Europe/Berlin",
+    "cache_dir": "~/.cache/BI-StorchCam"
   },
-  "video": {
-    "url": "https://www.youtube.com/watch?v=mRECZ-PJ2So",
-    "fullscreen": true
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8000,
+    "state_refresh_seconds": 2
+  },
+  "kiosk": {
+    "enabled": true,
+    "display": ":0",
+    "xauthority": "~/.Xauthority",
+    "browser": "chromium",
+    "profile_dir": "/tmp/storchcam-profile",
+    "kill_existing_chromium": true,
+    "disable_screensaver": true,
+    "use_gpu": true,
+    "extra_flags": []
+  },
+  "screen": {
+    "profile": "auto",
+    "width": 1280,
+    "height": 720,
+    "output": "DSI-2",
+    "rotation": "right",
+    "touch_matrix": "0 1 0 -1 0 1 0 0 1"
   },
   "location": {
-    "query": "Bielefeld",
     "label": "Bielefeld",
     "latitude": 52.0302,
     "longitude": 8.5325
   },
-  "transit": {
-    "provider": "vrr",
-    "station_id": "23005489",
-    "station_name": "Gellershagen Schneiderstraße",
-    "refresh_seconds": 15,
-    "max_rows": 5
-  },
-  "weather": {
-    "refresh_seconds": 300
+  "stream": {
+    "url": "https://www.youtube.com/embed/kgaMXfx0G8U?autoplay=1&mute=1&playsinline=1&controls=0&modestbranding=1&rel=0",
+    "muted": true,
+    "autoplay": true
   },
   "ui": {
-    "opacity_top": 0.82,
-    "opacity_weather": 0.78,
-    "opacity_bus": 0.88,
-    "top_clock_font_size": 34,
-    "weather_font_size": 15,
-    "bus_font_size": 12,
-    "bus_header_font_size": 14
+    "menu_enabled": true,
+    "theme": "dark-radar",
+    "layout_profile": "auto",
+    "clock": {"enabled": true, "position": "top-left", "size": "auto"},
+    "weather": {"enabled": true, "mode": "smart_short", "position": "bottom", "size": "auto"},
+    "radar": {"enabled": true, "position": "left", "width": 260, "height": 190, "zoom": 10, "opacity": 0.82},
+    "transit": {"enabled": true, "position": "right", "size": "auto"},
+    "system": {"enabled": true, "position": "top-right", "diagnostic_only": false}
+  },
+  "weather": {
+    "provider": "openmeteo",
+    "refresh_seconds": 300,
+    "forecast_hours": 8,
+    "rain_mm_threshold": 0.1,
+    "rain_probability_threshold": 45
+  },
+  "transit": {
+    "provider": "vrr",
+    "refresh_seconds": 60,
+    "default_max_rows": 2,
+    "target_len": 16,
+    "stops": [
+      {
+        "title": "BEISPIEL",
+        "station_name": "Gellershagen Schneiderstraße",
+        "station_id": "23005489",
+        "line_filter": ["31"],
+        "nightbus_only": false,
+        "hide_if_empty": false,
+        "max_rows": 2
+      }
+    ]
   }
 }
