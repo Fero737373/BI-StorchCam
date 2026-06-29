@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BI-StorchCam</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <iframe id="live" class="live" title="Livestream"></iframe>
+
+  <button id="menuBtn" class="menu-btn" type="button" aria-label="Menü öffnen">☰</button>
+  <section id="clockbar" class="glass pill"><span id="clock">--:--:--</span></section>
+  <section id="sysbar" class="glass pill"><span id="sys">IP -- | CPU --% | RAM --% | Temp --°C</span></section>
+
+  <section id="radar" class="glass radar-card">
+    <div class="radar-title">Regenradar</div>
+    <div id="radar-map" class="radar-fake"></div>
+    <div class="radar-scale"><span>leicht</span><b></b><span>stark</span></div>
+  </section>
+
+  <section id="boards"></section>
+  <section id="weather" class="glass pill"><span id="weatherText">Bielefeld | Wetter lädt ...</span></section>
+
+  <aside id="menu" class="menu-panel hidden">
+    <div class="menu-head">
+      <h1>BI-StorchCam</h1>
+      <button id="closeMenu" type="button">×</button>
+    </div>
+
+    <div class="menu-grid">
+      <label>Stream URL<textarea id="cfgStream" rows="3"></textarea></label>
+      <label>Standort Label<input id="cfgLabel" type="text"></label>
+      <label>Breitengrad<input id="cfgLat" type="number" step="0.0001"></label>
+      <label>Längengrad<input id="cfgLon" type="number" step="0.0001"></label>
+      <label>Layoutprofil<select id="cfgLayout"><option>auto</option><option>raspi_7_1280x720</option><option>small_1024x600</option><option>desktop</option><option>custom</option></select></label>
+      <label>Radar Höhe<input id="cfgRadarH" type="number" min="80" max="420"></label>
+    </div>
+
+    <h2>Anzeigen</h2>
+    <div class="toggles">
+      <label><input id="showWeather" type="checkbox"> Wetter</label>
+      <label><input id="showRadar" type="checkbox"> Regenradar</label>
+      <label><input id="showTransit" type="checkbox"> Bus</label>
+      <label><input id="showSystem" type="checkbox"> Technikdaten</label>
+    </div>
+
+    <h2>Haltestellen JSON</h2>
+    <p class="hint">Lokale Haltestellen bleiben in ~/.config/BI-StorchCam/config.json.</p>
+    <textarea id="cfgStops" class="codebox" rows="12"></textarea>
+
+    <div class="station-search">
+      <input id="stationQuery" placeholder="Haltestelle suchen, z.B. Schneiderstraße">
+      <button id="stationSearchBtn" type="button">Suchen</button>
+    </div>
+    <pre id="stationResults"></pre>
+
+    <div class="menu-actions">
+      <button id="saveConfig" type="button">Speichern</button>
+      <button id="reloadConfig" type="button">Neu laden</button>
+    </div>
+    <div id="saveState" class="hint"></div>
+  </aside>
+
+  <script src="app.js"></script>
+</body>
+</html>
