@@ -4,6 +4,7 @@ let radarRefreshInFlight = false;
 
 function byId(id){ return document.getElementById(id); }
 function setText(id, text){ const el = byId(id); if(el) el.textContent = text; }
+function safeArray(value){ return Array.isArray(value) ? value : []; }
 
 function tick(){
   const d = new Date();
@@ -93,10 +94,13 @@ function renderRadar(meta){
   if(!map){ return; }
   map.replaceChildren();
 
+  const label = meta && meta.label ? meta.label : 'Bielefeld';
+  setText('radarLabel', label);
+
   if(!meta || !meta.ok || !meta.tile_url){
     map.classList.add('radar-offline');
     const error = (meta && meta.error) ? meta.error : 'keine Daten';
-    setRadarStatus('Regenradar offline · ' + error);
+    setRadarStatus('offline · ' + error);
     return;
   }
 
@@ -137,8 +141,7 @@ function renderRadar(meta){
   }
 
   map.appendChild(grid);
-  const label = currentConfig && currentConfig.location && currentConfig.location.label ? currentConfig.location.label : 'Bielefeld';
-  setRadarStatus(label + ' · live');
+  setRadarStatus(label + ' · aktuell');
 }
 
 async function refreshRadar(force){
@@ -197,7 +200,7 @@ function fillForm(cfg){
   byId('cfgLat').value = (cfg.location && cfg.location.latitude) || 52.0302;
   byId('cfgLon').value = (cfg.location && cfg.location.longitude) || 8.5325;
   byId('cfgLayout').value = (cfg.ui && cfg.ui.layout_profile) || 'auto';
-  byId('cfgRadarH').value = (cfg.ui && cfg.ui.radar && cfg.ui.radar.height) || 190;
+  byId('cfgRadarH').value = (cfg.ui && cfg.ui.radar && cfg.ui.radar.height) || 180;
   byId('showWeather').checked = !!(cfg.ui && cfg.ui.weather && cfg.ui.weather.enabled);
   byId('showRadar').checked = !!(cfg.ui && cfg.ui.radar && cfg.ui.radar.enabled);
   byId('showTransit').checked = !!(cfg.ui && cfg.ui.transit && cfg.ui.transit.enabled);
@@ -228,13 +231,79 @@ function readForm(){
   cfg.location.latitude = parseFloat(byId('cfgLat').value || '52.0302');
   cfg.location.longitude = parseFloat(byId('cfgLon').value || '8.5325');
   cfg.ui.layout_profile = byId('cfgLayout').value;
-  cfg.ui.radar.height = parseInt(byId('cfgRadarH').value || '190', 10);
+  cfg.ui.radar.height = parseInt(byId('cfgRadarH').value || '180', 10);
   cfg.ui.weather.enabled = byId('showWeather').checked;
   cfg.ui.radar.enabled = byId('showRadar').checked;
   cfg.ui.transit.enabled = byId('showTransit').checked;
   cfg.ui.system.enabled = byId('showSystem').checked;
   cfg.transit.stops = JSON.parse(byId('cfgStops').value || '[]');
   return cfg;
+}
+
+function shortStopTitle(name){
+  const cleaned = String(name || 'Haltestelle')
+    .replace('Bielefeld', '')
+    .replace('Bi-', '')
+    .trim()
+    .replace(/^,\s*/, '');
+  return cleaned.split(',')[0].trim() || 'Haltestelle';
+}
+
+function stationToStop(station){
+  return {
+    title: shortStopTitle(station.station_name),
+    station_name: station.station_name,
+    station_id: station.station_id,
+    line_filter: [],
+    nightbus_only: false,
+    hide_if_empty: true,
+    max_rows: 3,
+  };
+}
+
+function renderStationResults(results){
+  const root = byId('stationResults');
+  root.replaceChildren();
+  if(!results || !results.length){
+    const empty = document.createElement('div');
+    empty.className = 'station-empty';
+    empty.textContent = 'Keine Haltestelle gefunden.';
+    root.appendChild(empty);
+    return;
+  }
+
+  results.forEach(station => {
+    const row = document.createElement('div');
+    row.className = 'station-result';
+
+    const text = document.createElement('div');
+    const name = document.createElement('strong');
+    name.textContent = station.station_name || 'Haltestelle';
+    const meta = document.createElement('span');
+    meta.textContent = station.station_id ? 'ID ' + station.station_id : '';
+    text.appendChild(name);
+    text.appendChild(meta);
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = 'Übernehmen';
+    btn.addEventListener('click', () => {
+      const cfg = JSON.parse(JSON.stringify(currentConfig || {}));
+      cfg.transit = cfg.transit || {};
+      cfg.transit.stops = safeArray(cfg.transit.stops);
+      cfg.transit.stops = [stationToStop(station)];
+      cfg.ui = cfg.ui || {};
+      cfg.ui.transit = cfg.ui.transit || {};
+      cfg.ui.transit.enabled = true;
+      currentConfig = cfg;
+      fillForm(cfg);
+      setText('saveState', 'Haltestelle übernommen. Jetzt speichern.');
+    });
+
+    row.appendChild(text);
+    row.appendChild(btn);
+    root.appendChild(row);
+  });
 }
 
 byId('saveConfig').addEventListener('click', async () => {
@@ -250,7 +319,18 @@ byId('reloadConfig').addEventListener('click', loadConfig);
 
 byId('stationSearchBtn').addEventListener('click', async () => {
   const q = byId('stationQuery').value.trim();
-  const r = await fetch('/api/station/search?q=' + encodeURIComponent(q));
-  const d = await r.json();
-  byId('stationResults').textContent = JSON.stringify(d.results || [], null, 2);
+  if(!q){
+    renderStationResults([]);
+    return;
+  }
+  setText('saveState', 'Haltestelle wird gesucht ...');
+  try{
+    const r = await fetch('/api/station/search?q=' + encodeURIComponent(q));
+    const d = await r.json();
+    renderStationResults(d.results || []);
+    setText('saveState', '');
+  }catch(e){
+    renderStationResults([]);
+    setText('saveState', 'Suche fehlgeschlagen: ' + e.message);
+  }
 });
