@@ -1,0 +1,37 @@
+:root{
+  --p-bg:#05070b;
+  --p-panel:rgba(8,12,18,.74);
+  --p-panel-strong:rgba(9,13,20,.90);
+  --p-line:rgba(255,255,255,.115);
+  --p-line-strong:rgba(255,255,255,.18);
+  --p-text:#f4f7fb;
+  --p-muted:rgba(244,247,251,.66);
+  --p-soft:rgba(244,247,251,.44);
+  --p-accent:#d4b45a;
+  --p-accent-quiet:rgba(212,180,90,.13);
+  --p-accent-text:#181203;
+  --p-danger:#ee7c7c;
+  --p-success:#74d7a0;
+  --p-shadow:0 12px 34px rgba(0,0,0,.28);
+  --p-shadow-soft:0 6px 18px rgba(0,0,0,.22);
+  --p-radius:16px;
+  --p-radius-sm:12px;
+  --p-safe:clamp(14px,1.55vw,26px);
+}
+
+body{background:var(--p-bg);color:var(--p-text)}
+.video-vignette{background:linear-gradient(180deg,rgba(0,0,0,.28),rgba(0,0,0,.06) 32%,rgba(0,0,0,.04) 62%,rgba(0,0,0,.42)),radial-gradient(circle at 50% 52%,transparent 44%,rgba(0,0,0,.20))}
+.surface{background:var(--p-panel);border-color:var(--p-line);box-shadow:var(--p-shadow-soft);backdrop-filter:blur(9px) saturate(1.02);-webkit-backdrop-filter:blur(9px) saturate(1.02)}
+
+.topbar{inset:var(--p-safe) var(--p-safe) auto var(--p-safe);gap:10px}.icon-button{width:42px;height:42px;border-radius:12px;border-color:var(--p-line);background:rgba(6,9,14,.66);box-shadow:var(--p-shadow-soft)}.icon-button:hover{background:rgba(17,22,31,.82);border-color:var(--p-line-strong);transform:none}.menu-btn span{font-size:21px}.clock-card{min-width:auto;border-radius:14px;padding:8px 15px;background:rgba(6,9,14,.70)}#clock{font-size:clamp(25px,3.5vw,43px);font-weight:680;letter-spacing:-.035em}.system-card{border-radius:13px;background:rgba(6,9,14,.62);color:var(--p-muted);font-size:12px;font-weight:560;padding:8px 11px}
+
+.radar-card{left:var(--p-safe);top:calc(var(--p-safe) + 56px);width:clamp(205px,19vw,280px);height:168px;border-radius:16px;background:rgba(9,13,20,.76);box-shadow:var(--p-shadow-soft)}.radar-title{padding:10px 12px;background:linear-gradient(180deg,rgba(0,0,0,.50),rgba(0,0,0,.05))}.eyebrow{color:var(--p-accent);font-size:10px;font-weight:650;letter-spacing:.10em}.radar-title h2{font-size:14px;font-weight:620}.radar-title small{font-weight:540;color:rgba(255,255,255,.68)}.radar-cell img.rain{opacity:.70}.radar-status{bottom:22px;border-radius:9px;background:rgba(0,0,0,.44);font-size:10.5px;font-weight:560}.radar-scale{font-size:9.5px;font-weight:540}.radar-scale b{height:5px;opacity:.85}
+
+.boards{right:var(--p-safe);top:calc(var(--p-safe) + 56px);width:clamp(214px,22vw,304px);gap:10px}.board{padding:12px;border-radius:15px;background:rgba(9,13,20,.78);border-color:var(--p-line);box-shadow:var(--p-shadow-soft);font-family:inherit}.board h3{color:var(--p-text);font-size:13px;font-weight:620;letter-spacing:.01em}.board th{color:var(--p-soft);font-size:10.5px;font-weight:560}.board td{color:var(--p-text);font-size:13px;font-weight:560}.board .time{color:var(--p-muted)}
+
+.weather-card{bottom:var(--p-safe);width:min(880px,calc(100vw - (var(--p-safe) * 2)));border-radius:16px;padding:10px 15px;background:rgba(6,9,14,.72);box-shadow:var(--p-shadow-soft);font-size:clamp(15px,1.65vw,21px);font-weight:580;line-height:1.25}.weather-content{display:flex;justify-content:center;align-items:center;gap:9px;min-width:0;white-space:normal}.weather-part{display:inline-flex;align-items:center;min-width:0}.weather-location{max-width:36vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.weather-temp{font-variant-numeric:tabular-nums}.weather-separator{color:var(--p-soft)}
+
+.panel-backdrop{background:rgba(3,6,11,.74);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}.panel-shell{inset:18px;max-width:1280px;padding:22px;border-radius:22px;background:linear-gradient(135deg,rgba(10,14,21,.98),rgba(12,17,25,.95));border-color:var(--p-line);box-shadow:var(--p-shadow)}.product-kicker{border:0;border-radius:999px;background:var(--p-accent-quiet);color:var(--p-accent);font-size:10px;font-weight:650}.panel-header h1{font-size:clamp(28px,3.1vw,38px);font-weight:650}.menu-sub{font-size:14px;color:var(--p-muted)}.close-button{width:42px;height:42px;font-size:30px}.settings-section{padding:16px;border-radius:17px;border-color:var(--p-line);background:rgba(255,255,255,.035)}.section-heading h2{font-size:20px;font-weight:630}.section-heading p{font-size:13px;color:var(--p-muted)}.field{font-size:12.5px;font-weight:580;color:var(--p-muted)}input,textarea,select{border-radius:12px;border-color:var(--p-line);background:rgba(4,7,12,.72);font-weight:500;padding:10px 11px}input:focus,textarea:focus,select:focus{border-color:rgba(212,180,90,.70);box-shadow:0 0 0 3px rgba(212,180,90,.10)}.toggle-card{min-height:45px;border-radius:13px;background:rgba(255,255,255,.032);border-color:var(--p-line);font-weight:570}.toggle-card:hover{transform:none;background:rgba(255,255,255,.052)}.toggle-card input{accent-color:var(--p-accent)}.button{min-height:42px;border-radius:12px;font-weight:620}.button-primary{background:var(--p-accent);color:var(--p-accent-text);box-shadow:none}.button-primary:hover{background:#c6a84f}.button-secondary{background:rgba(255,255,255,.07);border-color:var(--p-line);box-shadow:none}.station-result{border-radius:13px;border-color:var(--p-line);background:rgba(255,255,255,.032)}.station-result strong{font-weight:600}.station-empty{border-color:var(--p-line);font-weight:500}.advanced-config summary{color:var(--p-muted);font-weight:580}.status-message{font-weight:500}.status-message[data-state="success"]{color:var(--p-success)}.status-message[data-state="error"]{color:var(--p-danger)}.toast{border-radius:13px;background:var(--p-panel-strong);border-color:var(--p-line);box-shadow:var(--p-shadow);font-weight:560}
+
+@media (max-width:760px){.clock-card{padding:8px 12px}#clock{font-size:28px}.radar-card{left:12px;top:68px;width:min(250px,calc(100vw - 24px));height:150px}.boards{left:12px;right:auto;top:232px;width:min(306px,calc(100vw - 24px))}.weather-card{left:12px;right:12px;bottom:12px;transform:none;width:auto;font-size:15px}.weather-content{flex-wrap:wrap;gap:6px 8px}.weather-location{max-width:calc(100vw - 72px)}.panel-shell{inset:8px;padding:15px;border-radius:18px}.settings-section{padding:13px}}
+@media (max-width:1080px) and (max-height:650px){.radar-card{width:204px;height:144px}.clock-card{padding:7px 12px}#clock{font-size:30px}.weather-card{font-size:16px}.board{padding:10px}.panel-shell{inset:10px;padding:16px}}
