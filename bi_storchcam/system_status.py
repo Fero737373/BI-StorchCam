@@ -1,18 +1,28 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import subprocess
+import socket
+import time
 
 _last_cpu: tuple[int, int] | None = None
+_started_at = time.monotonic()
 
 
 def get_ip() -> str:
+    """Return the primary local IP without calling platform-specific hostname flags."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        out = subprocess.check_output(["hostname", "-I"], text=True, timeout=2).strip()
-        ips = [x for x in out.split() if not x.startswith("127.")]
-        return ips[0] if ips else "keine IP"
+        sock.connect(("8.8.8.8", 80))
+        ip = sock.getsockname()[0]
+        return ip if ip and not ip.startswith("127.") else "keine IP"
     except Exception:
-        return "keine IP"
+        try:
+            ip = socket.gethostbyname(socket.gethostname())
+            return ip if ip and not ip.startswith("127.") else "keine IP"
+        except Exception:
+            return "keine IP"
+    finally:
+        sock.close()
 
 
 def get_cpu() -> int:
@@ -60,9 +70,9 @@ def get_uptime() -> str:
     try:
         with open("/proc/uptime", encoding="utf-8") as f:
             seconds = float(f.read().split()[0])
-        return f"{int(seconds // 3600)}h {int((seconds % 3600) // 60)}m"
     except Exception:
-        return "-"
+        seconds = time.monotonic() - _started_at
+    return f"{int(seconds // 3600)}h {int((seconds % 3600) // 60)}m"
 
 
 def get_system_status() -> dict:
