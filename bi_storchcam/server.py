@@ -17,7 +17,7 @@ WEB_DIR = Path(__file__).resolve().parent / "web"
 
 
 class StorchHandler(BaseHTTPRequestHandler):
-    server_version = "BI-StorchCam/2.0"
+    server_version = "BI-StorchCam/2.1"
 
     def _json(self, obj: Any, status: int = 200) -> None:
         raw = json.dumps(obj, ensure_ascii=False).encode("utf-8")
@@ -55,11 +55,8 @@ class StorchHandler(BaseHTTPRequestHandler):
             q = parse_qs(parsed.query).get("q", [""])[0]
             self._json({"query": q, "results": search_station(q)})
             return
-        if path == "/api/radar/test":
-            try:
-                self._json(get_radar_metadata())
-            except Exception as exc:
-                self._json({"ok": False, "error": str(exc)}, 500)
+        if path in ("/api/radar", "/api/radar/test"):
+            self._json(get_radar_metadata(self.config))
             return
         self._serve_static(path)
 
