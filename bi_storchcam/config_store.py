@@ -9,8 +9,32 @@ from typing import Any
 
 from .defaults import DEFAULT_CONFIG
 
-APP_DIR = Path.home() / ".config" / "BI-StorchCam"
+
+def _platform_app_dir() -> Path:
+    if os.name == "nt":
+        base = os.environ.get("APPDATA")
+        if base:
+            return Path(base) / "BI-StorchCam"
+        return Path.home() / "AppData" / "Roaming" / "BI-StorchCam"
+    return Path.home() / ".config" / "BI-StorchCam"
+
+
+APP_DIR = _platform_app_dir()
 CONFIG_PATH = APP_DIR / "config.json"
+LEGACY_CONFIG_PATH = Path.home() / ".config" / "BI-StorchCam" / "config.json"
+
+
+def _migrate_legacy_windows_config() -> None:
+    """Move old Windows config location into the normal AppData path once."""
+    if os.name != "nt" or CONFIG_PATH == LEGACY_CONFIG_PATH:
+        return
+    if CONFIG_PATH.exists() or not LEGACY_CONFIG_PATH.exists():
+        return
+    try:
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG_PATH.write_text(LEGACY_CONFIG_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+    except Exception:
+        pass
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -34,6 +58,8 @@ def expand_user_values(value: Any) -> Any:
 
 
 def load_config(path: Path | None = None) -> dict[str, Any]:
+    if path is None:
+        _migrate_legacy_windows_config()
     cfg_path = path or CONFIG_PATH
     if not cfg_path.exists():
         save_config(DEFAULT_CONFIG, cfg_path)
@@ -51,6 +77,7 @@ def save_config(config: dict[str, Any], path: Path | None = None) -> None:
 
 
 def config_path() -> Path:
+    _migrate_legacy_windows_config()
     APP_DIR.mkdir(parents=True, exist_ok=True)
     return CONFIG_PATH
 
