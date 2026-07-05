@@ -1,4 +1,6 @@
 let currentConfig = null;
+let lastRadarRefresh = 0;
+let radarRefreshInFlight = false;
 
 function byId(id){ return document.getElementById(id); }
 function setText(id, text){ const el = byId(id); if(el) el.textContent = text; }
@@ -58,11 +60,117 @@ function applyUi(cfg){
   if(ui.radar && ui.radar.height){ byId('radar').style.height = ui.radar.height + 'px'; }
 }
 
+function lon2tile(lon, zoom){
+  return Math.floor((lon + 180) / 360 * Math.pow(2, zoom));
+}
+
+function lat2tile(lat, zoom){
+  const rad = lat * Math.PI / 180;
+  return Math.floor((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2 * Math.pow(2, zoom));
+}
+
+function replaceTileVars(template, zoom, x, y){
+  return template
+    .replaceAll('{z}', String(zoom))
+    .replaceAll('{x}', String(x))
+    .replaceAll('{y}', String(y));
+}
+
+function setRadarStatus(text){
+  const map = byId('radar-map');
+  if(!map){ return; }
+  let status = map.querySelector('.radar-status');
+  if(!status){
+    status = document.createElement('div');
+    status.className = 'radar-status';
+    map.appendChild(status);
+  }
+  status.textContent = text;
+}
+
+function renderRadar(meta){
+  const map = byId('radar-map');
+  if(!map){ return; }
+  map.replaceChildren();
+
+  if(!meta || !meta.ok || !meta.tile_url){
+    map.classList.add('radar-offline');
+    const error = (meta && meta.error) ? meta.error : 'keine Daten';
+    setRadarStatus('Regenradar offline · ' + error);
+    return;
+  }
+
+  map.classList.remove('radar-offline');
+  const zoom = Number(meta.zoom || 10);
+  const lat = Number(meta.latitude || 52.0302);
+  const lon = Number(meta.longitude || 8.5325);
+  const centerX = lon2tile(lon, zoom);
+  const centerY = lat2tile(lat, zoom);
+
+  const grid = document.createElement('div');
+  grid.className = 'radar-grid';
+
+  for(let dy = -1; dy <= 1; dy++){
+    for(let dx = -1; dx <= 1; dx++){
+      const x = centerX + dx;
+      const y = centerY + dy;
+      const cell = document.createElement('div');
+      cell.className = 'radar-cell';
+
+      const base = document.createElement('img');
+      base.alt = '';
+      base.loading = 'lazy';
+      base.decoding = 'async';
+      base.src = `https://tile.openstreetmap.org/${zoom}/${x}/${y}.png`;
+
+      const rain = document.createElement('img');
+      rain.alt = '';
+      rain.loading = 'lazy';
+      rain.decoding = 'async';
+      rain.className = 'rain';
+      rain.src = replaceTileVars(meta.tile_url, zoom, x, y);
+
+      cell.appendChild(base);
+      cell.appendChild(rain);
+      grid.appendChild(cell);
+    }
+  }
+
+  map.appendChild(grid);
+  const label = currentConfig && currentConfig.location && currentConfig.location.label ? currentConfig.location.label : 'Bielefeld';
+  setRadarStatus(label + ' · live');
+}
+
+async function refreshRadar(force){
+  const ui = currentConfig && currentConfig.ui ? currentConfig.ui : {};
+  if(ui.radar && ui.radar.enabled === false){ return; }
+
+  const now = Date.now();
+  const refreshSeconds = ui.radar && ui.radar.refresh_seconds ? Number(ui.radar.refresh_seconds) : 300;
+  const interval = Math.max(refreshSeconds, 60) * 1000;
+  if(!force && now - lastRadarRefresh < interval){ return; }
+  if(radarRefreshInFlight){ return; }
+
+  radarRefreshInFlight = true;
+  try{
+    const r = await fetch('/api/radar?_=' + now, {cache:'no-store'});
+    const d = await r.json();
+    renderRadar(d);
+    lastRadarRefresh = Date.now();
+  }catch(e){
+    renderRadar({ok:false, error:e.message || 'Netzwerkfehler'});
+    lastRadarRefresh = Date.now();
+  }finally{
+    radarRefreshInFlight = false;
+  }
+}
+
 async function pull(){
   try{
     const r = await fetch('/api/state?_=' + Date.now(), {cache:'no-store'});
     const d = await r.json();
     const cfg = d.config || {};
+    currentConfig = cfg;
     applyUi(cfg);
     const stream = (cfg.stream && cfg.stream.url) || '';
     if(stream && byId('live').src !== stream){ byId('live').src = stream; }
@@ -71,9 +179,11 @@ async function pull(){
     const w = d.weather || {};
     setText('weatherText', w.text || 'Wetter lädt ...');
     renderBoards(d.boards || []);
+    refreshRadar(false);
   }catch(e){ }
 }
 setInterval(pull, 2000); pull();
+setInterval(() => refreshRadar(true), 300000);
 
 function openMenu(){ byId('menu').classList.remove('hidden'); loadConfig(); }
 function closeMenu(){ byId('menu').classList.add('hidden'); }
@@ -132,7 +242,7 @@ byId('saveConfig').addEventListener('click', async () => {
     const cfg = readForm();
     const r = await fetch('/api/config/save', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({config:cfg})});
     const d = await r.json();
-    if(d.ok){ currentConfig = cfg; setText('saveState', 'Gespeichert: ' + d.path); closeMenu(); pull(); }
+    if(d.ok){ currentConfig = cfg; setText('saveState', 'Gespeichert: ' + d.path); closeMenu(); lastRadarRefresh = 0; pull(); }
     else{ setText('saveState', 'Fehler: ' + (d.error || 'unbekannt')); }
   }catch(e){ setText('saveState', 'Fehler: ' + e.message); }
 });
