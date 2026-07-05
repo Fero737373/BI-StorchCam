@@ -1,14 +1,16 @@
 # BI-StorchCam
 
+**Status:** Preview/Beta. Das Projekt ist für einen ersten Test-Release vorbereitet, aber noch kein finales Produkt.
+
 **BI-StorchCam** ist ein Open-Source-Infoscreen für Bielefeld. Die App startet einen lokalen Webserver, öffnet einen Browser im Kiosk-Modus und zeigt über dem Livestream gut lesbare Infos:
 
 - Uhrzeit
 - Wetter für Bielefeld bzw. den konfigurierten Standort
 - Regenradar
 - moBiel-/VRR-Abfahrten
-- optionale Technikdaten
+- optionale Technikdaten für Diagnose
 
-Der Standard-Livestream ist voreingestellt und kann im Menü oder per Setup geändert werden.
+Der Standard-Livestream ist voreingestellt und kann im Menü geändert werden. Für Release-Abnahmen gibt es zusätzlich die Datei [`RELEASE_CHECKLIST.md`](RELEASE_CHECKLIST.md).
 
 ## Unterstützte Systeme
 
@@ -112,16 +114,23 @@ Wichtige Einstellungen:
     "longitude": 8.5325
   },
   "ui": {
+    "weather": {"enabled": true},
     "radar": {
       "enabled": true,
       "zoom": 10,
       "refresh_seconds": 300
-    }
+    },
+    "transit": {"enabled": false},
+    "system": {"enabled": false}
   }
 }
 ```
 
 Wenn `browser` auf `auto` steht, sucht BI-StorchCam selbst nach einem passenden Browser. Ein fester Pfad ist weiterhin möglich, z. B. unter Linux `/usr/bin/chromium` oder unter Windows `C:\Program Files\Google\Chrome\Application\chrome.exe`.
+
+## Release-Default
+
+Für einen sauberen öffentlichen Preview-Screen sind im Standard nur Uhrzeit, Wetter und Regenradar sichtbar. Abfahrten werden erst angezeigt, wenn im Menü eine echte Haltestelle übernommen und gespeichert wurde. Systemdaten sind im Standard ausgeblendet und nur für Diagnose gedacht.
 
 ## Regenradar
 

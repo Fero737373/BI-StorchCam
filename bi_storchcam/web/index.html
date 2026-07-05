@@ -11,12 +11,12 @@
 
   <button id="menuBtn" class="menu-btn" type="button" aria-label="Menü öffnen">☰</button>
   <section id="clockbar" class="glass pill"><span id="clock">--:--:--</span></section>
-  <section id="sysbar" class="glass pill"><span id="sys">IP -- | CPU --% | RAM --% | Temp --°C</span></section>
+  <section id="sysbar" class="glass pill"><span id="sys">Diagnose lädt ...</span></section>
 
   <section id="radar" class="glass radar-card">
-    <div class="radar-title">Regenradar</div>
+    <div class="radar-title"><span>Regenradar</span><small id="radarLabel">Bielefeld</small></div>
     <div id="radar-map" class="radar-map">
-      <div class="radar-status">Regenradar lädt ...</div>
+      <div class="radar-status">lädt ...</div>
     </div>
     <div class="radar-scale"><span>leicht</span><b></b><span>stark</span></div>
   </section>
@@ -26,42 +26,58 @@
 
   <aside id="menu" class="menu-panel hidden">
     <div class="menu-head">
-      <h1>BI-StorchCam</h1>
-      <button id="closeMenu" type="button">×</button>
+      <div>
+        <div class="brand-row">
+          <h1>BI-StorchCam</h1>
+          <span class="preview-badge">Preview</span>
+        </div>
+        <p class="menu-sub">Infoscreen für Livestream, Wetter, Regenradar und Abfahrten.</p>
+      </div>
+      <button id="closeMenu" type="button" aria-label="Menü schließen">×</button>
     </div>
 
-    <div class="menu-grid">
-      <label>Stream URL<textarea id="cfgStream" rows="3"></textarea></label>
-      <label>Standort Label<input id="cfgLabel" type="text"></label>
-      <label>Breitengrad<input id="cfgLat" type="number" step="0.0001"></label>
-      <label>Längengrad<input id="cfgLon" type="number" step="0.0001"></label>
-      <label>Layoutprofil<select id="cfgLayout"><option>auto</option><option>raspi_7_1280x720</option><option>small_1024x600</option><option>desktop</option><option>custom</option></select></label>
-      <label>Radar Höhe<input id="cfgRadarH" type="number" min="80" max="420"></label>
-    </div>
+    <section class="menu-section">
+      <h2>Bildschirm</h2>
+      <div class="menu-grid">
+        <label>Livestream URL<textarea id="cfgStream" rows="3" spellcheck="false"></textarea></label>
+        <label>Standortname<input id="cfgLabel" type="text" placeholder="Bielefeld"></label>
+        <label>Breitengrad<input id="cfgLat" type="number" step="0.0001"></label>
+        <label>Längengrad<input id="cfgLon" type="number" step="0.0001"></label>
+        <label>Layoutprofil<select id="cfgLayout"><option>auto</option><option>raspi_7_1280x720</option><option>small_1024x600</option><option>desktop</option><option>custom</option></select></label>
+        <label>Radarhöhe<input id="cfgRadarH" type="number" min="80" max="420"></label>
+      </div>
+    </section>
 
-    <h2>Anzeigen</h2>
-    <div class="toggles">
-      <label><input id="showWeather" type="checkbox"> Wetter</label>
-      <label><input id="showRadar" type="checkbox"> Regenradar</label>
-      <label><input id="showTransit" type="checkbox"> Bus</label>
-      <label><input id="showSystem" type="checkbox"> Technikdaten</label>
-    </div>
+    <section class="menu-section">
+      <h2>Sichtbare Elemente</h2>
+      <div class="toggles">
+        <label><input id="showWeather" type="checkbox"> Wetter</label>
+        <label><input id="showRadar" type="checkbox"> Regenradar</label>
+        <label><input id="showTransit" type="checkbox"> Abfahrten</label>
+        <label class="diagnostic-toggle"><input id="showSystem" type="checkbox"> Systemdaten <span>nur Diagnose</span></label>
+      </div>
+    </section>
 
-    <h2>Haltestellen JSON</h2>
-    <p class="hint">Lokale Haltestellen bleiben in der lokalen config.json.</p>
-    <textarea id="cfgStops" class="codebox" rows="12"></textarea>
+    <section class="menu-section">
+      <h2>Abfahrten</h2>
+      <p class="hint">Haltestelle suchen, übernehmen und danach speichern. Keine JSON-Bearbeitung nötig.</p>
+      <div class="station-search">
+        <input id="stationQuery" placeholder="z.B. Stapelbrede oder Schneiderstraße">
+        <button id="stationSearchBtn" type="button">Suchen</button>
+      </div>
+      <div id="stationResults" class="station-results" aria-live="polite"></div>
 
-    <div class="station-search">
-      <input id="stationQuery" placeholder="Haltestelle suchen, z.B. Schneiderstraße">
-      <button id="stationSearchBtn" type="button">Suchen</button>
-    </div>
-    <pre id="stationResults"></pre>
+      <details class="advanced-config">
+        <summary>Erweiterte Haltestellen-Konfiguration</summary>
+        <textarea id="cfgStops" class="codebox" rows="10" spellcheck="false"></textarea>
+      </details>
+    </section>
 
     <div class="menu-actions">
-      <button id="saveConfig" type="button">Speichern</button>
+      <button id="saveConfig" class="primary" type="button">Speichern</button>
       <button id="reloadConfig" type="button">Neu laden</button>
+      <div id="saveState" class="hint"></div>
     </div>
-    <div id="saveState" class="hint"></div>
   </aside>
 
   <script src="app.js"></script>

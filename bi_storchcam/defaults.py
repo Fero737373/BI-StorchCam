@@ -56,13 +56,15 @@ DEFAULT_CONFIG = {
             "enabled": True,
             "position": "left",
             "width": 260,
-            "height": 190,
+            "height": 180,
             "zoom": 10,
             "opacity": 0.82,
             "refresh_seconds": 300,
         },
-        "transit": {"enabled": True, "position": "right", "size": "auto"},
-        "system": {"enabled": True, "position": "top-right", "diagnostic_only": False},
+        # Release-Default: Keine leeren Beispiel-Abfahrten auf dem öffentlichen Screen.
+        "transit": {"enabled": False, "position": "right", "size": "auto"},
+        # Release-Default: Technikdaten nur bei Diagnose sichtbar machen.
+        "system": {"enabled": False, "position": "top-right", "diagnostic_only": True},
     },
     "weather": {
         "provider": "openmeteo",
@@ -76,16 +78,6 @@ DEFAULT_CONFIG = {
         "refresh_seconds": 60,
         "default_max_rows": 2,
         "target_len": 16,
-        "stops": [
-            {
-                "title": "BEISPIEL",
-                "station_name": "Gellershagen Schneiderstraße",
-                "station_id": "23005489",
-                "line_filter": ["31"],
-                "nightbus_only": False,
-                "hide_if_empty": False,
-                "max_rows": 2,
-            }
-        ],
+        "stops": [],
     },
 }

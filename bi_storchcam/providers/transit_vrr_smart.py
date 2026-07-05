@@ -14,7 +14,7 @@ _cache: dict[str, Any] = {"ts": 0.0, "boards": []}
 
 
 def _fetch_json(url: str, data: dict[str, Any] | None = None, timeout: int = 12) -> dict[str, Any]:
-    headers = {"User-Agent": "Mozilla/5.0 BI-StorchCam/2.0", "Accept": "application/json,text/plain,*/*"}
+    headers = {"User-Agent": "Mozilla/5.0 BI-StorchCam/2.1", "Accept": "application/json,text/plain,*/*"}
     if data is None:
         req = urllib.request.Request(url, headers=headers)
     else:
@@ -62,6 +62,19 @@ def _matches_line(line: str, filters: list[str], nightbus_only: bool) -> bool:
         if line_up == f_up:
             return True
     return False
+
+
+def _short_title(stop: dict[str, Any]) -> str:
+    raw = str(stop.get("title") or stop.get("station_name") or "HALT").strip()
+    raw = raw.replace("Bielefeld", "").replace("Bi-", "").strip(" ,")
+    if "," in raw:
+        raw = raw.split(",", 1)[0].strip()
+    return (raw or "HALT").upper()
+
+
+def _is_placeholder(stop: dict[str, Any], title: str) -> bool:
+    station = str(stop.get("station_name") or "").lower()
+    return title.upper() == "BEISPIEL" or "gellershagen schneiderstraße" in station
 
 
 def _departures_for_stop(stop: dict[str, Any], default_max_rows: int, target_len: int) -> list[dict[str, str]]:
@@ -125,13 +138,14 @@ def get_boards(config: dict[str, Any]) -> list[dict[str, Any]]:
     default_max = int(transit.get("default_max_rows", 2))
     target_len = int(transit.get("target_len", 16))
     for stop in transit.get("stops", []):
-        title = str(stop.get("title") or stop.get("station_name") or "HALT").upper()
+        title = _short_title(stop)
         try:
             rows = _departures_for_stop(stop, default_max, target_len)
         except Exception as exc:
             rows = []
             stop["last_error"] = str(exc)
-        if stop.get("hide_if_empty", False) and not rows:
+
+        if not rows and (_is_placeholder(stop, title) or stop.get("hide_if_empty", False)):
             continue
         boards.append({"title": title, "rows": rows, "hide_if_empty": bool(stop.get("hide_if_empty", False))})
 
