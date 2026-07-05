@@ -1,1 +1,1 @@
-#clock{font-weight:680}
+#clock{font-size:clamp(25px,3.5vw,43px);font-weight:680}.clock-card{border-radius:14px;padding:8px 15px}.weather-card{white-space:normal;font-weight:580;border-radius:16px}.weather-content{white-space:normal;overflow:visible;text-overflow:clip}.button-primary{box-shadow:none}.toggle-card:hover,.icon-button:hover{transform:none}.radar-card{border-radius:16px}.board{font-family:inherit}.board h3,.board td{color:#f4f7fb;font-weight:600}
