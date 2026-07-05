@@ -39,16 +39,14 @@ def _migrate_legacy_windows_config() -> None:
         pass
 
 
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _clamp_int(value: Any, fallback: int, minimum: int, maximum: int) -> int:
+def _release_int(value: Any, fallback: int, minimum: int, maximum: int) -> int:
     try:
         num = int(value)
     except Exception:
-        num = fallback
-    return max(minimum, min(maximum, num))
+        return fallback
+    if num < minimum or num > maximum:
+        return fallback
+    return num
 
 
 def _is_placeholder_stop(stop: Any) -> bool:
@@ -76,7 +74,7 @@ def migrate_config(config: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     ui = cfg.setdefault("ui", {})
     radar = ui.setdefault("radar", {})
     old_height = radar.get("height", 180)
-    new_height = _clamp_int(old_height, 180, 120, 420)
+    new_height = _release_int(old_height, 180, 120, 420)
     if old_height != new_height:
         radar["height"] = new_height
         changed = True
