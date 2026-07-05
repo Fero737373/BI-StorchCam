@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="dark light">
   <title>BI-StorchCam</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="product.css">
 </head>
 <body>
   <a class="skip-link" href="#menu">Zum Menü springen</a>
@@ -45,7 +46,7 @@
     <section id="boards" class="boards" aria-label="Abfahrten"></section>
 
     <section id="weather" class="surface weather-card" aria-label="Wetterübersicht">
-      <span id="weatherText">Bielefeld | Wetter lädt ...</span>
+      <div id="weatherText" class="weather-content">Bielefeld | Wetter lädt ...</div>
     </section>
   </main>
 
@@ -55,7 +56,7 @@
       <header class="panel-header">
         <div>
           <div class="brand-row">
-            <p class="product-kicker">Preview Release</p>
+            <p class="product-kicker">Konfiguration</p>
             <h1 id="settingsTitle">BI-StorchCam</h1>
           </div>
           <p class="menu-sub">Infoscreen für Livestream, Wetter, Regenradar und Abfahrten.</p>
@@ -76,7 +77,7 @@
           <div class="form-grid">
             <label class="field field-wide" for="cfgStream">
               <span>Livestream URL</span>
-              <textarea id="cfgStream" rows="3" spellcheck="false" placeholder="https://..."></textarea>
+              <input id="cfgStream" type="url" spellcheck="false" placeholder="https://...">
             </label>
             <label class="field" for="cfgLabel">
               <span>Standortname</span>
@@ -102,7 +103,7 @@
             </label>
             <label class="field" for="cfgRadarH">
               <span>Radarhöhe</span>
-              <input id="cfgRadarH" type="number" min="120" max="420" inputmode="numeric">
+              <input id="cfgRadarH" type="number" min="120" max="360" inputmode="numeric">
             </label>
           </div>
         </section>
@@ -147,7 +148,7 @@
             <summary>Erweiterte Haltestellen-Konfiguration</summary>
             <label class="field" for="cfgStops">
               <span class="sr-only">Haltestellen JSON</span>
-              <textarea id="cfgStops" class="codebox" rows="10" spellcheck="false"></textarea>
+              <textarea id="cfgStops" class="codebox" rows="9" spellcheck="false"></textarea>
             </label>
           </details>
         </section>
