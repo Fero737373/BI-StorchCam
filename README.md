@@ -1,78 +1,22 @@
 # BI-StorchCam
 
-**BI-StorchCam** ist ein Open-Source-Infoscreen für Bielefeld. Die App zeigt einen Livestream im Hintergrund und legt darüber große, gut lesbare Informationen:
+**BI-StorchCam** ist ein Open-Source-Infoscreen für Bielefeld. Die App startet einen lokalen Webserver, öffnet einen Browser im Kiosk-Modus und zeigt über dem Livestream gut lesbare Infos:
 
-- Uhrzeit oben
-- Wetter für den eingegebenen Ort in Bielefeld unten
-- moBiel-/ÖPNV-Abfahrten einer bestätigten Haltestelle rechts unten über dem Wetter
+- Uhrzeit
+- Wetter für Bielefeld bzw. den konfigurierten Standort
+- Regenradar
+- moBiel-/VRR-Abfahrten
+- optionale Technikdaten
 
-Der Standard-Livestream ist bereits voreingestellt, kann aber im Setup durch einen anderen YouTube- oder Webcam-Link ersetzt werden.
+Der Standard-Livestream ist voreingestellt und kann im Menü oder per Setup geändert werden.
 
-## Ziel
+## Unterstützte Systeme
 
-Die App soll einfach bedienbar sein:
+- Windows 10/11 mit Microsoft Edge oder Google Chrome
+- Linux Desktop mit Chromium/Chrome/Edge/Firefox
+- Raspberry Pi OS / Debian mit Chromium
 
-1. App starten.
-2. Ort oder Adresse in Bielefeld eingeben.
-3. Haltestelle suchen lassen.
-4. Gefundene Haltestelle bestätigen.
-5. Wenn die Haltestelle falsch ist, Haltestellennamen manuell eingeben und erneut suchen.
-6. Infoscreen starten.
-
-## Screenshot-Logik
-
-Das Design orientiert sich an einem dunklen Kiosk-Screen:
-
-- oben: große Uhrzeit
-- rechts unten: schwarzes Abfahrtspanel mit gelber Schrift
-- unten: schwarze Wetterleiste mit weißer Schrift
-- Livestream im Hintergrund
-
-Technische Daten wie IP, CPU oder RAM werden absichtlich nicht angezeigt.
-
-## Unterstützte Datenquellen
-
-### Wetter
-
-Wetterdaten werden über Open-Meteo geholt. Für die Eingabe einer Adresse oder eines Ortes wird eine Geokodierung benutzt. Wenn keine genaue Adresse gefunden wird, fällt die App auf Bielefeld zurück.
-
-### Abfahrten
-
-Die Abfahrten werden über den VRR-Haltestellenmonitor geladen. Für Bielefeld/moBiel funktioniert das mit Haltestellen wie zum Beispiel:
-
-- Gellershagen Schneiderstraße
-- Bielefeld Bi-Gellershagen, Schneiderstr
-
-Die App speichert die bestätigte Haltestelle in der lokalen Konfigurationsdatei.
-
-## Projektstruktur
-
-```text
-BI-StorchCam/
-├─ bi_storchcam/
-│  ├─ __init__.py
-│  ├─ __main__.py
-│  ├─ app.py
-│  ├─ browser.py
-│  ├─ config.py
-│  ├─ geocoding.py
-│  ├─ overlay.py
-│  ├─ setup_wizard.py
-│  └─ providers/
-│     ├─ __init__.py
-│     ├─ transit_vrr.py
-│     └─ weather_openmeteo.py
-├─ scripts/
-│  ├─ install_linux_autostart.sh
-│  └─ remove_linux_autostart.sh
-├─ launcher.py
-├─ requirements.txt
-├─ build_windows.bat
-├─ build_linux.sh
-├─ config.example.json
-├─ LICENSE
-└─ README.md
-```
+Die App versucht den Browser automatisch zu finden. Unter Windows werden Edge und Chrome automatisch gesucht. Unter Linux werden typische Browser-Binaries wie `chromium`, `chromium-browser`, `google-chrome` und `firefox` gesucht.
 
 ## Installation aus dem Sourcecode
 
@@ -81,7 +25,7 @@ BI-StorchCam/
 Voraussetzungen:
 
 - Python 3.10 oder neuer
-- Google Chrome oder Microsoft Edge für den Livestream
+- Microsoft Edge oder Google Chrome
 
 Im Projektordner:
 
@@ -90,18 +34,100 @@ py -3 -m venv .venv
 .\.venv\Scripts\activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-python launcher.py --setup
-```
-
-Danach kann die App normal gestartet werden:
-
-```powershell
+python launcher.py --test-config
 python launcher.py
 ```
 
-## Windows-EXE erstellen
+Nur den Server ohne Browser starten:
+
+```powershell
+python launcher.py --no-browser
+```
+
+Regenradar testen:
+
+```powershell
+python launcher.py --test-radar
+```
+
+### Linux / Raspberry Pi OS
+
+Voraussetzungen auf Debian/Ubuntu/Raspberry Pi OS:
+
+```bash
+sudo apt update
+sudo apt install -y python3 python3-venv chromium
+```
 
 Im Projektordner:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python launcher.py --test-config
+python launcher.py
+```
+
+Nur den Server ohne Browser starten:
+
+```bash
+python launcher.py --no-browser
+```
+
+Regenradar testen:
+
+```bash
+python launcher.py --test-radar
+```
+
+## Konfiguration
+
+Die App erstellt die lokale Konfiguration automatisch.
+
+Windows:
+
+```text
+%APPDATA%\BI-StorchCam\config.json
+```
+
+Linux / Raspberry Pi:
+
+```text
+~/.config/BI-StorchCam/config.json
+```
+
+Wichtige Einstellungen:
+
+```json
+{
+  "kiosk": {
+    "browser": "auto",
+    "profile_dir": ""
+  },
+  "location": {
+    "label": "Bielefeld",
+    "latitude": 52.0302,
+    "longitude": 8.5325
+  },
+  "ui": {
+    "radar": {
+      "enabled": true,
+      "zoom": 10,
+      "refresh_seconds": 300
+    }
+  }
+}
+```
+
+Wenn `browser` auf `auto` steht, sucht BI-StorchCam selbst nach einem passenden Browser. Ein fester Pfad ist weiterhin möglich, z. B. unter Linux `/usr/bin/chromium` oder unter Windows `C:\Program Files\Google\Chrome\Application\chrome.exe`.
+
+## Regenradar
+
+Das Regenradar wird über RainViewer geladen. Die App fragt serverseitig die aktuellen Radar-Frames ab und rendert im Browser Kacheln rund um den konfigurierten Standort. Wenn RainViewer oder das Netzwerk nicht erreichbar ist, bleibt die App offen und zeigt einen Offline-Hinweis im Radar-Feld statt abzustürzen.
+
+## Windows-EXE erstellen
 
 ```powershell
 build_windows.bat
@@ -113,36 +139,7 @@ Die fertige Datei liegt danach hier:
 dist\BI-StorchCam.exe
 ```
 
-Falls Windows SmartScreen warnt: Das ist normal bei selbstgebauten EXE-Dateien ohne Signatur. Für öffentliche Releases sollte die EXE später signiert werden.
-
-## Linux starten
-
-Voraussetzungen auf Debian/Ubuntu/Raspberry Pi OS:
-
-```bash
-sudo apt update
-sudo apt install -y python3 python3-venv python3-tk chromium
-```
-
-Dann im Projektordner:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-python launcher.py --setup
-```
-
-Danach starten:
-
-```bash
-python launcher.py
-```
-
 ## Linux-Binary erstellen
-
-Im Projektordner:
 
 ```bash
 chmod +x build_linux.sh
@@ -157,8 +154,6 @@ dist/BI-StorchCam
 
 ## Linux-Autostart einrichten
 
-Ohne spezielle Display-Rotation und ohne Touchscreen-Matrix:
-
 ```bash
 chmod +x scripts/install_linux_autostart.sh
 ./scripts/install_linux_autostart.sh
@@ -171,47 +166,30 @@ chmod +x scripts/remove_linux_autostart.sh
 ./scripts/remove_linux_autostart.sh
 ```
 
-## Konfiguration
+## Troubleshooting
 
-Die Konfiguration wird automatisch gespeichert.
+### Windows: „Chromium nicht gefunden“
 
-Unter Windows:
+Aktuelle Version starten und sicherstellen, dass Edge oder Chrome installiert ist:
 
-```text
-%APPDATA%\BI-StorchCam\config.json
+```powershell
+python launcher.py --test-config
+python launcher.py
 ```
 
-Unter Linux:
+Die App sucht Edge/Chrome automatisch. Falls trotzdem kein Browser startet, kann in der lokalen `config.json` ein fester Browser-Pfad gesetzt werden.
 
-```text
-~/.config/BI-StorchCam/config.json
-```
+### Windows: `hostname -s` oder `hostname -I` Fehler
 
-Setup erneut öffnen:
+Diese Fehler sollten nicht mehr auftreten. Die App nutzt keine Linux-only-Hostname-Flags mehr, sondern ermittelt die lokale IP plattformneutral.
+
+### Regenradar lädt nicht
 
 ```bash
-python launcher.py --setup
+python launcher.py --test-radar
 ```
 
-Overlay ohne Browser starten, nur zum Testen:
-
-```bash
-python launcher.py --no-browser
-```
-
-## Standard-Livestream
-
-Voreingestellt ist:
-
-```text
-https://www.youtube.com/watch?v=mRECZ-PJ2So
-```
-
-Im Setup kann jeder andere YouTube- oder Webcam-Link eingetragen werden.
-
-## Hinweise zu YouTube
-
-Manche YouTube-Livestreams erlauben kein Einbetten in eigene HTML-Seiten. BI-StorchCam öffnet deshalb den normalen YouTube-Link im Browser und legt die eigenen UI-Fenster darüber. Dadurch funktioniert auch ein Stream, der nicht als Embed erlaubt ist.
+Wenn `ok` false ist, liegt es meistens an Netzwerk/DNS/Firewall oder RainViewer ist kurzfristig nicht erreichbar. Die UI läuft trotzdem weiter.
 
 ## Bielefeld-Fokus
 

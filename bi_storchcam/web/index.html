@@ -15,7 +15,9 @@
 
   <section id="radar" class="glass radar-card">
     <div class="radar-title">Regenradar</div>
-    <div id="radar-map" class="radar-fake"></div>
+    <div id="radar-map" class="radar-map">
+      <div class="radar-status">Regenradar lädt ...</div>
+    </div>
     <div class="radar-scale"><span>leicht</span><b></b><span>stark</span></div>
   </section>
 
@@ -46,7 +48,7 @@
     </div>
 
     <h2>Haltestellen JSON</h2>
-    <p class="hint">Lokale Haltestellen bleiben in ~/.config/BI-StorchCam/config.json.</p>
+    <p class="hint">Lokale Haltestellen bleiben in der lokalen config.json.</p>
     <textarea id="cfgStops" class="codebox" rows="12"></textarea>
 
     <div class="station-search">

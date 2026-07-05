@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Default-Konfiguration für BI-StorchCam.
 
-Private lokale Daten gehören in ~/.config/BI-StorchCam/config.json
-und nicht ins öffentliche Repository.
+Private lokale Daten gehören unter Linux nach ~/.config/BI-StorchCam/config.json
+und unter Windows nach %APPDATA%\\BI-StorchCam\\config.json.
 """
 
 DEFAULT_CONFIG = {
@@ -21,8 +21,8 @@ DEFAULT_CONFIG = {
         "enabled": True,
         "display": ":0",
         "xauthority": "~/.Xauthority",
-        "browser": "chromium",
-        "profile_dir": "/tmp/storchcam-profile",
+        "browser": "auto",
+        "profile_dir": "",
         "kill_existing_chromium": True,
         "disable_screensaver": True,
         "use_gpu": True,
@@ -52,7 +52,15 @@ DEFAULT_CONFIG = {
         "layout_profile": "auto",
         "clock": {"enabled": True, "position": "top-left", "size": "auto"},
         "weather": {"enabled": True, "mode": "smart_short", "position": "bottom", "size": "auto"},
-        "radar": {"enabled": True, "position": "left", "width": 260, "height": 190, "zoom": 10, "opacity": 0.82},
+        "radar": {
+            "enabled": True,
+            "position": "left",
+            "width": 260,
+            "height": 190,
+            "zoom": 10,
+            "opacity": 0.82,
+            "refresh_seconds": 300,
+        },
         "transit": {"enabled": True, "position": "right", "size": "auto"},
         "system": {"enabled": True, "position": "top-right", "diagnostic_only": False},
     },
