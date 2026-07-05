@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.parse
 import urllib.request
@@ -21,7 +22,7 @@ _cache: dict[str, Any] = {"ts": 0.0, "data": {"ok": False, "text": "Wetter offli
 
 
 def _fetch_json(url: str, timeout: int = 12) -> dict[str, Any]:
-    req = urllib.request.Request(url, headers={"User-Agent": "BI-StorchCam/2.0", "Accept": "application/json"})
+    req = urllib.request.Request(url, headers={"User-Agent": "BI-StorchCam/2.1", "Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode("utf-8", "replace"))
 
@@ -31,6 +32,26 @@ def _hour_label(value: str) -> str:
         return datetime.fromisoformat(value).strftime("%H:%M")
     except Exception:
         return value[-5:] if len(value) >= 5 else value
+
+
+def _clean_label(label: str) -> str:
+    """Keep the public weather bar short enough for a release/kiosk screen."""
+    label = re.sub(r"\s+", " ", str(label or "Bielefeld")).strip()
+    if len(label) <= 34:
+        return label
+
+    parts = [p.strip() for p in label.split(",") if p.strip()]
+    if len(parts) >= 4:
+        street = re.sub(r"^\d+[a-zA-Z]?\s*", "", parts[1]).strip() or parts[1]
+        city = parts[3]
+        compact = f"{street}, {city}"
+        if len(compact) <= 34:
+            return compact
+    if len(parts) >= 2:
+        compact = ", ".join(parts[:2])
+        if len(compact) <= 34:
+            return compact
+    return label[:31].rstrip() + "…"
 
 
 def _smart_text(label: str, current: dict[str, Any], hourly: dict[str, Any], cfg: dict[str, Any]) -> str:
@@ -68,7 +89,8 @@ def _smart_text(label: str, current: dict[str, Any], hourly: dict[str, Any], cfg
         end = _hour_label(times[-1]) if times else "später"
         hint = f"trocken bis {end}"
 
-    return f"{label} | {temp}°C | {condition} | {hint}"
+    public_label = _clean_label(label)
+    return f"{public_label} | {temp}°C | {condition} | {hint}"
 
 
 def get_weather(config: dict[str, Any]) -> dict[str, Any]:
@@ -99,7 +121,7 @@ def get_weather(config: dict[str, Any]) -> dict[str, Any]:
         hourly = data.get("hourly", {})
         result = {
             "ok": True,
-            "label": label,
+            "label": _clean_label(label),
             "text": _smart_text(label, current, hourly, weather_cfg),
             "condition": CODES.get(int(current.get("weather_code", 0) or 0), "aktuell"),
             "temp": round(float(current.get("temperature_2m", 0))),
@@ -109,7 +131,8 @@ def get_weather(config: dict[str, Any]) -> dict[str, Any]:
             "rain": round(float(current.get("precipitation", 0)), 1),
         }
     except Exception as exc:
-        result = {"ok": False, "label": label, "text": f"{label} | Wetter offline", "error": str(exc)}
+        public_label = _clean_label(label)
+        result = {"ok": False, "label": public_label, "text": f"{public_label} | Wetter offline", "error": str(exc)}
 
     _cache["ts"] = now
     _cache["data"] = result
