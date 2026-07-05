@@ -9,6 +9,8 @@ from typing import Any
 
 from .defaults import DEFAULT_CONFIG
 
+CONFIG_SCHEMA_VERSION = 2
+
 
 def _platform_app_dir() -> Path:
     if os.name == "nt":
@@ -35,6 +37,76 @@ def _migrate_legacy_windows_config() -> None:
         CONFIG_PATH.write_text(LEGACY_CONFIG_PATH.read_text(encoding="utf-8"), encoding="utf-8")
     except Exception:
         pass
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _clamp_int(value: Any, fallback: int, minimum: int, maximum: int) -> int:
+    try:
+        num = int(value)
+    except Exception:
+        num = fallback
+    return max(minimum, min(maximum, num))
+
+
+def _is_placeholder_stop(stop: Any) -> bool:
+    if not isinstance(stop, dict):
+        return False
+    title = str(stop.get("title") or "").strip().upper()
+    station = str(stop.get("station_name") or "").strip().lower()
+    return title == "BEISPIEL" or "gellershagen schneiderstraße" in station
+
+
+def migrate_config(config: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    """Apply safe release migrations for old local configs.
+
+    Existing test machines may still have debug defaults from older builds
+    stored in config.json. Without this migration the release screen can still
+    show system diagnostics or an oversized radar even though the repository
+    defaults were already cleaned up.
+    """
+    cfg = copy.deepcopy(config)
+    changed = False
+
+    app = cfg.setdefault("app", {})
+    old_version = int(app.get("config_schema_version", 0) or 0)
+
+    ui = cfg.setdefault("ui", {})
+    radar = ui.setdefault("radar", {})
+    old_height = radar.get("height", 180)
+    new_height = _clamp_int(old_height, 180, 120, 420)
+    if old_height != new_height:
+        radar["height"] = new_height
+        changed = True
+
+    if old_version < 2:
+        system = ui.setdefault("system", {})
+        if system.get("enabled", False):
+            system["enabled"] = False
+            changed = True
+        if system.get("diagnostic_only") is not True:
+            system["diagnostic_only"] = True
+            changed = True
+
+        transit_ui = ui.setdefault("transit", {})
+        transit = cfg.setdefault("transit", {})
+        stops = transit.get("stops", [])
+        if isinstance(stops, list):
+            cleaned_stops = [stop for stop in stops if not _is_placeholder_stop(stop)]
+            if cleaned_stops != stops:
+                transit["stops"] = cleaned_stops
+                changed = True
+            if not cleaned_stops and transit_ui.get("enabled", False):
+                transit_ui["enabled"] = False
+                changed = True
+
+    if app.get("config_schema_version") != CONFIG_SCHEMA_VERSION:
+        app["config_schema_version"] = CONFIG_SCHEMA_VERSION
+        changed = True
+
+    return cfg, changed
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -67,7 +139,12 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
         user_cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
     except Exception:
         user_cfg = {}
-    return expand_user_values(deep_merge(DEFAULT_CONFIG, user_cfg))
+
+    merged = deep_merge(DEFAULT_CONFIG, user_cfg)
+    migrated, changed = migrate_config(merged)
+    if changed:
+        save_config(migrated, cfg_path)
+    return expand_user_values(migrated)
 
 
 def save_config(config: dict[str, Any], path: Path | None = None) -> None:
