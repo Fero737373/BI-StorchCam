@@ -3,49 +3,63 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark light">
+  <meta name="color-scheme" content="dark">
   <title>BI-StorchCam</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <a class="skip-link" href="#menu">Zum Menü springen</a>
 
-  <main class="screen" aria-label="BI-StorchCam Infoscreen">
-    <iframe id="live" class="live" title="Livestream" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen></iframe>
-    <div class="video-vignette" aria-hidden="true"></div>
-
-    <header class="topbar" aria-label="Statusleiste">
-      <button id="menuBtn" class="icon-button menu-btn" type="button" aria-label="Einstellungen öffnen" aria-controls="menu" aria-expanded="false">
-        <span aria-hidden="true">☰</span>
-      </button>
-
-      <section id="clockbar" class="surface clock-card" aria-label="Aktuelle Uhrzeit">
-        <span id="clock">--:--:--</span>
-      </section>
-
-      <section id="sysbar" class="surface system-card" aria-label="Systemdiagnose">
-        <span id="sys">Diagnose lädt ...</span>
-      </section>
-    </header>
-
-    <section id="radar" class="surface radar-card" aria-label="Regenradar">
-      <div class="card-header radar-title">
-        <div>
-          <span class="eyebrow">Wetter</span>
-          <h2>Regenradar</h2>
-        </div>
-        <small id="radarLabel">Bielefeld</small>
+  <main class="screen stream-first-screen" aria-label="BI-StorchCam Livestream-Viewer">
+    <section class="stage" aria-label="Livestream Bühne">
+      <iframe id="live" class="live" title="Livestream" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+      <div class="stream-empty-state" aria-hidden="true">
+        <strong>Livestream fehlt</strong>
+        <span>Öffne das Menü und setze eine Stream- oder Embed-URL.</span>
       </div>
-      <div id="radar-map" class="radar-map">
-        <div class="radar-status">lädt ...</div>
-      </div>
-      <div class="radar-scale" aria-hidden="true"><span>leicht</span><b></b><span>stark</span></div>
+      <div class="video-vignette" aria-hidden="true"></div>
     </section>
 
-    <section id="boards" class="boards" aria-label="Abfahrten"></section>
+    <section class="hud-layer" aria-label="Livestream Zusatzinformationen">
+      <header class="hud-top" aria-label="Schnellstatus">
+        <div class="hud-cluster hud-cluster-left">
+          <button id="menuBtn" class="icon-button menu-btn" type="button" aria-label="Einstellungen öffnen" aria-controls="menu" aria-expanded="false">
+            <span aria-hidden="true">☰</span>
+          </button>
+          <section id="clockbar" class="overlay-card clock-card" aria-label="Aktuelle Uhrzeit">
+            <span id="clock">--:--:--</span>
+          </section>
+        </div>
+        <section id="sysbar" class="overlay-card system-card" aria-label="Systemdiagnose">
+          <span id="sys">Diagnose lädt ...</span>
+        </section>
+      </header>
 
-    <section id="weather" class="surface weather-card" aria-label="Wetterübersicht">
-      <span id="weatherText">Bielefeld | Wetter lädt ...</span>
+      <aside class="hud-side hud-side-left" aria-label="Wetter und Radar">
+        <section id="radar" class="overlay-card radar-card" aria-label="Regenradar">
+          <div class="radar-title">
+            <div>
+              <span class="eyebrow">Regenradar</span>
+              <h2>Nahbereich</h2>
+            </div>
+            <small id="radarLabel">Bielefeld</small>
+          </div>
+          <div id="radar-map" class="radar-map">
+            <div class="radar-status">Radar lädt ...</div>
+          </div>
+          <div class="radar-scale" aria-hidden="true"><span>leicht</span><b></b><span>stark</span></div>
+        </section>
+      </aside>
+
+      <aside class="hud-side hud-side-right" aria-label="ÖPNV Abfahrten">
+        <section id="boards" class="boards"></section>
+      </aside>
+
+      <footer class="hud-bottom" aria-label="Wetterübersicht">
+        <section id="weather" class="overlay-card weather-card">
+          <span id="weatherText">Bielefeld | Wetter lädt ...</span>
+        </section>
+      </footer>
     </section>
   </main>
 
@@ -55,10 +69,10 @@
       <header class="panel-header">
         <div>
           <div class="brand-row">
-            <p class="product-kicker">Preview Release</p>
+            <p class="product-kicker">Livestream First</p>
             <h1 id="settingsTitle">BI-StorchCam</h1>
           </div>
-          <p class="menu-sub">Infoscreen für Livestream, Wetter, Regenradar und Abfahrten.</p>
+          <p class="menu-sub">Livestream als Hauptfläche. Uhrzeit, Wetter, Regenradar und Abfahrten als dezente Overlays.</p>
         </div>
         <button id="closeMenu" class="icon-button close-button" type="button" aria-label="Einstellungen schließen">×</button>
       </header>
@@ -68,9 +82,9 @@
           <div class="section-heading">
             <div>
               <span class="eyebrow">Setup</span>
-              <h2 id="screenSettingsTitle">Bildschirm</h2>
+              <h2 id="screenSettingsTitle">Livestream & Standort</h2>
             </div>
-            <p>Stream, Standort und Radargröße für den öffentlichen Screen.</p>
+            <p>Der Stream ist das Produkt. Die restlichen Informationen werden als Overlays darüber gelegt.</p>
           </div>
 
           <div class="form-grid">
@@ -110,17 +124,17 @@
         <section class="settings-section" aria-labelledby="visibilityTitle">
           <div class="section-heading compact">
             <div>
-              <span class="eyebrow">Anzeige</span>
-              <h2 id="visibilityTitle">Sichtbare Elemente</h2>
+              <span class="eyebrow">Overlay</span>
+              <h2 id="visibilityTitle">Sichtbare Add-ons</h2>
             </div>
-            <p>Nur relevante Informationen auf dem Release-Screen zeigen.</p>
+            <p>Schalte Add-ons aus, wenn sie den Livestream auf kleinen Displays stören.</p>
           </div>
 
           <div class="toggle-grid" role="group" aria-label="Sichtbare Elemente">
             <label class="toggle-card" for="showWeather"><input id="showWeather" type="checkbox"><span>Wetter</span></label>
             <label class="toggle-card" for="showRadar"><input id="showRadar" type="checkbox"><span>Regenradar</span></label>
             <label class="toggle-card" for="showTransit"><input id="showTransit" type="checkbox"><span>Abfahrten</span></label>
-            <label class="toggle-card diagnostic-toggle" for="showSystem"><input id="showSystem" type="checkbox"><span>Systemdaten</span><small>nur Diagnose</small></label>
+            <label class="toggle-card diagnostic-toggle" for="showSystem"><input id="showSystem" type="checkbox"><span>Systemdaten</span><small>Diagnose</small></label>
           </div>
         </section>
 
@@ -128,15 +142,15 @@
           <div class="section-heading">
             <div>
               <span class="eyebrow">ÖPNV</span>
-              <h2 id="transitTitle">Abfahrten</h2>
+              <h2 id="transitTitle">Haltestellen</h2>
             </div>
-            <p>Haltestelle suchen, übernehmen und speichern. JSON bleibt nur für fortgeschrittene Konfiguration.</p>
+            <p>Haltestelle suchen, übernehmen und speichern. Die Anzeige bleibt als dunkles Overlay im Stream.</p>
           </div>
 
           <div class="station-search">
             <label class="field station-query" for="stationQuery">
               <span class="sr-only">Haltestelle suchen</span>
-              <input id="stationQuery" placeholder="z.B. Stapelbrede oder Schneiderstraße" autocomplete="off">
+              <input id="stationQuery" placeholder="z.B. Schneiderstraße oder Jahnplatz" autocomplete="off">
             </label>
             <button id="stationSearchBtn" class="button button-primary" type="button">Suchen</button>
           </div>
