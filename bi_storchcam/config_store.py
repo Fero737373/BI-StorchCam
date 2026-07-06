@@ -9,7 +9,7 @@ from typing import Any
 
 from .defaults import DEFAULT_CONFIG
 
-CONFIG_SCHEMA_VERSION = 2
+CONFIG_SCHEMA_VERSION = 3
 
 
 def _platform_app_dir() -> Path:
@@ -27,7 +27,6 @@ LEGACY_CONFIG_PATH = Path.home() / ".config" / "BI-StorchCam" / "config.json"
 
 
 def _migrate_legacy_windows_config() -> None:
-    """Move old Windows config location into the normal AppData path once."""
     if os.name != "nt" or CONFIG_PATH == LEGACY_CONFIG_PATH:
         return
     if CONFIG_PATH.exists() or not LEGACY_CONFIG_PATH.exists():
@@ -49,6 +48,16 @@ def _release_int(value: Any, fallback: int, minimum: int, maximum: int) -> int:
     return num
 
 
+def _release_float(value: Any, fallback: float, minimum: float, maximum: float) -> float:
+    try:
+        num = float(value)
+    except Exception:
+        return fallback
+    if num < minimum or num > maximum:
+        return fallback
+    return num
+
+
 def _is_placeholder_stop(stop: Any) -> bool:
     if not isinstance(stop, dict):
         return False
@@ -58,13 +67,6 @@ def _is_placeholder_stop(stop: Any) -> bool:
 
 
 def migrate_config(config: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-    """Apply safe release migrations for old local configs.
-
-    Existing test machines may still have debug defaults from older builds
-    stored in config.json. Without this migration the release screen can still
-    show system diagnostics or an oversized radar even though the repository
-    defaults were already cleaned up.
-    """
     cfg = copy.deepcopy(config)
     changed = False
 
@@ -73,13 +75,23 @@ def migrate_config(config: dict[str, Any]) -> tuple[dict[str, Any], bool]:
 
     ui = cfg.setdefault("ui", {})
     radar = ui.setdefault("radar", {})
-    old_height = radar.get("height", 180)
-    new_height = _release_int(old_height, 180, 120, 420)
-    if old_height != new_height:
-        radar["height"] = new_height
-        changed = True
 
-    if old_version < CONFIG_SCHEMA_VERSION:
+    if old_version < 3:
+        values = {
+            "height": _release_int(radar.get("height", 180), 320, 220, 520),
+            "width": _release_int(radar.get("width", 260), 420, 300, 560),
+            "zoom": _release_int(radar.get("zoom", 10), 12, 8, 14),
+            "opacity": _release_float(radar.get("opacity", 0.82), 0.92, 0.4, 1.0),
+        }
+        for key, value in values.items():
+            if radar.get(key) != value:
+                radar[key] = value
+                changed = True
+
+        if ui.get("theme") != "production":
+            ui["theme"] = "production"
+            changed = True
+
         system = ui.setdefault("system", {})
         if system.get("enabled", False):
             system["enabled"] = False
