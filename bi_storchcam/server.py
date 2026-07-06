@@ -17,16 +17,17 @@ WEB_DIR = Path(__file__).resolve().parent / "web"
 
 
 class StorchHandler(BaseHTTPRequestHandler):
-    server_version = "BI-StorchCam/2.1"
+    server_version = "BI-StorchCam/2.2"
 
-    def _json(self, obj: Any, status: int = 200) -> None:
+    def _json(self, obj: Any, status: int = 200, head_only: bool = False) -> None:
         raw = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(raw)))
         self.end_headers()
-        self.wfile.write(raw)
+        if not head_only:
+            self.wfile.write(raw)
 
     def _read_json_body(self) -> dict[str, Any]:
         length = int(self.headers.get("Content-Length") or "0")
@@ -41,6 +42,20 @@ class StorchHandler(BaseHTTPRequestHandler):
     @property
     def config(self) -> dict[str, Any]:
         return load_config()
+
+    def do_HEAD(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if path == "/api/state":
+            self._json(build_state(self.config), head_only=True)
+            return
+        if path == "/api/config":
+            self._json({"path": str(CONFIG_PATH), "config": self.config}, head_only=True)
+            return
+        if path in ("/api/radar", "/api/radar/test"):
+            self._json(get_radar_metadata(self.config), head_only=True)
+            return
+        self._serve_static(path, head_only=True)
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
@@ -72,7 +87,7 @@ class StorchHandler(BaseHTTPRequestHandler):
             return
         self._json({"ok": False, "error": "unknown endpoint"}, 404)
 
-    def _serve_static(self, path: str) -> None:
+    def _serve_static(self, path: str, head_only: bool = False) -> None:
         if path in ("/", ""):
             path = "/index.html"
         rel = path.lstrip("/")
@@ -83,6 +98,7 @@ class StorchHandler(BaseHTTPRequestHandler):
         if not file_path.exists() or not file_path.is_file():
             self.send_error(404)
             return
+
         data = file_path.read_bytes()
         ctype = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
         if file_path.suffix == ".js":
@@ -91,12 +107,14 @@ class StorchHandler(BaseHTTPRequestHandler):
             ctype = "text/css; charset=utf-8"
         elif file_path.suffix == ".html":
             ctype = "text/html; charset=utf-8"
+
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
-        self.wfile.write(data)
+        if not head_only:
+            self.wfile.write(data)
 
     def log_message(self, fmt: str, *args: Any) -> None:
         return
