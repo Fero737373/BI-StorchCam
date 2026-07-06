@@ -13,6 +13,7 @@
   <main class="screen stream-first-screen" aria-label="BI-StorchCam Kiosk-Livestream">
     <section class="stage" aria-label="Livestream Bühne">
       <iframe id="live" class="live" title="Livestream" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+      <div class="video-mask" aria-hidden="true"></div>
       <div class="stream-empty-state" aria-hidden="true">
         <div class="empty-copy">
           <span class="eyebrow danger">Stream</span>
@@ -48,13 +49,27 @@
         <section id="sysbar" class="system-pill" aria-label="Systemdiagnose">
           <span id="sys">Diagnose lädt ...</span>
         </section>
-      </header>
+      </div>
+
+      <section id="weather" class="weather-chip" aria-label="Wetterstatus">
+        <span class="color-key" aria-hidden="true"></span>
+        <span id="weatherText">Bielefeld | Wetter lädt ...</span>
+      </section>
+
+      <section id="streamStatus" class="connection-flag" role="status" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="streamStatusText">Livestream wird geladen</span>
+      </section>
+
+      <section id="sysbar" class="system-line" aria-label="Systemdiagnose">
+        <span id="sys">Diagnose lädt ...</span>
+      </section>
 
       <aside class="hud-corner hud-corner-left" aria-label="Regenradar">
         <section id="radar" class="radar-card" aria-label="Regenradar Nahbereich">
           <div class="radar-title">
             <div>
-              <span class="eyebrow">Regenradar</span>
+              <span class="kicker">Regenradar</span>
               <h2>Nahbereich</h2>
             </div>
             <small id="radarLabel">Bielefeld</small>
@@ -81,7 +96,7 @@
           <h1 id="settingsTitle">BI-StorchCam Konfiguration</h1>
           <p class="menu-sub">Der Livestream bleibt die Bühne. Alle Zusatzinformationen werden als kompakte Kiosk-Overlays gesteuert.</p>
         </div>
-        <button id="closeMenu" class="icon-button close-button" type="button" aria-label="Einstellungen schließen">×</button>
+        <button id="closeMenu" class="close-button" type="button" aria-label="Einstellungen schließen">×</button>
       </header>
 
       <form id="settingsForm" class="panel-content">
@@ -164,7 +179,7 @@
             <label class="toggle-card" for="showWeather"><input id="showWeather" type="checkbox"><span>Wetter</span></label>
             <label class="toggle-card" for="showRadar"><input id="showRadar" type="checkbox"><span>Regenradar</span></label>
             <label class="toggle-card" for="showTransit"><input id="showTransit" type="checkbox"><span>Abfahrten</span></label>
-            <label class="toggle-card diagnostic-toggle" for="showSystem"><input id="showSystem" type="checkbox"><span>Systemdaten</span><small>Diagnose</small></label>
+            <label class="toggle-card" for="showSystem"><input id="showSystem" type="checkbox"><span>Systemdaten</span></label>
           </div>
         </section>
 
@@ -178,10 +193,7 @@
             <p>Haltestelle suchen, übernehmen und als kompakte Abfahrtstafel anzeigen.</p>
           </div>
           <div class="station-search">
-            <label class="field station-query" for="stationQuery">
-              <span class="sr-only">Haltestelle suchen</span>
-              <input id="stationQuery" placeholder="z.B. Schneiderstraße oder Jahnplatz" autocomplete="off">
-            </label>
+            <label class="field station-query" for="stationQuery"><span class="sr-only">Haltestelle suchen</span><input id="stationQuery" placeholder="z.B. Schneiderstraße oder Jahnplatz" autocomplete="off"></label>
             <button id="stationSearchBtn" class="button button-primary" type="button">Suchen</button>
           </div>
           <div id="stationResults" class="station-results" aria-live="polite"></div>
@@ -217,7 +229,6 @@
   </aside>
 
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-
   <script src="app.js"></script>
 </body>
 </html>
