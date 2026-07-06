@@ -7,36 +7,51 @@
   <title>BI-StorchCam</title>
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="is-loading">
   <a class="skip-link" href="#menu">Zum Menü springen</a>
 
-  <main class="screen stream-first-screen" aria-label="BI-StorchCam Livestream-Viewer">
+  <main class="screen stream-first-screen" aria-label="BI-StorchCam Kiosk-Livestream">
     <section class="stage" aria-label="Livestream Bühne">
       <iframe id="live" class="live" title="Livestream" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen></iframe>
       <div class="stream-empty-state" aria-hidden="true">
-        <strong>Livestream fehlt</strong>
-        <span>Öffne das Menü und setze eine Stream- oder Embed-URL.</span>
+        <div class="empty-copy">
+          <span class="eyebrow danger">Stream</span>
+          <strong>Livestream nicht erreichbar</strong>
+          <span>Prüfe die Livestream-URL oder lade den Stream neu.</span>
+          <button id="streamReload" class="button button-primary" type="button">Neu laden</button>
+        </div>
       </div>
       <div class="video-vignette" aria-hidden="true"></div>
+      <div id="streamStatus" class="stream-status" role="status" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="streamStatusText">Livestream wird geladen</span>
+      </div>
     </section>
 
-    <section class="hud-layer" aria-label="Livestream Zusatzinformationen">
+    <section class="hud-layer" aria-label="Livestream Informationsschicht">
       <header class="hud-top" aria-label="Schnellstatus">
-        <div class="hud-cluster hud-cluster-left">
+        <div class="hud-top-left">
           <button id="menuBtn" class="icon-button menu-btn" type="button" aria-label="Einstellungen öffnen" aria-controls="menu" aria-expanded="false">
-            <span aria-hidden="true">☰</span>
+            <span aria-hidden="true"></span>
           </button>
-          <section id="clockbar" class="overlay-card clock-card" aria-label="Aktuelle Uhrzeit">
-            <span id="clock">--:--:--</span>
+          <section id="clockbar" class="clock-badge" aria-label="Aktuelle Uhrzeit">
+            <span class="eyebrow">Zeit</span>
+            <strong id="clock">--:--:--</strong>
           </section>
         </div>
-        <section id="sysbar" class="overlay-card system-card" aria-label="Systemdiagnose">
+
+        <section id="weather" class="weather-strip" aria-label="Wetterstatus">
+          <span class="signal-square" aria-hidden="true"></span>
+          <span id="weatherText">Bielefeld | Wetter lädt ...</span>
+        </section>
+
+        <section id="sysbar" class="system-pill" aria-label="Systemdiagnose">
           <span id="sys">Diagnose lädt ...</span>
         </section>
       </header>
 
-      <aside class="hud-side hud-side-left" aria-label="Wetter und Radar">
-        <section id="radar" class="overlay-card radar-card" aria-label="Regenradar">
+      <aside class="hud-corner hud-corner-left" aria-label="Regenradar">
+        <section id="radar" class="radar-card" aria-label="Regenradar Nahbereich">
           <div class="radar-title">
             <div>
               <span class="eyebrow">Regenradar</span>
@@ -51,15 +66,9 @@
         </section>
       </aside>
 
-      <aside class="hud-side hud-side-right" aria-label="ÖPNV Abfahrten">
+      <aside class="hud-corner hud-corner-right" aria-label="ÖPNV Abfahrten">
         <section id="boards" class="boards"></section>
       </aside>
-
-      <footer class="hud-bottom" aria-label="Wetterübersicht">
-        <section id="weather" class="overlay-card weather-card">
-          <span id="weatherText">Bielefeld | Wetter lädt ...</span>
-        </section>
-      </footer>
     </section>
   </main>
 
@@ -68,30 +77,49 @@
     <div class="panel-shell">
       <header class="panel-header">
         <div>
-          <div class="brand-row">
-            <p class="product-kicker">Livestream First</p>
-            <h1 id="settingsTitle">BI-StorchCam</h1>
-          </div>
-          <p class="menu-sub">Livestream als Hauptfläche. Uhrzeit, Wetter, Regenradar und Abfahrten als dezente Overlays.</p>
+          <p class="product-kicker">Admin</p>
+          <h1 id="settingsTitle">BI-StorchCam Konfiguration</h1>
+          <p class="menu-sub">Der Livestream bleibt die Bühne. Alle Zusatzinformationen werden als kompakte Kiosk-Overlays gesteuert.</p>
         </div>
         <button id="closeMenu" class="icon-button close-button" type="button" aria-label="Einstellungen schließen">×</button>
       </header>
 
       <form id="settingsForm" class="panel-content">
-        <section class="settings-section" aria-labelledby="screenSettingsTitle">
+        <section class="settings-section" aria-labelledby="streamSettingsTitle">
           <div class="section-heading">
+            <span class="section-letter">A</span>
             <div>
-              <span class="eyebrow">Setup</span>
-              <h2 id="screenSettingsTitle">Livestream & Standort</h2>
+              <span class="eyebrow">Livestream</span>
+              <h2 id="streamSettingsTitle">Quelle & Verbindung</h2>
             </div>
-            <p>Der Stream ist das Produkt. Die restlichen Informationen werden als Overlays darüber gelegt.</p>
+            <p>Stream-URL ändern, neu laden und Reconnect-Zustand prüfen.</p>
           </div>
-
           <div class="form-grid">
             <label class="field field-wide" for="cfgStream">
-              <span>Livestream URL</span>
+              <span>Livestream-URL</span>
               <textarea id="cfgStream" rows="3" spellcheck="false" placeholder="https://..."></textarea>
             </label>
+            <div class="field field-status">
+              <span>Reconnect-Status</span>
+              <output id="panelStreamStatus">wartet auf Verbindung</output>
+            </div>
+            <div class="field field-actions-inline">
+              <span>Stream-Aktion</span>
+              <button id="reloadStreamPanel" class="button button-secondary" type="button">Neu laden</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-section" aria-labelledby="locationSettingsTitle">
+          <div class="section-heading">
+            <span class="section-letter">B</span>
+            <div>
+              <span class="eyebrow">Standort</span>
+              <h2 id="locationSettingsTitle">Ort & Koordinaten</h2>
+            </div>
+            <p>Basis für Wetter, Regenradar und öffentliche Standortanzeige.</p>
+          </div>
+          <div class="form-grid">
             <label class="field" for="cfgLabel">
               <span>Standortname</span>
               <input id="cfgLabel" type="text" placeholder="Bielefeld">
@@ -104,6 +132,19 @@
               <span>Längengrad</span>
               <input id="cfgLon" type="number" step="0.0001" inputmode="decimal">
             </label>
+          </div>
+        </section>
+
+        <section class="settings-section" aria-labelledby="layoutSettingsTitle">
+          <div class="section-heading">
+            <span class="section-letter">C</span>
+            <div>
+              <span class="eyebrow">Layout</span>
+              <h2 id="layoutSettingsTitle">Overlay-Profil</h2>
+            </div>
+            <p>Sichtbarkeit und Größe der Zusatzinformationen ohne manuelles Nachjustieren.</p>
+          </div>
+          <div class="form-grid">
             <label class="field" for="cfgLayout">
               <span>Layoutprofil</span>
               <select id="cfgLayout">
@@ -116,20 +157,9 @@
             </label>
             <label class="field" for="cfgRadarH">
               <span>Radarhöhe</span>
-              <input id="cfgRadarH" type="number" min="120" max="420" inputmode="numeric">
+              <input id="cfgRadarH" type="number" min="140" max="280" inputmode="numeric">
             </label>
           </div>
-        </section>
-
-        <section class="settings-section" aria-labelledby="visibilityTitle">
-          <div class="section-heading compact">
-            <div>
-              <span class="eyebrow">Overlay</span>
-              <h2 id="visibilityTitle">Sichtbare Add-ons</h2>
-            </div>
-            <p>Schalte Add-ons aus, wenn sie den Livestream auf kleinen Displays stören.</p>
-          </div>
-
           <div class="toggle-grid" role="group" aria-label="Sichtbare Elemente">
             <label class="toggle-card" for="showWeather"><input id="showWeather" type="checkbox"><span>Wetter</span></label>
             <label class="toggle-card" for="showRadar"><input id="showRadar" type="checkbox"><span>Regenradar</span></label>
@@ -140,13 +170,13 @@
 
         <section class="settings-section" aria-labelledby="transitTitle">
           <div class="section-heading">
+            <span class="section-letter">D</span>
             <div>
               <span class="eyebrow">ÖPNV</span>
               <h2 id="transitTitle">Haltestellen</h2>
             </div>
-            <p>Haltestelle suchen, übernehmen und speichern. Die Anzeige bleibt als dunkles Overlay im Stream.</p>
+            <p>Haltestelle suchen, übernehmen und als kompakte Abfahrtstafel anzeigen.</p>
           </div>
-
           <div class="station-search">
             <label class="field station-query" for="stationQuery">
               <span class="sr-only">Haltestelle suchen</span>
@@ -154,13 +184,22 @@
             </label>
             <button id="stationSearchBtn" class="button button-primary" type="button">Suchen</button>
           </div>
-
           <div id="stationResults" class="station-results" aria-live="polite"></div>
+        </section>
 
+        <section class="settings-section" aria-labelledby="actionsTitle">
+          <div class="section-heading">
+            <span class="section-letter">E</span>
+            <div>
+              <span class="eyebrow">Aktionen</span>
+              <h2 id="actionsTitle">Speichern & erweitert</h2>
+            </div>
+            <p>Änderungen speichern, Konfiguration neu laden oder JSON direkt bearbeiten.</p>
+          </div>
           <details class="advanced-config">
-            <summary>Erweiterte Haltestellen-Konfiguration</summary>
-            <label class="field" for="cfgStops">
-              <span class="sr-only">Haltestellen JSON</span>
+            <summary>Erweiterte Konfiguration</summary>
+            <label class="field field-wide" for="cfgStops">
+              <span>Haltestellen JSON</span>
               <textarea id="cfgStops" class="codebox" rows="10" spellcheck="false"></textarea>
             </label>
           </details>
