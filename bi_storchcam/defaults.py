@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Default-Konfiguration für BI-StorchCam.
-
-Private lokale Daten gehören unter Linux nach ~/.config/BI-StorchCam/config.json
-und unter Windows nach %APPDATA%\\BI-StorchCam\\config.json.
-"""
+"""Default-Konfiguration für BI-StorchCam."""
 
 DEFAULT_CONFIG = {
     "app": {
@@ -42,28 +38,26 @@ DEFAULT_CONFIG = {
         "longitude": 8.5325,
     },
     "stream": {
-        "url": "https://www.youtube.com/embed/kgaMXfx0G8U?autoplay=1&mute=1&playsinline=1&controls=0&modestbranding=1&rel=0",
+        "url": "",
         "muted": True,
         "autoplay": True,
     },
     "ui": {
         "menu_enabled": True,
-        "theme": "dark-radar",
+        "theme": "production",
         "layout_profile": "auto",
-        "clock": {"enabled": True, "position": "top-left", "size": "auto"},
-        "weather": {"enabled": True, "mode": "smart_short", "position": "bottom", "size": "auto"},
+        "clock": {"enabled": True, "position": "top-left", "size": "large"},
+        "weather": {"enabled": True, "mode": "smart_short", "position": "bottom", "size": "large"},
         "radar": {
             "enabled": True,
             "position": "left",
-            "width": 260,
-            "height": 180,
-            "zoom": 10,
-            "opacity": 0.82,
+            "width": 420,
+            "height": 320,
+            "zoom": 12,
+            "opacity": 0.92,
             "refresh_seconds": 300,
         },
-        # Release-Default: Keine leeren Beispiel-Abfahrten auf dem öffentlichen Screen.
         "transit": {"enabled": False, "position": "right", "size": "auto"},
-        # Release-Default: Technikdaten nur bei Diagnose sichtbar machen.
         "system": {"enabled": False, "position": "top-right", "diagnostic_only": True},
     },
     "weather": {
