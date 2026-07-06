@@ -6,6 +6,10 @@
   <meta name="color-scheme" content="dark">
   <title>BI-StorchCam</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    .stage:has(.live[src]:not([src=""])) .stream-empty-state,
+    .live[src]:not([src=""]) ~ .stream-empty-state{display:none!important}
+  </style>
 </head>
 <body>
   <a class="skip-link" href="#menu">Zum Menü springen</a>
