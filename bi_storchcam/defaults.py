@@ -19,9 +19,13 @@ DEFAULT_CONFIG = {
         "xauthority": "~/.Xauthority",
         "browser": "auto",
         "profile_dir": "",
+        "log_file": "~/.cache/BI-StorchCam/chromium.log",
         "kill_existing_chromium": True,
         "disable_screensaver": True,
         "use_gpu": True,
+        "browser_restart_seconds": 3,
+        "browser_restart_max_seconds": 60,
+        "browser_stable_seconds": 30,
         "extra_flags": [],
     },
     "screen": {
