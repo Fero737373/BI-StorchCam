@@ -6,6 +6,7 @@ import shlex
 import shutil
 import subprocess
 import webbrowser
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,12 @@ def _default_profile_dir() -> str:
         base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
         return str(Path(base) / "BI-StorchCam" / "browser-profile")
     return "/tmp/storchcam-profile"
+
+
+def _browser_log_path(config: dict[str, Any]) -> Path:
+    kiosk = config.get("kiosk", {})
+    raw = str(kiosk.get("log_file") or "~/.cache/BI-StorchCam/chromium.log")
+    return Path(os.path.expandvars(os.path.expanduser(raw)))
 
 
 def _browser_candidates(configured: str) -> list[str]:
@@ -88,6 +95,15 @@ def _resolve_browser(configured: str) -> str | None:
     return None
 
 
+def _clear_profile_locks(profile_dir: str) -> None:
+    profile = Path(profile_dir)
+    for name in ("SingletonCookie", "SingletonLock", "SingletonSocket"):
+        try:
+            (profile / name).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 def prepare_display(config: dict[str, Any]) -> dict[str, str]:
     """Prepare Linux/X11 display helpers.
 
@@ -134,7 +150,24 @@ def prepare_display(config: dict[str, Any]) -> dict[str, str]:
     return env
 
 
-def start_browser(config: dict[str, Any], url: str) -> subprocess.Popen | None:
+def browser_is_running(process: subprocess.Popen[Any] | None) -> bool:
+    return process is not None and process.poll() is None
+
+
+def stop_browser(process: subprocess.Popen[Any] | None) -> None:
+    if process is None or process.poll() is not None:
+        return
+    try:
+        process.terminate()
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=3)
+    except Exception:
+        pass
+
+
+def start_browser(config: dict[str, Any], url: str) -> subprocess.Popen[Any] | None:
     kiosk = config.get("kiosk", {})
     env = prepare_display(config)
 
@@ -157,6 +190,7 @@ def start_browser(config: dict[str, Any], url: str) -> subprocess.Popen | None:
         profile_dir = _default_profile_dir()
     profile_dir = os.path.expandvars(os.path.expanduser(profile_dir))
     Path(profile_dir).mkdir(parents=True, exist_ok=True)
+    _clear_profile_locks(profile_dir)
 
     flags = [
         browser_bin,
@@ -164,14 +198,44 @@ def start_browser(config: dict[str, Any], url: str) -> subprocess.Popen | None:
         "--noerrdialogs",
         "--disable-infobars",
         "--disable-session-crashed-bubble",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-dev-shm-usage",
+        "--password-store=basic",
         "--autoplay-policy=no-user-gesture-required",
         "--disable-features=TranslateUI,MediaRouter",
         f"--user-data-dir={profile_dir}",
     ]
+    if not _is_windows():
+        flags.append("--ozone-platform=x11")
     if not kiosk.get("use_gpu", True):
         flags.extend(["--disable-gpu", "--disable-gpu-compositing"])
     flags.extend(str(x) for x in kiosk.get("extra_flags", []))
     flags.append(url)
 
-    print("Starte Browser:", " ".join(shlex.quote(x) for x in flags))
-    return subprocess.Popen(flags, env=env)
+    log_path = _browser_log_path(config)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
+    command = " ".join(shlex.quote(x) for x in flags)
+    print(f"Starte Browser: {command}")
+    print(f"Chromium-Log: {log_path}")
+
+    try:
+        with log_path.open("a", encoding="utf-8") as log_handle:
+            log_handle.write(f"\n===== Chromium start {timestamp} =====\n{command}\n")
+            log_handle.flush()
+            return subprocess.Popen(
+                flags,
+                env=env,
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+                start_new_session=not _is_windows(),
+            )
+    except Exception as exc:
+        print(f"FEHLER: Browserstart fehlgeschlagen: {exc}")
+        try:
+            with log_path.open("a", encoding="utf-8") as log_handle:
+                log_handle.write(f"Browserstart fehlgeschlagen: {exc}\n")
+        except OSError:
+            pass
+        return None
