@@ -6,7 +6,6 @@ import json
 import subprocess
 import threading
 import time
-from pathlib import Path
 from typing import Any
 
 from .config_store import CONFIG_PATH, config_path, load_config, save_config
@@ -20,6 +19,14 @@ from .state import build_state
 
 def _print_json(obj: Any) -> None:
     print(json.dumps(obj, ensure_ascii=False, indent=2))
+
+
+def _positive_float(value: Any, fallback: float, minimum: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        parsed = fallback
+    return max(minimum, parsed)
 
 
 def setup_interactive() -> None:
@@ -53,9 +60,9 @@ def start_local_server(cfg: dict[str, Any]) -> tuple[str, threading.Thread]:
 
 def _restart_settings(cfg: dict[str, Any]) -> tuple[float, float, float]:
     kiosk = cfg.get("kiosk", {})
-    initial = max(2.0, float(kiosk.get("browser_restart_seconds", 3)))
-    maximum = max(initial, float(kiosk.get("browser_restart_max_seconds", 60)))
-    stable = max(10.0, float(kiosk.get("browser_stable_seconds", 30)))
+    initial = _positive_float(kiosk.get("browser_restart_seconds"), 3.0, 2.0)
+    maximum = _positive_float(kiosk.get("browser_restart_max_seconds"), 60.0, initial)
+    stable = _positive_float(kiosk.get("browser_stable_seconds"), 30.0, 10.0)
     return initial, maximum, stable
 
 
@@ -155,7 +162,11 @@ def main() -> None:
                             next_browser_start = now + restart_delay
                             restart_delay = min(max(restart_delay * 2, current_initial), restart_max)
 
-            refresh_seconds = max(1.0, float(current_cfg.get("server", {}).get("state_refresh_seconds", 2)))
+            refresh_seconds = _positive_float(
+                current_cfg.get("server", {}).get("state_refresh_seconds"),
+                2.0,
+                1.0,
+            )
             elapsed = time.monotonic() - loop_started
             time.sleep(max(0.2, refresh_seconds - elapsed))
     except KeyboardInterrupt:
