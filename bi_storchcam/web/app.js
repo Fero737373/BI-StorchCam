@@ -1,34 +1,662 @@
-let currentConfig=null,lastRadarRefresh=0,radarRefreshInFlight=false,toastTimer=null,streamLoadedOnce=false;
-const byId=id=>document.getElementById(id);
-const arr=v=>Array.isArray(v)?v:[];
-function setText(id,text){const el=byId(id);if(el)el.textContent=text;}
-function setStatus(msg,state){const el=byId('saveState');if(!el)return;el.textContent=msg||'';state?el.dataset.state=state:delete el.dataset.state;}
-function setStreamStatus(msg,state){setText('streamStatusText',msg||'');setText('panelStreamStatus',msg||'ok');document.body.classList.toggle('is-loading',state==='loading');document.body.classList.toggle('is-reconnecting',state==='reconnect');document.body.classList.toggle('stream-missing',state==='missing'||state==='offline');}
-function showToast(msg,state='info'){const t=byId('toast');if(!t||!msg)return;t.textContent=msg;t.dataset.state=state;t.classList.remove('hidden');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.add('hidden'),4200);}
-function tick(){setText('clock',new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'}));}
-setInterval(tick,1000);tick();
-function makeCell(text,cls){const td=document.createElement('td');td.textContent=text;if(cls)td.className=cls;return td;}
-function shortenTarget(v,max=20){const s=String(v||'-').replace(/\s+/g,' ').replace(/^Bielefeld\s+/i,'').replace(/^BI-\s*/i,'').trim();return s.length>max?s.slice(0,max-1).trim()+'…':s;}
-function renderBoards(boards){const root=byId('boards');if(!root)return;root.replaceChildren();arr(boards).slice(0,2).forEach(board=>{const card=document.createElement('div');card.className='board';const h=document.createElement('h3');h.textContent=board.title||'HALT';card.appendChild(h);const table=document.createElement('table'),head=document.createElement('thead'),hr=document.createElement('tr');['Linie','Ziel','Zeit'].forEach((x,i)=>{const th=document.createElement('th');th.textContent=x;if(i===2)th.className='time';hr.appendChild(th);});head.appendChild(hr);table.appendChild(head);const body=document.createElement('tbody'),rows=arr(board.rows).slice(0,3);if(rows.length){rows.forEach(row=>{const tr=document.createElement('tr');tr.appendChild(makeCell(row.line||'-'));tr.appendChild(makeCell(shortenTarget(row.target),'target'));tr.appendChild(makeCell(row.mins||'-','time'));body.appendChild(tr);});}else{const tr=document.createElement('tr'),td=makeCell('keine Abfahrten','empty');td.colSpan=3;tr.appendChild(td);body.appendChild(tr);}table.appendChild(body);card.appendChild(table);root.appendChild(card);});}
-function applyUi(cfg){const ui=cfg?.ui||{};document.body.classList.toggle('hide-weather',!(ui.weather&&ui.weather.enabled));document.body.classList.toggle('hide-radar',!(ui.radar&&ui.radar.enabled));document.body.classList.toggle('hide-transit',!(ui.transit&&ui.transit.enabled));document.body.classList.toggle('hide-system',!(ui.system&&ui.system.enabled));const radar=byId('radar');if(radar&&ui.radar&&ui.radar.height){radar.style.height=Math.max(140,Math.min(280,Number(ui.radar.height)||190))+'px';}}
-function lon2tile(lon,z){return Math.floor((lon+180)/360*Math.pow(2,z));}
-function lat2tile(lat,z){const r=lat*Math.PI/180;return Math.floor((1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*Math.pow(2,z));}
-function tileUrl(t,z,x,y){return t.replaceAll('{z}',String(z)).replaceAll('{x}',String(x)).replaceAll('{y}',String(y));}
-function setRadarStatus(text){const map=byId('radar-map');if(!map)return;let s=map.querySelector('.radar-status');if(!s){s=document.createElement('div');s.className='radar-status';map.appendChild(s);}s.textContent=text;}
-function renderRadar(meta){const map=byId('radar-map');if(!map)return;map.replaceChildren();const label=meta?.label||'Bielefeld';setText('radarLabel',label);if(!meta||!meta.ok||!meta.tile_url){map.classList.add('radar-offline');setRadarStatus('offline · '+(meta?.error||'keine Daten'));return;}map.classList.remove('radar-offline');const z=Number(meta.zoom||10),lat=Number(meta.latitude||52.0302),lon=Number(meta.longitude||8.5325),cx=lon2tile(lon,z),cy=lat2tile(lat,z),grid=document.createElement('div');grid.className='radar-grid';for(let dy=-1;dy<=1;dy++){for(let dx=-1;dx<=1;dx++){const x=cx+dx,y=cy+dy,cell=document.createElement('div'),base=document.createElement('img'),rain=document.createElement('img');cell.className='radar-cell';base.alt='';base.loading='lazy';base.decoding='async';base.src=`https://tile.openstreetmap.org/${z}/${x}/${y}.png`;rain.alt='';rain.loading='lazy';rain.decoding='async';rain.className='rain';rain.src=tileUrl(meta.tile_url,z,x,y);cell.append(base,rain);grid.appendChild(cell);}}map.appendChild(grid);setRadarStatus(label+' · aktuell');}
-async function refreshRadar(force){const ui=currentConfig?.ui||{};if(ui.radar&&ui.radar.enabled===false)return;const now=Date.now(),sec=ui.radar&&ui.radar.refresh_seconds?Number(ui.radar.refresh_seconds):300,interval=Math.max(sec,60)*1000;if(!force&&now-lastRadarRefresh<interval)return;if(radarRefreshInFlight)return;radarRefreshInFlight=true;try{const r=await fetch('/api/radar?_='+now,{cache:'no-store'});renderRadar(await r.json());lastRadarRefresh=Date.now();}catch(e){renderRadar({ok:false,error:e.message||'Netzwerkfehler'});lastRadarRefresh=Date.now();}finally{radarRefreshInFlight=false;}}
-function reloadStream(){const live=byId('live'),stream=currentConfig?.stream?.url||live?.src;if(!live)return;if(!stream){setStreamStatus('Livestream-URL fehlt','missing');showToast('Livestream-URL fehlt','error');return;}streamLoadedOnce=false;setStreamStatus('Livestream wird neu geladen','loading');live.src='about:blank';setTimeout(()=>{live.src=stream;},60);}
-async function pull(){try{const r=await fetch('/api/state?_='+Date.now(),{cache:'no-store'}),d=await r.json(),cfg=d.config||{};currentConfig=cfg;applyUi(cfg);const stream=cfg.stream?.url||'',live=byId('live');if(stream&&live&&live.src!==stream){streamLoadedOnce=false;setStreamStatus('Livestream wird geladen','loading');live.src=stream;}else if(!stream){setStreamStatus('Livestream-URL fehlt','missing');}else if(streamLoadedOnce){setStreamStatus('Livestream verbunden','ok');}const s=d.system||{};setText('sys','IP '+(s.ip||'--')+' | CPU '+(s.cpu??'--')+'% | RAM '+(s.ram??'--')+'% | Temp '+(s.temp??'--')+'°C | Laufzeit '+(s.uptime||'--'));setText('weatherText',d.weather?.text||'Wetter lädt ...');renderBoards(d.boards||[]);refreshRadar(false);}catch(e){setStreamStatus('Verbindung wird wiederhergestellt','reconnect');showToast('Verbindung zur App wird wiederhergestellt ...','error');}}
-setInterval(pull,2000);pull();setInterval(()=>refreshRadar(true),300000);
-function openMenu(){const menu=byId('menu'),btn=byId('menuBtn');if(!menu)return;menu.classList.remove('hidden');btn?.setAttribute('aria-expanded','true');loadConfig().then(()=>byId('cfgStream')?.focus());}
-function closeMenu(){const menu=byId('menu'),btn=byId('menuBtn');if(!menu)return;menu.classList.add('hidden');btn?.setAttribute('aria-expanded','false');btn?.focus();}
-function fillForm(cfg){currentConfig=cfg;byId('cfgStream').value=cfg.stream?.url||'';byId('cfgLabel').value=cfg.location?.label||'Bielefeld';byId('cfgLat').value=cfg.location?.latitude||52.0302;byId('cfgLon').value=cfg.location?.longitude||8.5325;byId('cfgLayout').value=cfg.ui?.layout_profile||'auto';byId('cfgRadarH').value=cfg.ui?.radar?.height||190;byId('showWeather').checked=!!cfg.ui?.weather?.enabled;byId('showRadar').checked=!!cfg.ui?.radar?.enabled;byId('showTransit').checked=!!cfg.ui?.transit?.enabled;byId('showSystem').checked=!!cfg.ui?.system?.enabled;byId('cfgStops').value=JSON.stringify(cfg.transit?.stops||[],null,2);}
-async function loadConfig(){const r=await fetch('/api/config?_='+Date.now(),{cache:'no-store'}),d=await r.json();fillForm(d.config);setStatus('Config: '+d.path);}
-function readForm(){const cfg=JSON.parse(JSON.stringify(currentConfig||{}));cfg.stream=cfg.stream||{};cfg.location=cfg.location||{};cfg.ui=cfg.ui||{};cfg.ui.weather=cfg.ui.weather||{};cfg.ui.radar=cfg.ui.radar||{};cfg.ui.transit=cfg.ui.transit||{};cfg.ui.system=cfg.ui.system||{};cfg.transit=cfg.transit||{};const stream=byId('cfgStream').value.trim();if(!stream)throw new Error('Livestream URL fehlt.');cfg.stream.url=stream;cfg.location.label=byId('cfgLabel').value.trim()||'Bielefeld';cfg.location.latitude=parseFloat(byId('cfgLat').value||'52.0302');cfg.location.longitude=parseFloat(byId('cfgLon').value||'8.5325');cfg.ui.layout_profile=byId('cfgLayout').value;cfg.ui.radar.height=Math.max(140,Math.min(280,parseInt(byId('cfgRadarH').value||'190',10)));cfg.ui.weather.enabled=byId('showWeather').checked;cfg.ui.radar.enabled=byId('showRadar').checked;cfg.ui.transit.enabled=byId('showTransit').checked;cfg.ui.system.enabled=byId('showSystem').checked;try{cfg.transit.stops=JSON.parse(byId('cfgStops').value||'[]');}catch(e){throw new Error('Haltestellen JSON ist ungültig.');}return cfg;}
-function shortStopTitle(name){const cleaned=String(name||'Haltestelle').replace('Bielefeld','').replace('Bi-','').trim().replace(/^,\s*/,'');return cleaned.split(',')[0].trim()||'Haltestelle';}
-function stationToStop(station){return{title:shortStopTitle(station.station_name),station_name:station.station_name,station_id:station.station_id,line_filter:[],nightbus_only:false,hide_if_empty:true,max_rows:3};}
-function renderStationResults(results){const root=byId('stationResults');if(!root)return;root.replaceChildren();if(!results||!results.length){const empty=document.createElement('div');empty.className='station-empty';empty.textContent='Keine Haltestelle gefunden. Prüfe die Schreibweise oder suche allgemeiner.';root.appendChild(empty);return;}results.forEach(station=>{const row=document.createElement('div'),text=document.createElement('div'),name=document.createElement('strong'),meta=document.createElement('span'),btn=document.createElement('button');row.className='station-result';name.textContent=station.station_name||'Haltestelle';meta.textContent=station.station_id?'ID '+station.station_id:'VRR-Haltestelle';text.append(name,meta);btn.className='button button-primary';btn.type='button';btn.textContent='Übernehmen';btn.addEventListener('click',()=>{const cfg=JSON.parse(JSON.stringify(currentConfig||{}));cfg.transit=cfg.transit||{};cfg.transit.stops=[stationToStop(station)];cfg.ui=cfg.ui||{};cfg.ui.transit=cfg.ui.transit||{};cfg.ui.transit.enabled=true;currentConfig=cfg;fillForm(cfg);setStatus('Haltestelle übernommen. Speichern nicht vergessen.','success');showToast('Haltestelle übernommen','success');});row.append(text,btn);root.appendChild(row);});}
-async function saveConfig(){try{const cfg=readForm();setStatus('Speichere ...');const r=await fetch('/api/config/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({config:cfg})}),d=await r.json();if(d.ok){currentConfig=cfg;setStatus('Gespeichert: '+d.path,'success');showToast('Einstellungen gespeichert','success');lastRadarRefresh=0;reloadStream();pull();}else{setStatus('Fehler: '+(d.error||'unbekannt'),'error');showToast('Speichern fehlgeschlagen','error');}}catch(e){setStatus('Fehler: '+e.message,'error');showToast(e.message,'error');}}
-async function searchStation(){const q=byId('stationQuery').value.trim();if(!q){renderStationResults([]);setStatus('Bitte Suchbegriff eingeben.','error');return;}const btn=byId('stationSearchBtn');if(btn){btn.disabled=true;btn.textContent='Sucht ...';}setStatus('Haltestelle wird gesucht ...');try{const r=await fetch('/api/station/search?q='+encodeURIComponent(q)),d=await r.json();renderStationResults(d.results||[]);setStatus((d.results||[]).length?'Suchergebnis auswählen und übernehmen.':'Keine Haltestelle gefunden.',(d.results||[]).length?undefined:'error');}catch(e){renderStationResults([]);setStatus('Suche fehlgeschlagen: '+e.message,'error');showToast('Haltestellensuche fehlgeschlagen','error');}finally{if(btn){btn.disabled=false;btn.textContent='Suchen';}}}
-const liveFrame=byId('live');if(liveFrame){liveFrame.addEventListener('load',()=>{if(currentConfig?.stream?.url){streamLoadedOnce=true;setStreamStatus('Livestream verbunden','ok');}});}
-byId('menuBtn').addEventListener('click',openMenu);byId('closeMenu').addEventListener('click',closeMenu);byId('saveConfig').addEventListener('click',saveConfig);byId('reloadConfig').addEventListener('click',()=>loadConfig().then(()=>showToast('Config neu geladen','success')));byId('reloadStreamPanel').addEventListener('click',reloadStream);byId('streamReload').addEventListener('click',reloadStream);byId('stationSearchBtn').addEventListener('click',searchStation);byId('settingsForm').addEventListener('submit',e=>e.preventDefault());byId('stationQuery').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchStation();}});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!byId('menu').classList.contains('hidden'))closeMenu();});
+"use strict";
+
+const byId = (id) => document.getElementById(id);
+const elements = {
+  body: document.body,
+  live: byId("live"),
+  streamEmpty: byId("streamEmpty"),
+  streamStatus: byId("streamStatus"),
+  streamStatusText: byId("streamStatusText"),
+  clockbar: byId("clockbar"),
+  clock: byId("clock"),
+  date: byId("date"),
+  weather: byId("weather"),
+  weatherText: byId("weatherText"),
+  sysbar: byId("sysbar"),
+  sys: byId("sys"),
+  radar: byId("radar"),
+  radarMap: byId("radarMap"),
+  radarLabel: byId("radarLabel"),
+  radarTime: byId("radarTime"),
+  radarStatus: byId("radarStatus"),
+  radarAttribution: byId("radarAttribution"),
+  transitPanel: byId("transitPanel"),
+  boards: byId("boards"),
+  hotspot: byId("adminHotspot"),
+  pinDialog: byId("pinDialog"),
+  pinForm: byId("pinForm"),
+  pinTitle: byId("pinTitle"),
+  pinHelp: byId("pinHelp"),
+  pin: byId("adminPin"),
+  pinConfirm: byId("adminPinConfirm"),
+  pinConfirmField: byId("pinConfirmField"),
+  pinStatus: byId("pinStatus"),
+  submitPin: byId("submitPin"),
+  settings: byId("settingsDialog"),
+  settingsForm: byId("settingsForm"),
+  saveState: byId("saveState"),
+  stopEditor: byId("stopEditor"),
+  stationResults: byId("stationResults"),
+  stationSearchStatus: byId("stationSearchStatus"),
+  toast: byId("toast"),
+};
+
+let token = sessionStorage.getItem("bi-storchcam-admin-token") || "";
+let setupMode = false;
+let currentConfig = null;
+let workingStops = [];
+let dirty = false;
+let lastTrigger = null;
+let streamSignature = "";
+let longPressTimer = null;
+let toastTimer = null;
+let runtimeTimezone = "Europe/Berlin";
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+async function api(path, options = {}) {
+  const headers = new Headers(options.headers || {});
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  if (options.body) headers.set("Content-Type", "application/json");
+  const response = await fetch(path, { ...options, headers, cache: "no-store" });
+  let payload = {};
+  try {
+    payload = await response.json();
+  } catch (_error) {
+    payload = { error: `Ungültige Serverantwort (${response.status})` };
+  }
+  if (!response.ok) {
+    const error = new Error(payload.error || `HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+  return payload;
+}
+
+function setStatus(target, text, kind = "") {
+  target.textContent = text;
+  target.classList.remove("error", "success");
+  if (kind) target.classList.add(kind);
+}
+
+function showToast(text) {
+  elements.toast.textContent = text;
+  elements.toast.classList.remove("hidden");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => elements.toast.classList.add("hidden"), 3500);
+}
+
+function updateClock() {
+  const now = new Date();
+  elements.clock.textContent = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" }).format(now);
+  elements.date.textContent = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" }).format(now);
+}
+
+function resolveLayout(requested) {
+  if (requested !== "auto") return requested;
+  if (window.innerWidth < 1150 || window.innerHeight < 650) return "minimal";
+  if (window.innerWidth >= 1700 && window.innerHeight >= 850) return "information";
+  return "standard";
+}
+
+function applyRuntimeConfig(runtime) {
+  if (!runtime || !runtime.ui) return;
+  const ui = runtime.ui;
+  runtimeTimezone = runtime.timezone || runtime.app?.timezone || "Europe/Berlin";
+  elements.body.dataset.theme = ui.theme || "dark";
+  elements.body.dataset.layout = resolveLayout(ui.layout_profile || "auto");
+  const radar = ui.radar || {};
+  document.documentElement.style.setProperty("--radar-width", `${Number(radar.width || 280)}px`);
+  document.documentElement.style.setProperty("--radar-height", `${Number(radar.height || 190)}px`);
+  document.documentElement.style.setProperty("--radar-opacity", String(Number(radar.opacity ?? 0.92)));
+  elements.clockbar.classList.toggle("hidden", !ui.clock?.enabled);
+  elements.weather.classList.toggle("hidden", !ui.weather?.enabled);
+  elements.radar.classList.toggle("hidden", !radar.enabled);
+  elements.transitPanel.classList.toggle("hidden", !ui.transit?.enabled);
+  elements.sysbar.classList.toggle("hidden", !ui.system?.enabled);
+  configureStream(runtime.stream || {});
+}
+
+function effectiveStreamUrl(stream) {
+  const raw = String(stream.url || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    url.searchParams.set("autoplay", stream.autoplay ? "1" : "0");
+    url.searchParams.set("mute", stream.muted ? "1" : "0");
+    url.searchParams.set("playsinline", "1");
+    return url.toString();
+  } catch (_error) {
+    return raw;
+  }
+}
+
+function configureStream(stream, force = false) {
+  const signature = JSON.stringify({ url: stream.url || "", autoplay: !!stream.autoplay, muted: !!stream.muted });
+  if (!force && signature === streamSignature) return;
+  streamSignature = signature;
+  const url = effectiveStreamUrl(stream);
+  if (!url) {
+    elements.live.removeAttribute("src");
+    elements.streamEmpty.classList.remove("has-stream");
+    elements.streamEmpty.querySelector("strong").textContent = "Kein Livestream konfiguriert";
+    elements.streamStatus.dataset.state = "error";
+    elements.streamStatusText.textContent = "Keine Stream-URL konfiguriert";
+    return;
+  }
+  elements.streamEmpty.classList.add("has-stream");
+  elements.streamStatus.dataset.state = "loading";
+  elements.streamStatusText.textContent = "Stream-Seite wird geladen";
+  elements.live.src = "about:blank";
+  requestAnimationFrame(() => { elements.live.src = url; });
+}
+
+function formatMaybe(value, suffix = "") {
+  return value === null || value === undefined ? "–" : `${value}${suffix}`;
+}
+
+function renderSystem(system) {
+  if (!system || system.enabled === false) return;
+  elements.sys.textContent = `CPU ${formatMaybe(system.cpu, "%")} · RAM ${formatMaybe(system.ram, "%")} · ${system.temp == null ? "Temperatur nicht verfügbar" : `${system.temp} °C`}`;
+}
+
+function renderWeather(weather) {
+  if (!weather) return;
+  elements.weatherText.textContent = weather.text || "Wetter nicht verfügbar";
+  elements.weather.classList.toggle("provider-error", !weather.ok);
+}
+
+function tileCoordinates(latitude, longitude, zoom) {
+  const size = 256;
+  const scale = 2 ** zoom;
+  const x = ((longitude + 180) / 360) * scale * size;
+  const latRad = latitude * Math.PI / 180;
+  const y = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * scale * size;
+  return { x, y, scale, size };
+}
+
+function tileImage(src, left, top, rain = false) {
+  const image = document.createElement("img");
+  image.className = `radar-tile${rain ? " radar-rain" : ""}`;
+  image.alt = "";
+  image.loading = "eager";
+  image.style.left = `${left}px`;
+  image.style.top = `${top}px`;
+  image.src = src;
+  image.addEventListener("error", () => image.classList.add("tile-error"));
+  return image;
+}
+
+function renderRadar(radar) {
+  if (!radar) return;
+  elements.radarLabel.textContent = radar.label || "Standort";
+  elements.radarStatus.textContent = radar.status || "Datenstatus unbekannt";
+  elements.radarTime.textContent = radar.data_time ? new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: runtimeTimezone }).format(new Date(radar.data_time)) : "offline";
+  elements.radarAttribution.textContent = radar.attribution || "RainViewer · OpenStreetMap-Mitwirkende";
+  elements.radarMap.replaceChildren();
+  if (!radar.ok || !radar.tile_url) {
+    const message = document.createElement("span");
+    message.className = "loading-copy";
+    message.textContent = radar.error ? `Radar offline: ${radar.error}` : "Radar offline";
+    elements.radarMap.append(message);
+    return;
+  }
+  const width = elements.radarMap.clientWidth || 280;
+  const height = elements.radarMap.clientHeight || 190;
+  const zoom = Number(radar.zoom || 10);
+  const world = tileCoordinates(Number(radar.latitude), Number(radar.longitude), zoom);
+  const leftWorld = world.x - width / 2;
+  const topWorld = world.y - height / 2;
+  const firstX = Math.floor(leftWorld / world.size);
+  const lastX = Math.floor((leftWorld + width) / world.size);
+  const firstY = Math.floor(topWorld / world.size);
+  const lastY = Math.floor((topWorld + height) / world.size);
+  for (let tileY = firstY; tileY <= lastY; tileY += 1) {
+    if (tileY < 0 || tileY >= world.scale) continue;
+    for (let tileX = firstX; tileX <= lastX; tileX += 1) {
+      const wrappedX = ((tileX % world.scale) + world.scale) % world.scale;
+      const left = tileX * world.size - leftWorld;
+      const top = tileY * world.size - topWorld;
+      const baseUrl = `https://tile.openstreetmap.org/${zoom}/${wrappedX}/${tileY}.png`;
+      const rainUrl = radar.tile_url
+        .replace("{z}", String(zoom))
+        .replace("{x}", String(wrappedX))
+        .replace("{y}", String(tileY));
+      elements.radarMap.append(tileImage(baseUrl, left, top));
+      elements.radarMap.append(tileImage(rainUrl, left, top, true));
+    }
+  }
+  const marker = document.createElement("span");
+  marker.className = "radar-marker";
+  marker.title = radar.label || "Standort";
+  elements.radarMap.append(marker);
+}
+
+function renderBoards(boards) {
+  elements.boards.replaceChildren();
+  if (!Array.isArray(boards) || boards.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "board-message";
+    empty.textContent = "Keine Haltestellen oder Abfahrten verfügbar.";
+    elements.boards.append(empty);
+    return;
+  }
+  boards.forEach((board) => {
+    const section = document.createElement("section");
+    section.className = "board";
+    const header = document.createElement("div");
+    header.className = "board-title";
+    header.innerHTML = `<span>${escapeHtml(board.title)}</span><span>${escapeHtml(board.ok === false ? "Fehler" : "Live")}</span>`;
+    section.append(header);
+    if (board.ok === false) {
+      const error = document.createElement("p");
+      error.className = "board-message error";
+      error.textContent = board.error || "VRR-Daten derzeit nicht verfügbar.";
+      section.append(error);
+    } else if (!board.rows?.length) {
+      const empty = document.createElement("p");
+      empty.className = "board-message";
+      empty.textContent = "Keine passenden Abfahrten.";
+      section.append(empty);
+    } else {
+      board.rows.forEach((row) => {
+        const departure = document.createElement("div");
+        departure.className = "departure";
+        departure.innerHTML = `<span class="departure-line">${escapeHtml(row.line)}</span><span class="departure-target">${escapeHtml(row.target)}</span><span class="departure-mins">${escapeHtml(row.mins)}</span>`;
+        section.append(departure);
+      });
+    }
+    elements.boards.append(section);
+  });
+}
+
+async function refreshState() {
+  try {
+    const state = await api("/api/state");
+    applyRuntimeConfig(state.config);
+    renderWeather(state.weather);
+    renderRadar(state.radar);
+    renderBoards(state.boards);
+    renderSystem(state.system);
+    elements.body.classList.remove("is-loading");
+  } catch (error) {
+    elements.streamStatus.dataset.state = "error";
+    elements.streamStatusText.textContent = "Lokales Backend nicht erreichbar";
+    elements.weatherText.textContent = "Wetterdaten nicht erreichbar";
+  }
+}
+
+function openDialog(dialog, trigger) {
+  lastTrigger = trigger || document.activeElement;
+  if (!dialog.open) dialog.showModal();
+}
+
+function closeDialog(dialog) {
+  if (dialog.open) dialog.close();
+  if (lastTrigger instanceof HTMLElement) lastTrigger.focus();
+}
+
+function trapFocus(dialog, event) {
+  if (event.key !== "Tab") return;
+  const focusable = [...dialog.querySelectorAll("button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])")]
+    .filter((item) => !item.closest(".hidden"));
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+async function beginAdmin(trigger) {
+  try {
+    if (token) {
+      await loadConfig();
+      openDialog(elements.settings, trigger);
+      return;
+    }
+    const status = await api("/api/admin/status");
+    setupMode = !status.pin_configured;
+    elements.pinTitle.textContent = setupMode ? "Admin-PIN erstmals festlegen" : "Admin-PIN eingeben";
+    elements.pinHelp.textContent = setupMode
+      ? "Die PIN wird nur als sicherer Hash auf diesem Gerät gespeichert."
+      : "Die lokale Admin-Sitzung ist zeitlich begrenzt.";
+    elements.pinConfirmField.classList.toggle("hidden", !setupMode);
+    elements.pinConfirm.required = setupMode;
+    elements.submitPin.textContent = setupMode ? "PIN festlegen" : "Anmelden";
+    elements.pin.value = "";
+    elements.pinConfirm.value = "";
+    setStatus(elements.pinStatus, "");
+    openDialog(elements.pinDialog, trigger);
+    elements.pin.focus();
+  } catch (error) {
+    showToast(`Adminmodus nicht verfügbar: ${error.message}`);
+  }
+}
+
+async function authenticate(event) {
+  event.preventDefault();
+  const pin = elements.pin.value.trim();
+  if (setupMode && pin !== elements.pinConfirm.value.trim()) {
+    setStatus(elements.pinStatus, "Die PINs stimmen nicht überein.", "error");
+    return;
+  }
+  elements.submitPin.disabled = true;
+  setStatus(elements.pinStatus, setupMode ? "PIN wird sicher gespeichert …" : "Anmeldung läuft …");
+  try {
+    const result = await api(setupMode ? "/api/admin/setup" : "/api/admin/login", {
+      method: "POST",
+      body: JSON.stringify({ pin }),
+    });
+    token = result.token;
+    sessionStorage.setItem("bi-storchcam-admin-token", token);
+    await loadConfig();
+    closeDialog(elements.pinDialog);
+    openDialog(elements.settings, elements.hotspot);
+  } catch (error) {
+    setStatus(elements.pinStatus, error.message, "error");
+  } finally {
+    elements.submitPin.disabled = false;
+  }
+}
+
+function fillForm(config) {
+  byId("cfgStream").value = config.stream.url || "";
+  byId("streamAutoplay").checked = !!config.stream.autoplay;
+  byId("streamMuted").checked = !!config.stream.muted;
+  byId("cfgLabel").value = config.location.label || "";
+  byId("cfgLat").value = config.location.latitude;
+  byId("cfgLon").value = config.location.longitude;
+  byId("cfgLayout").value = config.ui.layout_profile;
+  byId("cfgTheme").value = config.ui.theme;
+  byId("cfgRadarOpacity").value = config.ui.radar.opacity;
+  byId("cfgRadarW").value = config.ui.radar.width;
+  byId("cfgRadarH").value = config.ui.radar.height;
+  byId("showClock").checked = !!config.ui.clock.enabled;
+  byId("showWeather").checked = !!config.ui.weather.enabled;
+  byId("showRadar").checked = !!config.ui.radar.enabled;
+  byId("showTransit").checked = !!config.ui.transit.enabled;
+  byId("showSystem").checked = !!config.ui.system.enabled;
+  workingStops = clone(config.transit.stops || []);
+  renderStopEditor();
+  dirty = false;
+  setStatus(elements.saveState, "");
+}
+
+async function loadConfig() {
+  try {
+    const result = await api("/api/config");
+    currentConfig = result.config;
+    fillForm(currentConfig);
+  } catch (error) {
+    if (error.status === 401) {
+      token = "";
+      sessionStorage.removeItem("bi-storchcam-admin-token");
+    }
+    throw error;
+  }
+}
+
+function renderStopEditor() {
+  elements.stopEditor.replaceChildren();
+  if (!workingStops.length) {
+    const empty = document.createElement("p");
+    empty.className = "board-message";
+    empty.textContent = "Noch keine Haltestelle konfiguriert. Die ÖPNV-Anzeige bleibt leer.";
+    elements.stopEditor.append(empty);
+    return;
+  }
+  workingStops.forEach((stop, index) => {
+    const card = document.createElement("article");
+    card.className = "stop-card";
+    card.dataset.index = String(index);
+    card.innerHTML = `
+      <header class="stop-card-header">
+        <strong>${escapeHtml(stop.title || stop.station_name || `Haltestelle ${index + 1}`)}</strong>
+        <div class="stop-actions">
+          <button class="button button-secondary" type="button" data-action="up" aria-label="Haltestelle nach oben" ${index === 0 ? "disabled" : ""}>↑</button>
+          <button class="button button-secondary" type="button" data-action="down" aria-label="Haltestelle nach unten" ${index === workingStops.length - 1 ? "disabled" : ""}>↓</button>
+          <button class="button button-danger" type="button" data-action="remove">Löschen</button>
+        </div>
+      </header>
+      <div class="stop-fields">
+        <label class="field wide"><span>Anzeigename</span><input name="title" value="${escapeHtml(stop.title || "")}" maxlength="80"></label>
+        <label class="field wide"><span>Haltestellenname</span><input name="station_name" value="${escapeHtml(stop.station_name || "")}" maxlength="160" required></label>
+        <label class="field"><span>Haltestellen-ID</span><input name="station_id" value="${escapeHtml(stop.station_id || "")}" maxlength="80"></label>
+        <label class="field"><span>Linienfilter (Komma)</span><input name="line_filter" value="${escapeHtml((stop.line_filter || []).join(", "))}" maxlength="160"></label>
+        <label class="field"><span>Maximale Zeilen</span><input name="max_rows" type="number" min="1" max="12" value="${Number(stop.max_rows || 2)}"></label>
+        <label class="toggle"><input name="nightbus_only" type="checkbox" ${stop.nightbus_only ? "checked" : ""}><span>Nur Nachtbus</span></label>
+        <label class="toggle"><input name="hide_if_empty" type="checkbox" ${stop.hide_if_empty ? "checked" : ""}><span>Leer ausblenden</span></label>
+      </div>`;
+    elements.stopEditor.append(card);
+  });
+}
+
+function syncStopField(input) {
+  const card = input.closest(".stop-card");
+  if (!card) return;
+  const stop = workingStops[Number(card.dataset.index)];
+  if (!stop) return;
+  if (input.name === "line_filter") {
+    stop.line_filter = input.value.split(",").map((item) => item.trim()).filter(Boolean);
+  } else if (input.name === "max_rows") {
+    stop.max_rows = Number(input.value);
+  } else if (input.type === "checkbox") {
+    stop[input.name] = input.checked;
+  } else {
+    stop[input.name] = input.value;
+  }
+  dirty = true;
+}
+
+function stopAction(button) {
+  const card = button.closest(".stop-card");
+  if (!card) return;
+  const index = Number(card.dataset.index);
+  if (button.dataset.action === "remove") workingStops.splice(index, 1);
+  if (button.dataset.action === "up" && index > 0) [workingStops[index - 1], workingStops[index]] = [workingStops[index], workingStops[index - 1]];
+  if (button.dataset.action === "down" && index < workingStops.length - 1) [workingStops[index + 1], workingStops[index]] = [workingStops[index], workingStops[index + 1]];
+  dirty = true;
+  renderStopEditor();
+}
+
+async function searchStations() {
+  const query = byId("stationQuery").value.trim();
+  if (query.length < 2) {
+    setStatus(elements.stationSearchStatus, "Bitte mindestens zwei Zeichen eingeben.", "error");
+    return;
+  }
+  byId("stationSearchBtn").disabled = true;
+  setStatus(elements.stationSearchStatus, "VRR-Haltestellen werden gesucht …");
+  elements.stationResults.replaceChildren();
+  try {
+    const result = await api(`/api/station/search?q=${encodeURIComponent(query)}`);
+    if (!result.results.length) {
+      setStatus(elements.stationSearchStatus, "Keine VRR-Haltestelle gefunden. Andere Schreibweise versuchen.");
+      return;
+    }
+    setStatus(elements.stationSearchStatus, `${result.results.length} Treffer`);
+    result.results.forEach((station) => {
+      const row = document.createElement("div");
+      row.className = "station-result";
+      const name = document.createElement("span");
+      name.textContent = station.station_name;
+      const add = document.createElement("button");
+      add.type = "button";
+      add.className = "button button-secondary";
+      add.textContent = "Hinzufügen";
+      add.addEventListener("click", () => {
+        workingStops.push({
+          title: station.station_name.replace("Bielefeld", "").trim() || station.station_name,
+          station_name: station.station_name,
+          station_id: station.station_id,
+          line_filter: [],
+          nightbus_only: false,
+          hide_if_empty: true,
+          max_rows: Number(currentConfig.transit.default_max_rows || 2),
+        });
+        byId("showTransit").checked = true;
+        dirty = true;
+        renderStopEditor();
+        showToast("Haltestelle hinzugefügt. Zum Übernehmen noch speichern.");
+      });
+      row.append(name, add);
+      elements.stationResults.append(row);
+    });
+  } catch (error) {
+    setStatus(elements.stationSearchStatus, `Suche fehlgeschlagen: ${error.message}`, "error");
+  } finally {
+    byId("stationSearchBtn").disabled = false;
+  }
+}
+
+function collectConfig() {
+  if (!currentConfig) throw new Error("Konfiguration ist noch nicht geladen");
+  const config = clone(currentConfig);
+  config.stream.url = byId("cfgStream").value.trim();
+  config.stream.autoplay = byId("streamAutoplay").checked;
+  config.stream.muted = byId("streamMuted").checked;
+  config.location.label = byId("cfgLabel").value.trim();
+  config.location.latitude = Number(byId("cfgLat").value);
+  config.location.longitude = Number(byId("cfgLon").value);
+  config.ui.layout_profile = byId("cfgLayout").value;
+  config.ui.theme = byId("cfgTheme").value;
+  config.ui.radar.opacity = Number(byId("cfgRadarOpacity").value);
+  config.ui.radar.width = Number(byId("cfgRadarW").value);
+  config.ui.radar.height = Number(byId("cfgRadarH").value);
+  config.ui.clock.enabled = byId("showClock").checked;
+  config.ui.weather.enabled = byId("showWeather").checked;
+  config.ui.radar.enabled = byId("showRadar").checked;
+  config.ui.transit.enabled = byId("showTransit").checked;
+  config.ui.system.enabled = byId("showSystem").checked;
+  config.transit.stops = clone(workingStops);
+  if (!config.location.label) throw new Error("Standortname fehlt");
+  if (!Number.isFinite(config.location.latitude) || !Number.isFinite(config.location.longitude)) throw new Error("Koordinaten sind ungültig");
+  config.transit.stops.forEach((stop, index) => {
+    if (!stop.station_id && !stop.station_name) throw new Error(`Haltestelle ${index + 1} benötigt ID oder Namen`);
+    if (!Number.isInteger(stop.max_rows) || stop.max_rows < 1 || stop.max_rows > 12) throw new Error(`Maximale Zeilen bei Haltestelle ${index + 1} sind ungültig`);
+  });
+  return config;
+}
+
+async function saveConfig() {
+  const button = byId("saveConfig");
+  button.disabled = true;
+  setStatus(elements.saveState, "Konfiguration wird validiert und atomar gespeichert …");
+  try {
+    const candidate = collectConfig();
+    const result = await api("/api/config/save", { method: "POST", body: JSON.stringify({ config: candidate }) });
+    currentConfig = result.config;
+    fillForm(currentConfig);
+    applyRuntimeConfig({ ...currentConfig, timezone: currentConfig.app?.timezone });
+    setStatus(elements.saveState, "Gespeichert. Providerdaten werden im Hintergrund aktualisiert.", "success");
+    showToast("Konfiguration gespeichert");
+  } catch (error) {
+    setStatus(elements.saveState, `Speichern fehlgeschlagen: ${error.message}`, "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function requestSettingsClose() {
+  if (dirty && !window.confirm("Ungespeicherte Änderungen verwerfen?")) return;
+  dirty = false;
+  closeDialog(elements.settings);
+}
+
+function beginLongPress(event) {
+  event.preventDefault();
+  clearTimeout(longPressTimer);
+  longPressTimer = setTimeout(() => beginAdmin(elements.hotspot), 3000);
+}
+
+function cancelLongPress() {
+  clearTimeout(longPressTimer);
+  longPressTimer = null;
+}
+
+elements.live.addEventListener("load", () => {
+  if (!elements.live.getAttribute("src") || elements.live.src === "about:blank") return;
+  elements.streamStatus.dataset.state = "loaded";
+  elements.streamStatusText.textContent = "Stream-Seite geladen · Wiedergabe nicht verifizierbar";
+});
+elements.live.addEventListener("error", () => {
+  elements.streamStatus.dataset.state = "error";
+  elements.streamStatusText.textContent = "Stream-Einbettung möglicherweise blockiert";
+});
+byId("streamReload").addEventListener("click", () => currentConfig ? configureStream(currentConfig.stream, true) : refreshState());
+byId("reloadStreamPanel").addEventListener("click", () => configureStream(collectConfig().stream, true));
+
+elements.hotspot.addEventListener("pointerdown", beginLongPress);
+elements.hotspot.addEventListener("pointerup", cancelLongPress);
+elements.hotspot.addEventListener("pointercancel", cancelLongPress);
+elements.hotspot.addEventListener("pointerleave", cancelLongPress);
+elements.hotspot.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" || event.key === " ") beginAdmin(elements.hotspot);
+});
+document.addEventListener("keydown", (event) => {
+  if (event.ctrlKey && event.altKey && event.key.toLowerCase() === "s") {
+    event.preventDefault();
+    beginAdmin(document.activeElement);
+  }
+});
+
+elements.pinForm.addEventListener("submit", authenticate);
+byId("cancelPin").addEventListener("click", () => closeDialog(elements.pinDialog));
+elements.pinDialog.addEventListener("keydown", (event) => trapFocus(elements.pinDialog, event));
+elements.settings.addEventListener("keydown", (event) => {
+  trapFocus(elements.settings, event);
+  if (event.key === "Escape") {
+    event.preventDefault();
+    requestSettingsClose();
+  }
+});
+elements.settings.addEventListener("cancel", (event) => { event.preventDefault(); requestSettingsClose(); });
+byId("closeSettings").addEventListener("click", requestSettingsClose);
+byId("saveConfig").addEventListener("click", saveConfig);
+byId("reloadConfig").addEventListener("click", async () => {
+  try {
+    await loadConfig();
+    showToast("Konfiguration neu geladen");
+  } catch (error) {
+    setStatus(elements.saveState, `Laden fehlgeschlagen: ${error.message}`, "error");
+  }
+});
+elements.settingsForm.addEventListener("input", () => { dirty = true; });
+elements.stopEditor.addEventListener("input", (event) => syncStopField(event.target));
+elements.stopEditor.addEventListener("change", (event) => syncStopField(event.target));
+elements.stopEditor.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-action]");
+  if (button) stopAction(button);
+});
+byId("stationSearchBtn").addEventListener("click", searchStations);
+byId("stationQuery").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") { event.preventDefault(); searchStations(); }
+});
+window.addEventListener("resize", () => {
+  const requested = currentConfig?.ui?.layout_profile || "auto";
+  elements.body.dataset.layout = resolveLayout(requested);
+});
+window.addEventListener("beforeunload", (event) => {
+  if (dirty) { event.preventDefault(); event.returnValue = ""; }
+});
+
+updateClock();
+setInterval(updateClock, 1000);
+refreshState();
+setInterval(refreshState, 5000);
