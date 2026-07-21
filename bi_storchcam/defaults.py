@@ -1,5 +1,6 @@
-# -*- coding: utf-8 -*-
-"""Default-Konfiguration für BI-StorchCam."""
+"""Safe production defaults for the one supported web-kiosk application."""
+
+CONFIG_SCHEMA_VERSION = 4
 
 DEFAULT_CONFIG = {
     "app": {
@@ -7,30 +8,35 @@ DEFAULT_CONFIG = {
         "language": "de",
         "timezone": "Europe/Berlin",
         "cache_dir": "~/.cache/BI-StorchCam",
+        "config_schema_version": CONFIG_SCHEMA_VERSION,
     },
     "server": {
         "host": "127.0.0.1",
         "port": 8000,
-        "state_refresh_seconds": 2,
+        "max_request_bytes": 262144,
+        "admin_session_minutes": 30,
     },
     "kiosk": {
         "enabled": True,
-        "display": ":0",
-        "xauthority": "~/.Xauthority",
         "browser": "auto",
         "profile_dir": "",
-        "kill_existing_chromium": True,
         "disable_screensaver": True,
         "use_gpu": True,
+        "browser_restart_seconds": 3,
+        "browser_restart_max_seconds": 60,
+        "browser_stable_seconds": 30,
+        "browser_max_failures": 8,
+        "log_file": "~/.cache/BI-StorchCam/chromium.log",
+        "log_max_bytes": 2097152,
+        "log_backups": 3,
         "extra_flags": [],
     },
     "screen": {
-        "profile": "auto",
-        "width": 1280,
-        "height": 720,
-        "output": "DSI-2",
-        "rotation": "right",
-        "touch_matrix": "0 1 0 -1 0 1 0 0 1",
+        "hardware_profile": "generic",
+        "output": "auto",
+        "rotation": "none",
+        "touch_device": "",
+        "touch_matrix": "",
     },
     "location": {
         "label": "Bielefeld",
@@ -42,23 +48,23 @@ DEFAULT_CONFIG = {
         "muted": True,
         "autoplay": True,
     },
+    "admin": {
+        "pin_hash": "",
+    },
     "ui": {
-        "menu_enabled": True,
-        "theme": "production",
+        "theme": "dark",
         "layout_profile": "auto",
-        "clock": {"enabled": True, "position": "top-left", "size": "large"},
-        "weather": {"enabled": True, "mode": "smart_short", "position": "top", "size": "compact"},
+        "clock": {"enabled": True},
+        "weather": {"enabled": True},
         "radar": {
             "enabled": True,
-            "position": "bottom-left",
             "width": 280,
             "height": 190,
             "zoom": 12,
             "opacity": 0.92,
-            "refresh_seconds": 300,
         },
-        "transit": {"enabled": False, "position": "bottom-right", "size": "compact"},
-        "system": {"enabled": False, "position": "top-right", "diagnostic_only": True},
+        "transit": {"enabled": False},
+        "system": {"enabled": False},
     },
     "weather": {
         "provider": "openmeteo",
@@ -73,5 +79,14 @@ DEFAULT_CONFIG = {
         "default_max_rows": 2,
         "target_len": 16,
         "stops": [],
+    },
+    "radar": {
+        "provider": "rainviewer",
+        "refresh_seconds": 300,
+    },
+    "logging": {
+        "level": "INFO",
+        "max_bytes": 2097152,
+        "backups": 3,
     },
 }
