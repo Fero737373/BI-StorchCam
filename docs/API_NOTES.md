@@ -1,24 +1,24 @@
-# API-Hinweise
+# Provider- und API-Hinweise
 
-## Wetter
+## Lokale HTTP-API
 
-Die Wetterdaten werden über Open-Meteo geladen.
+- `GET /api/health`: Version, Uptime und State-Readiness
+- `GET /api/state`: letzter In-Memory-Snapshot ohne neue Providerabfrage
+- `GET /api/radar`: Radaranteil desselben Snapshots
+- `GET /api/admin/status`: lokaler PIN-/Sessionstatus
+- `POST /api/admin/setup`: einmaliges lokales PIN-Setup
+- `POST /api/admin/login`: zeitlich begrenzte Admin-Session
+- `GET /api/config`: validierte, redigierte Konfiguration; nach Setup authentifiziert
+- `POST /api/config/save`: authentifizierter, größenbegrenzter Schreibzugriff
+- `GET /api/station/search`: authentifizierte VRR-Suche
 
-## Geokodierung
+Fehler werden als JSON mit passenden HTTP-Statuscodes ausgegeben. Tracebacks werden nicht an den Browser übertragen.
 
-Für Adresseingaben innerhalb von Bielefeld wird Nominatim/OpenStreetMap verwendet. Die App fragt nur beim Setup ab, nicht dauerhaft im Betrieb.
+## Externe Provider
 
-## Abfahrten
+- Open-Meteo: aktuelles Wetter und stündliche Zukunft ab der konfigurierten Zeitzone
+- RainViewer: Messwert, optionaler Nowcast und Legacy-Fallback
+- OpenStreetMap: Basiskartenkacheln mit sichtbarer Attribution
+- VRR-Haltestellenmonitor: Suche und Abfahrten in der VRR-Region
 
-Die Abfahrten werden über den VRR-Haltestellenmonitor geladen.
-
-Für Bielefeld/moBiel ist die bestätigte Haltestelle in der Konfiguration gespeichert. Im Betrieb wird nicht mehr gesucht, sondern direkt anhand der gespeicherten Station-ID geladen.
-
-Beispiel:
-
-```json
-{
-  "station_id": "23005489",
-  "station_name": "Gellershagen Schneiderstraße"
-}
-```
+Providerfehler bleiben im Snapshot sichtbar, beenden aber weder Server noch State-Worker.

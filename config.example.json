@@ -3,31 +3,36 @@
     "name": "BI-StorchCam",
     "language": "de",
     "timezone": "Europe/Berlin",
-    "cache_dir": "~/.cache/BI-StorchCam"
+    "cache_dir": "~/.cache/BI-StorchCam",
+    "config_schema_version": 4
   },
   "server": {
     "host": "127.0.0.1",
     "port": 8000,
-    "state_refresh_seconds": 2
+    "max_request_bytes": 262144,
+    "admin_session_minutes": 30
   },
   "kiosk": {
     "enabled": true,
-    "display": ":0",
-    "xauthority": "~/.Xauthority",
-    "browser": "chromium",
-    "profile_dir": "/tmp/storchcam-profile",
-    "kill_existing_chromium": true,
+    "browser": "auto",
+    "profile_dir": "",
     "disable_screensaver": true,
     "use_gpu": true,
+    "browser_restart_seconds": 3,
+    "browser_restart_max_seconds": 60,
+    "browser_stable_seconds": 30,
+    "browser_max_failures": 8,
+    "log_file": "~/.cache/BI-StorchCam/chromium.log",
+    "log_max_bytes": 2097152,
+    "log_backups": 3,
     "extra_flags": []
   },
   "screen": {
-    "profile": "auto",
-    "width": 1280,
-    "height": 720,
-    "output": "DSI-2",
-    "rotation": "right",
-    "touch_matrix": "0 1 0 -1 0 1 0 0 1"
+    "hardware_profile": "generic",
+    "output": "auto",
+    "rotation": "none",
+    "touch_device": "",
+    "touch_matrix": ""
   },
   "location": {
     "label": "Bielefeld",
@@ -35,19 +40,27 @@
     "longitude": 8.5325
   },
   "stream": {
-    "url": "https://www.youtube.com/embed/kgaMXfx0G8U?autoplay=1&mute=1&playsinline=1&controls=0&modestbranding=1&rel=0",
+    "url": "",
     "muted": true,
     "autoplay": true
   },
+  "admin": {
+    "pin_hash": ""
+  },
   "ui": {
-    "menu_enabled": true,
-    "theme": "dark-radar",
+    "theme": "dark",
     "layout_profile": "auto",
-    "clock": {"enabled": true, "position": "top-left", "size": "auto"},
-    "weather": {"enabled": true, "mode": "smart_short", "position": "bottom", "size": "auto"},
-    "radar": {"enabled": true, "position": "left", "width": 260, "height": 190, "zoom": 10, "opacity": 0.82},
-    "transit": {"enabled": true, "position": "right", "size": "auto"},
-    "system": {"enabled": true, "position": "top-right", "diagnostic_only": false}
+    "clock": { "enabled": true },
+    "weather": { "enabled": true },
+    "radar": {
+      "enabled": true,
+      "width": 280,
+      "height": 190,
+      "zoom": 12,
+      "opacity": 0.92
+    },
+    "transit": { "enabled": false },
+    "system": { "enabled": false }
   },
   "weather": {
     "provider": "openmeteo",
@@ -61,16 +74,15 @@
     "refresh_seconds": 60,
     "default_max_rows": 2,
     "target_len": 16,
-    "stops": [
-      {
-        "title": "BEISPIEL",
-        "station_name": "Gellershagen Schneiderstraße",
-        "station_id": "23005489",
-        "line_filter": ["31"],
-        "nightbus_only": false,
-        "hide_if_empty": false,
-        "max_rows": 2
-      }
-    ]
+    "stops": []
+  },
+  "radar": {
+    "provider": "rainviewer",
+    "refresh_seconds": 300
+  },
+  "logging": {
+    "level": "INFO",
+    "max_bytes": 2097152,
+    "backups": 3
   }
 }
