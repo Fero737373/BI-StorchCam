@@ -34,8 +34,8 @@ def test_external_binding_requires_pin(config: dict) -> None:
         validate_config(config)
 
 
-def test_firefox_path_is_rejected(config: dict) -> None:
-    config["kiosk"]["browser"] = "/usr/bin/firefox"
+def test_firefox_path_is_rejected(config: dict, tmp_path: Path) -> None:
+    config["kiosk"]["browser"] = str(tmp_path / "firefox")
     with pytest.raises(ConfigError, match="Chromium, Chrome oder Edge"):
         validate_config(config)
 

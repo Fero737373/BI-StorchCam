@@ -16,9 +16,13 @@ def test_session_detection() -> None:
 def test_browser_arguments_are_chromium_family_and_session_specific(tmp_path, config: dict) -> None:
     config["kiosk"]["profile_dir"] = str(tmp_path / "profile")
     wayland = kiosk.browser_arguments("chromium", "/usr/bin/chromium", "http://127.0.0.1:8000", config, {"XDG_SESSION_TYPE": "wayland"})
-    assert "--ozone-platform=wayland" in wayland
     x11 = kiosk.browser_arguments("edge", "/usr/bin/edge", "http://127.0.0.1:8000", config, {"DISPLAY": ":0"})
-    assert "--ozone-platform=x11" in x11
+    if os.name == "nt":
+        assert not any(argument.startswith("--ozone-platform=") for argument in wayland)
+        assert not any(argument.startswith("--ozone-platform=") for argument in x11)
+    else:
+        assert "--ozone-platform=wayland" in wayland
+        assert "--ozone-platform=x11" in x11
     with pytest.raises(ValueError):
         kiosk.browser_arguments("firefox", "/usr/bin/firefox", "http://localhost", config, {})
 
