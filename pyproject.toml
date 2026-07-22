@@ -6,6 +6,9 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "GPL-3.0-only" }
 authors = [{ name = "BI-StorchCam Contributors" }]
+dependencies = [
+  "tzdata>=2024.1; platform_system == 'Windows'",
+]
 
 [project.optional-dependencies]
 dev = [

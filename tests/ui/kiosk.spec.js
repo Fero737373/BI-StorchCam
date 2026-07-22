@@ -61,9 +61,12 @@ for (const viewport of [
     expect(stage.height).toBe(viewport.height);
     await expect(page.locator("#clock")).toBeVisible();
     await expect(page.locator("#weatherText")).toContainText("21 °C");
-    const cards = page.locator("#radar:not(.hidden), #transitPanel:not(.hidden)");
+    const cards = page.locator("#radar, #transitPanel");
     for (let index = 0; index < await cards.count(); index += 1) {
-      const box = await cards.nth(index).boundingBox();
+      const card = cards.nth(index);
+      if (!(await card.isVisible())) continue;
+      const box = await card.boundingBox();
+      expect(box).not.toBeNull();
       expect(box.x).toBeGreaterThanOrEqual(0);
       expect(box.y).toBeGreaterThanOrEqual(0);
       expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
