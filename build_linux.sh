@@ -1,22 +1,14 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
-echo "== BI-StorchCam Linux Build =="
-
-if [ ! -d .venv ]; then
-    python3 -m venv .venv
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT"
+if [[ ! -d .venv ]]; then
+  python3 -m venv .venv
 fi
-
 source .venv/bin/activate
 python -m pip install --upgrade pip
-pip install -r requirements.txt
-
-pyinstaller \
-  --onefile \
-  --windowed \
-  --name BI-StorchCam \
-  --clean \
-  launcher.py
-
-echo
-echo "Fertig. Binary liegt in dist/BI-StorchCam"
+python -m pip install -r requirements.txt
+python -m PyInstaller --clean --noconfirm BI-StorchCam.spec
+"$ROOT/dist/BI-StorchCam" --test-config
+echo "Build und Smoke-Test erfolgreich: $ROOT/dist/BI-StorchCam"

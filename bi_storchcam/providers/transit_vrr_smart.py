@@ -1,93 +1,95 @@
-# -*- coding: utf-8 -*-
+"""VRR departure provider with complete configuration-aware caching."""
+
 from __future__ import annotations
 
+import copy
 import json
+import logging
+import threading
 import time
 import urllib.parse
 import urllib.request
 from typing import Any
 
+from ..version import __version__
+
+LOGGER = logging.getLogger(__name__)
 SEARCH_URL = "https://haltestellenmonitor.vrr.de/backend/api/stations/search"
 TABLE_URL = "https://haltestellenmonitor.vrr.de/backend/api/stations/table"
-
-_cache: dict[str, Any] = {"ts": 0.0, "boards": []}
+_cache: dict[str, dict[str, Any]] = {}
+_cache_lock = threading.Lock()
 
 
 def _fetch_json(url: str, data: dict[str, Any] | None = None, timeout: int = 12) -> dict[str, Any]:
-    headers = {"User-Agent": "Mozilla/5.0 BI-StorchCam/2.1", "Accept": "application/json,text/plain,*/*"}
-    if data is None:
-        req = urllib.request.Request(url, headers=headers)
-    else:
-        req = urllib.request.Request(url, data=urllib.parse.urlencode(data).encode(), headers=headers, method="POST")
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode("utf-8", "replace"))
+    headers = {"User-Agent": f"BI-StorchCam/{__version__}", "Accept": "application/json,text/plain,*/*"}
+    request = urllib.request.Request(
+        url,
+        data=urllib.parse.urlencode(data).encode("utf-8") if data is not None else None,
+        headers=headers,
+        method="POST" if data is not None else "GET",
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        result = json.loads(response.read().decode("utf-8", "replace"))
+    if not isinstance(result, dict):
+        raise ValueError("VRR lieferte kein JSON-Objekt")
+    return result
 
 
-def search_station(query: str) -> list[dict[str, Any]]:
-    if not query.strip():
+def search_station(query: str) -> list[dict[str, str]]:
+    clean = query.strip()
+    if len(clean) < 2:
         return []
-    url = SEARCH_URL + "?query=" + urllib.parse.quote(query.strip())
-    data = _fetch_json(url)
-    out = []
-    for item in data.get("suggestions", [])[:10]:
-        out.append({"station_id": str(item.get("data", "")), "station_name": str(item.get("value", ""))})
-    return out
+    data = _fetch_json(SEARCH_URL + "?query=" + urllib.parse.quote(clean))
+    results: list[dict[str, str]] = []
+    for item in data.get("suggestions", [])[:12]:
+        if not isinstance(item, dict):
+            continue
+        station_id = str(item.get("data", "")).strip()
+        station_name = str(item.get("value", "")).strip()
+        if station_id and station_name:
+            results.append({"station_id": station_id, "station_name": station_name})
+    return results
 
 
-def _fmt_mins(value: Any) -> str:
-    try:
-        mins = int(float(value))
-    except Exception:
-        return f"{value} min"
-    if mins <= 0:
-        return "jetzt"
-    if mins < 60:
-        return f"{mins} min"
-    h, m = divmod(mins, 60)
-    return f"{h}h {m} min" if m else f"{h}h"
+def cache_key(config: dict[str, Any]) -> str:
+    transit = config.get("transit", {})
+    relevant = {
+        "provider": transit.get("provider"),
+        "refresh_seconds": transit.get("refresh_seconds"),
+        "default_max_rows": transit.get("default_max_rows"),
+        "target_len": transit.get("target_len"),
+        "stops": transit.get("stops", []),
+    }
+    return json.dumps(relevant, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def _matches_line(line: str, filters: list[str], nightbus_only: bool) -> bool:
-    line_up = line.upper().strip()
-    if nightbus_only and not line_up.startswith("N"):
+    candidate = line.upper().strip()
+    if nightbus_only and not candidate.startswith("N"):
         return False
-    if not filters:
-        return True
-    for f in filters:
-        f_up = str(f).upper().strip()
-        if not f_up:
-            continue
-        if f_up == "N" and line_up.startswith("N"):
-            return True
-        if line_up == f_up:
-            return True
-    return False
+    wanted = {item.upper().strip() for item in filters if item.strip()}
+    return not wanted or candidate in wanted or ("N" in wanted and candidate.startswith("N"))
 
 
-def _short_title(stop: dict[str, Any]) -> str:
-    raw = str(stop.get("title") or stop.get("station_name") or "HALT").strip()
-    raw = raw.replace("Bielefeld", "").replace("Bi-", "").strip(" ,")
-    if "," in raw:
-        raw = raw.split(",", 1)[0].strip()
-    return (raw or "HALT").upper()
+def _format_minutes(value: Any) -> str:
+    try:
+        minutes = int(float(value))
+    except (TypeError, ValueError):
+        return "–"
+    if minutes <= 0:
+        return "jetzt"
+    return f"{minutes} min" if minutes < 60 else f"{minutes // 60}h {minutes % 60:02d}"
 
 
-def _is_placeholder(stop: dict[str, Any], title: str) -> bool:
-    station = str(stop.get("station_name") or "").lower()
-    return title.upper() == "BEISPIEL" or "gellershagen schneiderstraße" in station
-
-
-def _departures_for_stop(stop: dict[str, Any], default_max_rows: int, target_len: int) -> list[dict[str, str]]:
-    station_id = str(stop.get("station_id") or "").strip()
-    station_name = str(stop.get("station_name") or "").strip()
-    if not station_id and station_name:
-        found = search_station(station_name)
-        station_id = found[0]["station_id"] if found else ""
-        if not station_name and found:
-            station_name = found[0]["station_name"]
+def _board(stop: dict[str, Any], default_max: int, target_len: int) -> dict[str, Any]:
+    station_id = str(stop.get("station_id", "")).strip()
+    station_name = str(stop.get("station_name", "")).strip()
     if not station_id:
-        return []
-
+        matches = search_station(station_name)
+        if not matches:
+            raise ValueError(f"Haltestelle nicht gefunden: {station_name}")
+        station_id = matches[0]["station_id"]
+        station_name = matches[0]["station_name"]
     payload = {
         "table[departure][stationId]": station_id,
         "table[departure][stationName]": station_name,
@@ -103,52 +105,71 @@ def _departures_for_stop(stop: dict[str, Any], default_max_rows: int, target_len
         "table[sortBy]": "0",
     }
     data = _fetch_json(TABLE_URL, payload)
-    filters = [str(x) for x in stop.get("line_filter", [])]
-    nightbus_only = bool(stop.get("nightbus_only", False))
-    max_rows = int(stop.get("max_rows") or default_max_rows)
-
-    seen: set[str] = set()
+    filters = [str(item) for item in stop.get("line_filter", [])]
+    nightbus = bool(stop.get("nightbus_only", False))
+    limit = int(stop.get("max_rows") or default_max)
     rows: list[dict[str, str]] = []
-    for dep in data.get("departureData", []):
-        line = str(dep.get("lineNumber") or dep.get("name") or "-").strip()
-        if not _matches_line(line, filters, nightbus_only):
+    seen: set[tuple[str, str]] = set()
+    for departure in data.get("departureData", []):
+        if not isinstance(departure, dict):
             continue
-        raw_target = str(dep.get("direction") or dep.get("route") or "-").strip()
-        key = f"{line}|{raw_target.lower()}"
+        line = str(departure.get("lineNumber") or departure.get("name") or "–").strip()
+        if not _matches_line(line, filters, nightbus):
+            continue
+        target = str(departure.get("direction") or departure.get("route") or "–").strip()
+        target = target.replace("Bielefeld,", "").replace("Bi-", "").strip()
+        key = (line.casefold(), target.casefold())
         if key in seen:
             continue
         seen.add(key)
-        target = raw_target.replace("Bielefeld,", "").replace("Bi-", "").strip()
         if len(target) > target_len:
-            target = target[: max(1, target_len - 1)] + "…"
-        rows.append({"line": line, "target": target, "mins": _fmt_mins(dep.get("countdown", "?"))})
-        if len(rows) >= max_rows:
+            target = target[: target_len - 1].rstrip() + "…"
+        rows.append({"line": line, "target": target, "mins": _format_minutes(departure.get("countdown"))})
+        if len(rows) >= limit:
             break
-    return rows
+    title = str(stop.get("title") or station_name).replace("Bielefeld", "").strip(" ,") or "Haltestelle"
+    return {
+        "title": title,
+        "station_id": station_id,
+        "station_name": station_name,
+        "rows": rows,
+        "hide_if_empty": bool(stop.get("hide_if_empty", True)),
+        "ok": True,
+    }
 
 
-def get_boards(config: dict[str, Any]) -> list[dict[str, Any]]:
+def get_boards(config: dict[str, Any], *, force: bool = False) -> list[dict[str, Any]]:
     transit = config.get("transit", {})
+    key = cache_key(config)
     refresh = int(transit.get("refresh_seconds", 60))
-    now = time.time()
-    if now - float(_cache.get("ts", 0)) < refresh:
-        return list(_cache.get("boards", []))
+    now = time.monotonic()
+    with _cache_lock:
+        cached = copy.deepcopy(_cache.get(key))
+    if cached and not force and now - float(cached.get("cached_at", 0)) < refresh:
+        return cached["boards"]
 
-    boards = []
-    default_max = int(transit.get("default_max_rows", 2))
-    target_len = int(transit.get("target_len", 16))
+    boards: list[dict[str, Any]] = []
     for stop in transit.get("stops", []):
-        title = _short_title(stop)
         try:
-            rows = _departures_for_stop(stop, default_max, target_len)
+            board = _board(stop, int(transit.get("default_max_rows", 2)), int(transit.get("target_len", 16)))
         except Exception as exc:
-            rows = []
-            stop["last_error"] = str(exc)
+            LOGGER.warning("VRR-Abfrage für %s fehlgeschlagen: %s", stop.get("station_name"), exc)
+            board = {
+                "title": str(stop.get("title") or stop.get("station_name") or "Haltestelle"),
+                "station_id": str(stop.get("station_id", "")),
+                "station_name": str(stop.get("station_name", "")),
+                "rows": [],
+                "hide_if_empty": bool(stop.get("hide_if_empty", True)),
+                "ok": False,
+                "error": str(exc)[:160],
+            }
+        if board["rows"] or not board["hide_if_empty"] or not board["ok"]:
+            boards.append(board)
+    with _cache_lock:
+        _cache[key] = {"cached_at": now, "boards": copy.deepcopy(boards)}
+    return boards
 
-        if not rows and (_is_placeholder(stop, title) or stop.get("hide_if_empty", False)):
-            continue
-        boards.append({"title": title, "rows": rows, "hide_if_empty": bool(stop.get("hide_if_empty", False))})
 
-    _cache["ts"] = now
-    _cache["boards"] = boards
-    return list(boards)
+def clear_cache() -> None:
+    with _cache_lock:
+        _cache.clear()

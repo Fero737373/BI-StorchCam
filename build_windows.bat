@@ -1,23 +1,11 @@
 @echo off
 setlocal
-
-echo == BI-StorchCam Windows Build ==
-
-if not exist .venv (
-    py -3 -m venv .venv
-)
-
-call .venv\Scripts\activate.bat
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-
-pyinstaller ^
-  --onefile ^
-  --windowed ^
-  --name BI-StorchCam ^
-  --clean ^
-  launcher.py
-
-echo.
-echo Fertig. EXE liegt in dist\BI-StorchCam.exe
-pause
+cd /d "%~dp0"
+if not exist .venv py -3 -m venv .venv || exit /b 1
+call .venv\Scripts\activate.bat || exit /b 1
+python -m pip install --upgrade pip || exit /b 1
+python -m pip install -r requirements.txt || exit /b 1
+python -m PyInstaller --clean --noconfirm BI-StorchCam.spec || exit /b 1
+dist\BI-StorchCam.exe --test-config || exit /b 1
+echo Build und Smoke-Test erfolgreich: %CD%\dist\BI-StorchCam.exe
+exit /b 0

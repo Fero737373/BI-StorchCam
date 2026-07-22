@@ -1,2 +1,5 @@
-__version__ = "0.1.0"
+from .version import __version__
+
 APP_NAME = "BI-StorchCam"
+
+__all__ = ["APP_NAME", "__version__"]

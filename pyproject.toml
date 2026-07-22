@@ -1,11 +1,52 @@
 [project]
 name = "bi-storchcam"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Bielefeld Infoscreen mit Livestream, Wetter und moBiel-Abfahrten"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "GPL-3.0-only" }
 authors = [{ name = "BI-StorchCam Contributors" }]
+dependencies = [
+  "tzdata>=2024.1; platform_system == 'Windows'",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.10",
+  "pytest>=8.0",
+  "ruff>=0.5",
+]
 
 [project.scripts]
-bi-storchcam = "bi_storchcam.app:main"
+bi-storchcam = "bi_storchcam.kiosk_app:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = {attr = "bi_storchcam.version.__version__"}
+
+[tool.setuptools.package-data]
+bi_storchcam = ["web/*.html", "web/*.css", "web/*.js"]
+
+[tool.setuptools.packages.find]
+include = ["bi_storchcam*"]
+exclude = ["tests*", "node_modules*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+packages = ["bi_storchcam"]
+warn_unused_ignores = true
+check_untyped_defs = true

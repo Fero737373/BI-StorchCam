@@ -3,6 +3,12 @@ __pycache__/
 *.pyc
 build/
 dist/
-*.spec
+node_modules/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+test-results/
+playwright-report/
 .env
 .DS_Store
