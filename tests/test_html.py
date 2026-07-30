@@ -35,7 +35,7 @@ def test_html_structure_and_unique_ids() -> None:
     assert not parser.errors
     assert not parser.stack
     assert len(parser.ids) == len(set(parser.ids))
-    required = {"weather", "weatherText", "streamStatus", "streamStatusText", "sysbar", "sys"}
+    required = {"weather", "weatherText", "streamStatus", "streamStatusText", "sysbar", "sys", "consoleToggle"}
     assert required <= set(parser.ids)
 
 

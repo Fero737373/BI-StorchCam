@@ -9,16 +9,37 @@ from pathlib import Path
 
 import pytest
 
+from bi_storchcam.console_control import ConsoleController, ConsoleStatus
 from bi_storchcam.server import ServerContext, StorchServer, run_server
 from bi_storchcam.state import StateManager
 
 
+class FakeConsole(ConsoleController):
+    def __init__(self) -> None:
+        self.running = False
+
+    def status(self) -> ConsoleStatus:
+        return ConsoleStatus("running" if self.running else "stopped")
+
+    def toggle(self) -> ConsoleStatus:
+        self.running = not self.running
+        return self.status()
+
+
 @contextmanager
-def running_server(config: dict, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[tuple[str, int]]:
+def running_server(
+    config: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    console: FakeConsole | None = None,
+) -> Iterator[tuple[str, int]]:
     monkeypatch.setenv("BI_STORCHCAM_CONFIG", str(tmp_path / "config.json"))
     state = StateManager(config)
     state._ready.set()
-    server = StorchServer(("127.0.0.1", 0), ServerContext(config, state))
+    context = ServerContext(config, state)
+    if console is not None:
+        context.console = console
+    server = StorchServer(("127.0.0.1", 0), context)
     thread = threading.Thread(target=run_server, args=(server,), daemon=True)
     thread.start()
     try:
@@ -98,3 +119,16 @@ def test_state_endpoint_does_not_call_provider(config: dict, monkeypatch: pytest
     monkeypatch.setattr("bi_storchcam.providers.weather_smart.get_weather", forbidden)
     with running_server(config, monkeypatch, tmp_path) as address:
         assert request(address, "GET", "/api/state")[0] == 200
+
+
+def test_console_status_and_toggle(config: dict, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    console = FakeConsole()
+    with running_server(config, monkeypatch, tmp_path, console) as address:
+        status, _headers, payload = request(address, "GET", "/api/console")
+        assert status == 200 and payload["state"] == "stopped"
+
+        status, _headers, payload = post_json(address, "/api/console/toggle", {})
+        assert status == 200 and payload["state"] == "running"
+
+        status, _headers, payload = post_json(address, "/api/console/toggle", {"action": "start"})
+        assert status == 400 and "keine Parameter" in payload["error"]

@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .admin import SessionStore, hash_pin, verify_pin
 from .config_store import ConfigError, config_path, public_config, save_config, validate_config
+from .console_control import ConsoleController
 from .providers.transit_vrr_smart import search_station
 from .state import StateManager
 from .version import __version__
@@ -39,6 +40,7 @@ def web_directory() -> Path:
 class ServerContext:
     config: dict[str, Any]
     state: StateManager
+    console: ConsoleController = field(default_factory=ConsoleController)
     started_at: float = field(default_factory=time.monotonic)
     lock: threading.RLock = field(default_factory=threading.RLock)
     sessions: SessionStore = field(init=False)
@@ -178,6 +180,11 @@ class StorchHandler(BaseHTTPRequestHandler):
             if path == "/api/state":
                 self._json(self.context.state.snapshot(), head_only=head_only)
                 return
+            if path == "/api/console":
+                if not self._loopback_client():
+                    raise RequestError(HTTPStatus.FORBIDDEN, "Konsolensteuerung ist nur lokal erlaubt")
+                self._json(self.context.console.status().as_dict(), head_only=head_only)
+                return
             if path == "/api/admin/status":
                 self._json({
                     "ok": True,
@@ -211,6 +218,19 @@ class StorchHandler(BaseHTTPRequestHandler):
         try:
             body = self._read_json()
             path = urlparse(self.path).path
+            if path == "/api/console/toggle":
+                if not self._loopback_client():
+                    raise RequestError(HTTPStatus.FORBIDDEN, "Konsolensteuerung ist nur lokal erlaubt")
+                if body:
+                    raise RequestError(HTTPStatus.BAD_REQUEST, "Dieser Endpunkt akzeptiert keine Parameter")
+                result = self.context.console.toggle()
+                payload = result.as_dict()
+                if result.state == "unavailable":
+                    payload["error"] = result.message or "Pegasus ist nicht verfügbar."
+                    self._json(payload, HTTPStatus.SERVICE_UNAVAILABLE)
+                else:
+                    self._json(payload)
+                return
             if path == "/api/admin/setup":
                 if self._requires_auth():
                     raise RequestError(HTTPStatus.FORBIDDEN, "Admin-PIN ist bereits eingerichtet")

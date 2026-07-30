@@ -31,7 +31,13 @@ function stateFor(config) {
 
 async function mockBackend(page, config = structuredClone(baseConfig)) {
   let savedConfig = config;
+  let consoleState = "stopped";
   await page.route("**/api/state", (route) => route.fulfill({ json: stateFor(savedConfig) }));
+  await page.route("**/api/console", (route) => route.fulfill({ json: { ok: true, available: true, state: consoleState, message: "" } }));
+  await page.route("**/api/console/toggle", (route) => {
+    consoleState = consoleState === "running" ? "stopped" : "running";
+    return route.fulfill({ json: { ok: true, available: true, state: consoleState, message: "" } });
+  });
   await page.route("**/api/admin/status", (route) => route.fulfill({ json: { ok: true, pin_configured: false, authenticated: false } }));
   await page.route("**/api/admin/setup", (route) => route.fulfill({ json: { ok: true, token: "test-token", expires_in: 1800 } }));
   await page.route("**/api/admin/login", (route) => route.fulfill({ json: { ok: true, token: "test-token", expires_in: 1800 } }));
@@ -109,4 +115,15 @@ test("explicit profiles and offline states remain readable", async ({ page }) =>
   await expect(page.locator("#radarStatus")).toHaveText("Radar offline");
   await expect(page.locator("#sys")).toContainText("CPU –");
   await expect(page.locator("#streamStatusText")).toContainText("Wiedergabe nicht verifizierbar");
+});
+
+test("subtle Pegasus control toggles the HDMI console", async ({ page }) => {
+  await mockBackend(page);
+  await page.goto("/");
+  const control = page.locator("#consoleToggle");
+  await expect(control).toBeVisible();
+  await expect(control).toHaveAttribute("data-state", "stopped");
+  await control.click();
+  await expect(control).toHaveAttribute("data-state", "running");
+  await expect(page.locator("#toast")).toContainText("Pegasus startet auf HDMI");
 });

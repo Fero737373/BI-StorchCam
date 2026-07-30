@@ -17,6 +17,7 @@ Die automatisierten UI-Tests erzeugen bei Fehlern Screenshots für 1024×600, 12
 - RainViewer-Radar mit Datenzeit, Quelle, Standortmarkierung und Offlinezustand
 - mehrere VRR-Haltestellen mit Linien- und Nachtbusfiltern
 - lokaler Adminmodus per drei Sekunden langer Berührung oben links oder `Ctrl+Alt+S`
+- dezenter lokaler Start-/Stop-Schalter für Pegasus auf dem HDMI-Ausgang
 - PBKDF2-gehashte PIN und zeitlich begrenzte Admin-Sessions
 - Hintergrund-State ohne Provideraufrufe pro Browseranfrage
 - überwachte Chromium-, Chrome- oder Edge-Prozesse mit begrenztem Backoff
@@ -66,6 +67,18 @@ Nach erfolgreichem Server-Test:
 bash scripts/install_systemd_user.sh
 systemctl --user status bi-storchcam.service
 ```
+
+Für den Pegasus-Schalter wird `KonsolenDocker` standardmäßig unter
+`~/KonsolenDocker` erwartet. Ein anderer absoluter Pfad lässt sich vor dem
+StorchCam-Start über `STORCHCAM_CONSOLE_CONTROL` setzen:
+
+```bash
+export STORCHCAM_CONSOLE_CONTROL=/home/fero/KonsolenDocker/bin/console-control
+```
+
+Die HTTP-Steuerung akzeptiert ausschließlich lokale Loopback-Anfragen. Der
+Docker-Aufbau und die einmalige Host-Erkennung erfolgen vorher mit
+`KonsolenDocker/bin/setup`; der UI-Schalter baut beim Antippen kein Image.
 
 Für User-Services kann auf einem unbeaufsichtigten Gerät zusätzlich `loginctl enable-linger "$USER"` mit passenden Administratorrechten nötig sein. Das optionale Desktop-Autostart-Script `scripts/install_linux_autostart.sh` ist nur ein weniger robuster Fallback.
 

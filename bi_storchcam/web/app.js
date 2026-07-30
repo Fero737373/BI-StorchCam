@@ -23,6 +23,7 @@ const elements = {
   transitPanel: byId("transitPanel"),
   boards: byId("boards"),
   hotspot: byId("adminHotspot"),
+  consoleToggle: byId("consoleToggle"),
   pinDialog: byId("pinDialog"),
   pinForm: byId("pinForm"),
   pinTitle: byId("pinTitle"),
@@ -51,6 +52,7 @@ let streamSignature = "";
 let longPressTimer = null;
 let toastTimer = null;
 let runtimeTimezone = "Europe/Berlin";
+let consoleBusy = false;
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -294,6 +296,52 @@ async function refreshState() {
     elements.streamStatus.dataset.state = "error";
     elements.streamStatusText.textContent = "Lokales Backend nicht erreichbar";
     elements.weatherText.textContent = "Wetterdaten nicht erreichbar";
+  }
+}
+
+function renderConsoleStatus(payload) {
+  const state = ["running", "stopped", "unavailable"].includes(payload?.state)
+    ? payload.state
+    : "unavailable";
+  const labels = {
+    running: "Pegasus läuft – antippen zum Beenden",
+    stopped: "Pegasus starten",
+    unavailable: payload?.message || "Pegasus ist nicht verfügbar",
+  };
+  elements.consoleToggle.dataset.state = state;
+  elements.consoleToggle.setAttribute("aria-label", labels[state]);
+  elements.consoleToggle.title = labels[state];
+}
+
+async function refreshConsoleStatus() {
+  if (consoleBusy) return;
+  try {
+    renderConsoleStatus(await api("/api/console"));
+  } catch (error) {
+    renderConsoleStatus({ state: "unavailable", message: error.message });
+  }
+}
+
+async function toggleConsole() {
+  if (consoleBusy) return;
+  consoleBusy = true;
+  elements.consoleToggle.disabled = true;
+  elements.consoleToggle.dataset.state = "busy";
+  elements.consoleToggle.setAttribute("aria-label", "Pegasus wird umgeschaltet");
+  elements.consoleToggle.title = "Pegasus wird umgeschaltet";
+  try {
+    const result = await api("/api/console/toggle", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    renderConsoleStatus(result);
+    showToast(result.state === "running" ? "Pegasus startet auf HDMI" : "Pegasus wurde beendet");
+  } catch (error) {
+    renderConsoleStatus({ state: "unavailable", message: error.message });
+    showToast(`Pegasus nicht verfügbar: ${error.message}`);
+  } finally {
+    consoleBusy = false;
+    elements.consoleToggle.disabled = false;
   }
 }
 
@@ -609,6 +657,7 @@ elements.hotspot.addEventListener("pointerleave", cancelLongPress);
 elements.hotspot.addEventListener("keydown", (event) => {
   if (event.key === "Enter" || event.key === " ") beginAdmin(elements.hotspot);
 });
+elements.consoleToggle.addEventListener("click", toggleConsole);
 document.addEventListener("keydown", (event) => {
   if (event.ctrlKey && event.altKey && event.key.toLowerCase() === "s") {
     event.preventDefault();
@@ -660,3 +709,5 @@ updateClock();
 setInterval(updateClock, 1000);
 refreshState();
 setInterval(refreshState, 5000);
+refreshConsoleStatus();
+setInterval(refreshConsoleStatus, 5000);

@@ -10,6 +10,17 @@
 <body class="is-loading" data-theme="dark" data-layout="standard">
   <a class="skip-link" href="#stage">Zum Livestream springen</a>
   <button id="adminHotspot" class="admin-hotspot" type="button" aria-label="Adminmodus durch langes Drücken öffnen"></button>
+  <button
+    id="consoleToggle"
+    class="console-toggle"
+    type="button"
+    data-state="unavailable"
+    aria-label="Pegasus-Status wird geladen"
+    title="Pegasus-Status wird geladen"
+  >
+    <span class="console-glyph" aria-hidden="true">P</span>
+    <span class="console-dot" aria-hidden="true"></span>
+  </button>
 
   <main class="screen" aria-label="BI-StorchCam Infoscreen">
     <section id="stage" class="stage" aria-label="Livestream" tabindex="-1">
