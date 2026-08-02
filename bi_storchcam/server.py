@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .admin import SessionStore, hash_pin, verify_pin
 from .config_store import ConfigError, config_path, public_config, save_config, validate_config
+from .console_control import ConsoleControlError, run_console_action
 from .providers.transit_vrr_smart import search_station
 from .state import StateManager
 from .version import __version__
@@ -157,6 +158,14 @@ class StorchHandler(BaseHTTPRequestHandler):
         if not self._authenticated():
             raise RequestError(HTTPStatus.UNAUTHORIZED, "Admin-Anmeldung erforderlich")
 
+    def _guard_console(self) -> None:
+        if self._loopback_client() or self._authenticated():
+            return
+        raise RequestError(
+            HTTPStatus.FORBIDDEN,
+            "Konsolensteuerung ist nur lokal oder nach Admin-Anmeldung erlaubt",
+        )
+
     def do_HEAD(self) -> None:  # noqa: N802
         self._dispatch(head_only=True)
 
@@ -177,6 +186,10 @@ class StorchHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/state":
                 self._json(self.context.state.snapshot(), head_only=head_only)
+                return
+            if path == "/api/console/status":
+                self._guard_console()
+                self._json(run_console_action("status"), head_only=head_only)
                 return
             if path == "/api/admin/status":
                 self._json({
@@ -211,6 +224,14 @@ class StorchHandler(BaseHTTPRequestHandler):
         try:
             body = self._read_json()
             path = urlparse(self.path).path
+            if path == "/api/console/toggle":
+                self._guard_console()
+                try:
+                    result = run_console_action("toggle")
+                except ConsoleControlError as exc:
+                    raise RequestError(HTTPStatus.SERVICE_UNAVAILABLE, str(exc)) from exc
+                self._json(result)
+                return
             if path == "/api/admin/setup":
                 if self._requires_auth():
                     raise RequestError(HTTPStatus.FORBIDDEN, "Admin-PIN ist bereits eingerichtet")
