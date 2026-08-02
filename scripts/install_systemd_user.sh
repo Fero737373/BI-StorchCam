@@ -27,7 +27,7 @@ StartLimitBurst=8
 [Service]
 Type=simple
 WorkingDirectory=$APP_DIR
-ExecStart=$PYTHON_BIN $APP_DIR/launcher.py
+ExecStart=$PYTHON_BIN $APP_DIR/scripts/start_storchcam.py
 Restart=always
 RestartSec=5
 TimeoutStopSec=15
