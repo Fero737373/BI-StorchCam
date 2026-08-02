@@ -27,7 +27,7 @@
     </section>
 
     <section class="hud" aria-label="Zusatzinformationen">
-      <header class="hud-top" aria-label="Zeit und Wetter">
+      <header class="hud-top" aria-label="Zeit, Wetter und Konsolensteuerung">
         <section id="clockbar" class="clock-card" aria-label="Aktuelle Uhrzeit">
           <span class="eyebrow">Bielefeld</span>
           <strong id="clock">--:--</strong>
@@ -39,6 +39,11 @@
         </section>
         <section id="sysbar" class="system-card" aria-label="Systemstatus">
           <span id="sys">Systemstatus nicht verfügbar</span>
+        </section>
+        <section class="system-card" aria-label="Konsolenmodus">
+          <button id="consoleToggle" class="button button-secondary" type="button" title="KonsolenDocker-Status wird geprüft">
+            Konsole wird geprüft …
+          </button>
         </section>
       </header>
 
@@ -179,5 +184,6 @@
 
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
   <script src="app.js"></script>
+  <script src="console.js"></script>
 </body>
 </html>
