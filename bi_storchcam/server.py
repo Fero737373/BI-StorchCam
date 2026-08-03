@@ -18,6 +18,14 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from .admin import SessionStore, hash_pin, verify_pin
+from .bluetooth_control import (
+    BluetoothControlError,
+    connect_device,
+    disconnect_device,
+    list_devices,
+    remove_device,
+    scan_devices,
+)
 from .config_store import ConfigError, config_path, public_config, save_config, validate_config
 from .console_control import ConsoleControlError, run_console_action
 from .providers.transit_vrr_smart import search_station
@@ -166,6 +174,12 @@ class StorchHandler(BaseHTTPRequestHandler):
             "Konsolensteuerung ist nur lokal oder nach Admin-Anmeldung erlaubt",
         )
 
+    def _run_bluetooth(self, operation: Any, *arguments: Any) -> Any:
+        try:
+            return operation(*arguments)
+        except BluetoothControlError as exc:
+            raise RequestError(HTTPStatus.SERVICE_UNAVAILABLE, str(exc)) from exc
+
     def do_HEAD(self) -> None:  # noqa: N802
         self._dispatch(head_only=True)
 
@@ -190,6 +204,11 @@ class StorchHandler(BaseHTTPRequestHandler):
             if path == "/api/console/status":
                 self._guard_console()
                 self._json(run_console_action("status"), head_only=head_only)
+                return
+            if path == "/api/bluetooth/devices":
+                self._guard_console()
+                devices = self._run_bluetooth(list_devices)
+                self._json({"ok": True, "devices": devices}, head_only=head_only)
                 return
             if path == "/api/admin/status":
                 self._json({
@@ -239,6 +258,30 @@ class StorchHandler(BaseHTTPRequestHandler):
                 except ConsoleControlError as exc:
                     raise RequestError(HTTPStatus.SERVICE_UNAVAILABLE, str(exc)) from exc
                 self._json(result)
+                return
+            if path == "/api/bluetooth/scan":
+                self._guard_console()
+                try:
+                    seconds = int(body.get("seconds", 12))
+                except (TypeError, ValueError) as exc:
+                    raise RequestError(HTTPStatus.BAD_REQUEST, "Ungültige Suchdauer") from exc
+                devices = self._run_bluetooth(scan_devices, seconds)
+                self._json({"ok": True, "devices": devices})
+                return
+            if path == "/api/bluetooth/connect":
+                self._guard_console()
+                device = self._run_bluetooth(connect_device, str(body.get("address", "")))
+                self._json({"ok": True, "device": device})
+                return
+            if path == "/api/bluetooth/disconnect":
+                self._guard_console()
+                device = self._run_bluetooth(disconnect_device, str(body.get("address", "")))
+                self._json({"ok": True, "device": device})
+                return
+            if path == "/api/bluetooth/remove":
+                self._guard_console()
+                device = self._run_bluetooth(remove_device, str(body.get("address", "")))
+                self._json({"ok": True, "device": device})
                 return
             if path == "/api/admin/setup":
                 if self._requires_auth():
