@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="dark light">
   <title>BI-StorchCam</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="bluetooth.css">
 </head>
 <body class="is-loading" data-theme="dark" data-layout="standard">
   <a class="skip-link" href="#stage">Zum Livestream springen</a>
@@ -45,8 +46,8 @@
             <button id="consoleToggle" class="button button-secondary" type="button" title="KonsolenDocker-Status wird geprüft">
               Konsole wird geprüft …
             </button>
-            <button id="bluetoothConnect" class="button button-secondary" type="button" title="Controller zuerst in den Pairing-Modus setzen">
-              Bluetooth-Controller verbinden
+            <button id="bluetoothConnect" class="button button-secondary" type="button" title="Bluetooth-Geräte suchen und verwalten">
+              Bluetooth-Geräte
             </button>
             <span id="bluetoothStatus" class="console-status" role="status" aria-live="polite"></span>
           </section>
@@ -103,6 +104,26 @@
         <button id="submitPin" class="button button-primary" type="submit">Anmelden</button>
       </footer>
     </form>
+  </dialog>
+
+  <dialog id="bluetoothDialog" class="bluetooth-dialog" aria-labelledby="bluetoothTitle">
+    <section class="bluetooth-shell">
+      <header class="bluetooth-header">
+        <div>
+          <span class="eyebrow">Bluetooth</span>
+          <h1 id="bluetoothTitle">Geräte verbinden</h1>
+          <p>Setze neue Geräte in den Pairing-Modus. Bekannte Geräte können direkt verbunden oder getrennt werden.</p>
+        </div>
+        <button id="closeBluetooth" class="icon-button" type="button" aria-label="Bluetooth schließen">×</button>
+      </header>
+      <div class="bluetooth-toolbar">
+        <div id="bluetoothDialogStatus" class="status-message" role="status" aria-live="polite">Bekannte Geräte werden geladen.</div>
+        <button id="bluetoothScan" class="button button-primary" type="button">Nach Geräten suchen</button>
+      </div>
+      <div id="bluetoothDevices" class="bluetooth-devices" aria-live="polite">
+        <div class="bluetooth-empty">Noch keine Geräte geladen.</div>
+      </div>
+    </section>
   </dialog>
 
   <dialog id="settingsDialog" class="settings-dialog" aria-labelledby="settingsTitle">
