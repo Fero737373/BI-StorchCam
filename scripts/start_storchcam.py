@@ -5,9 +5,13 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
+
+BROWSER_NAMES = ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable")
 
 
 def _config_path() -> Path:
@@ -49,39 +53,78 @@ def _migrate_file(path: Path) -> None:
     if raw is None:
         return
 
+    changed = False
     server = raw.get("server")
-    changed = isinstance(server, dict) and server.pop("state_refresh_seconds", None) is not None
+    if isinstance(server, dict) and server.pop("state_refresh_seconds", None) is not None:
+        changed = True
+
+    kiosk = raw.setdefault("kiosk", {})
+    if isinstance(kiosk, dict):
+        # Auf dem Pi wird ausschließlich das frische, temporäre Kioskprofil
+        # verwendet. Ein altes Profil darf keine API-/JSON-Seite restaurieren.
+        if str(kiosk.get("profile_dir", "")).strip():
+            kiosk["profile_dir"] = ""
+            changed = True
+        for obsolete in ("url", "start_url", "startup_url"):
+            if kiosk.pop(obsolete, None) is not None:
+                changed = True
+
     if not changed:
         return
 
-    migration_backup = path.with_suffix(path.suffix + ".pre-console-migration.bak")
+    migration_backup = path.with_suffix(path.suffix + ".pre-kiosk-cleanup.bak")
     if not migration_backup.exists():
         shutil.copy2(path, migration_backup)
     _write_atomic(path, raw)
 
 
-def _reset_default_browser_profile(config_path: Path) -> None:
-    """Discard stale restored tabs from the dedicated temporary kiosk profile."""
-    raw = _read_config(config_path) or {}
-    kiosk = raw.get("kiosk")
-    configured_profile = ""
-    if isinstance(kiosk, dict):
-        configured_profile = str(kiosk.get("profile_dir", "")).strip()
-
-    # A custom profile can contain user data and is never deleted automatically.
-    if configured_profile:
+def _stop_existing_browsers() -> None:
+    """Stop stale kiosk/default-browser windows before starting the Cam."""
+    if os.name == "nt" or shutil.which("pkill") is None:
         return
+    for name in BROWSER_NAMES:
+        subprocess.run(
+            ["pkill", "-TERM", "-x", name],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    time.sleep(1.5)
+    for name in BROWSER_NAMES:
+        subprocess.run(
+            ["pkill", "-KILL", "-x", name],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
-    profile = Path("/tmp/bi-storchcam-browser-profile")
-    if profile.exists():
-        shutil.rmtree(profile, ignore_errors=True)
+
+def _reset_browser_state() -> None:
+    """Delete all known tab/session state used by the Raspberry Pi kiosk."""
+    shutil.rmtree(Path("/tmp/bi-storchcam-browser-profile"), ignore_errors=True)
+
+    chromium_default = Path.home() / ".config" / "chromium" / "Default"
+    shutil.rmtree(chromium_default / "Sessions", ignore_errors=True)
+    for name in ("Current Session", "Current Tabs", "Last Session", "Last Tabs"):
+        try:
+            (chromium_default / name).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    chromium_root = chromium_default.parent
+    for name in ("SingletonCookie", "SingletonLock", "SingletonSocket"):
+        try:
+            (chromium_root / name).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def main() -> int:
     config = _config_path()
     _migrate_file(config)
     _migrate_file(config.with_suffix(config.suffix + ".bak"))
-    _reset_default_browser_profile(config)
+    _stop_existing_browsers()
+    _reset_browser_state()
 
     from bi_storchcam.kiosk_app import main as application_main
 
