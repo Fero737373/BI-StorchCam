@@ -1,4 +1,4 @@
-"""Start BI-StorchCam after removing known obsolete local config fields."""
+"""Start BI-StorchCam after local config and kiosk-session cleanup."""
 
 from __future__ import annotations
 
@@ -34,14 +34,19 @@ def _write_atomic(path: Path, value: dict[str, Any]) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def _migrate_file(path: Path) -> None:
+def _read_config(path: Path) -> dict[str, Any] | None:
     if not path.exists():
-        return
+        return None
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return
-    if not isinstance(raw, dict):
+        return None
+    return raw if isinstance(raw, dict) else None
+
+
+def _migrate_file(path: Path) -> None:
+    raw = _read_config(path)
+    if raw is None:
         return
 
     server = raw.get("server")
@@ -55,10 +60,28 @@ def _migrate_file(path: Path) -> None:
     _write_atomic(path, raw)
 
 
+def _reset_default_browser_profile(config_path: Path) -> None:
+    """Discard stale restored tabs from the dedicated temporary kiosk profile."""
+    raw = _read_config(config_path) or {}
+    kiosk = raw.get("kiosk")
+    configured_profile = ""
+    if isinstance(kiosk, dict):
+        configured_profile = str(kiosk.get("profile_dir", "")).strip()
+
+    # A custom profile can contain user data and is never deleted automatically.
+    if configured_profile:
+        return
+
+    profile = Path("/tmp/bi-storchcam-browser-profile")
+    if profile.exists():
+        shutil.rmtree(profile, ignore_errors=True)
+
+
 def main() -> int:
     config = _config_path()
     _migrate_file(config)
     _migrate_file(config.with_suffix(config.suffix + ".bak"))
+    _reset_default_browser_profile(config)
 
     from bi_storchcam.kiosk_app import main as application_main
 
