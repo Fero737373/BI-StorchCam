@@ -6,6 +6,7 @@ web = root / "bi_storchcam" / "web"
 datas = [
     (str(web / "index.html"), "bi_storchcam/web"),
     (str(web / "style.css"), "bi_storchcam/web"),
+    (str(web / "bluetooth.css"), "bi_storchcam/web"),
     (str(web / "app.js"), "bi_storchcam/web"),
     (str(web / "console.js"), "bi_storchcam/web"),
 ]
