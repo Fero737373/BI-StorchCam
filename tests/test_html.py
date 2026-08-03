@@ -31,12 +31,25 @@ class Validator(HTMLParser):
 
 def test_html_structure_and_unique_ids() -> None:
     parser = Validator()
-    parser.feed(Path("bi_storchcam/web/index.html").read_text(encoding="utf-8"))
+    html = Path("bi_storchcam/web/index.html").read_text(encoding="utf-8")
+    parser.feed(html)
     assert not parser.errors
     assert not parser.stack
     assert len(parser.ids) == len(set(parser.ids))
-    required = {"weather", "weatherText", "streamStatus", "streamStatusText", "sysbar", "sys"}
+    required = {
+        "weather",
+        "weatherText",
+        "streamStatus",
+        "streamStatusText",
+        "sysbar",
+        "sys",
+        "bluetoothConnect",
+        "bluetoothDialog",
+        "bluetoothScan",
+        "bluetoothDevices",
+    }
     assert required <= set(parser.ids)
+    assert 'href="bluetooth.css"' in html
 
 
 def test_javascript_syntax() -> None:
