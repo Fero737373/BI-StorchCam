@@ -232,6 +232,14 @@ class StorchHandler(BaseHTTPRequestHandler):
                     raise RequestError(HTTPStatus.SERVICE_UNAVAILABLE, str(exc)) from exc
                 self._json(result)
                 return
+            if path == "/api/console/bluetooth":
+                self._guard_console()
+                try:
+                    result = run_console_action("bluetooth")
+                except ConsoleControlError as exc:
+                    raise RequestError(HTTPStatus.SERVICE_UNAVAILABLE, str(exc)) from exc
+                self._json(result)
+                return
             if path == "/api/admin/setup":
                 if self._requires_auth():
                     raise RequestError(HTTPStatus.FORBIDDEN, "Admin-PIN ist bereits eingerichtet")

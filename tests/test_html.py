@@ -42,4 +42,5 @@ def test_html_structure_and_unique_ids() -> None:
 def test_javascript_syntax() -> None:
     node = shutil.which("node")
     if node:
-        subprocess.run([node, "--check", "bi_storchcam/web/app.js"], check=True)
+        for script in ("app.js", "console.js"):
+            subprocess.run([node, "--check", f"bi_storchcam/web/{script}"], check=True)

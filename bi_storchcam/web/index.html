@@ -27,7 +27,7 @@
     </section>
 
     <section class="hud" aria-label="Zusatzinformationen">
-      <header class="hud-top" aria-label="Zeit, Wetter und Konsolensteuerung">
+      <header class="hud-top" aria-label="Zeit und Wetter">
         <section id="clockbar" class="clock-card" aria-label="Aktuelle Uhrzeit">
           <span class="eyebrow">Bielefeld</span>
           <strong id="clock">--:--</strong>
@@ -37,14 +37,20 @@
           <span class="weather-mark" aria-hidden="true"></span>
           <span id="weatherText">Wetter wird geladen</span>
         </section>
-        <section id="sysbar" class="system-card" aria-label="Systemstatus">
-          <span id="sys">Systemstatus nicht verfügbar</span>
-        </section>
-        <section class="system-card" aria-label="Konsolenmodus">
-          <button id="consoleToggle" class="button button-secondary" type="button" title="KonsolenDocker-Status wird geprüft">
-            Konsole wird geprüft …
-          </button>
-        </section>
+        <div class="system-stack">
+          <section id="sysbar" class="system-card" aria-label="Systemstatus">
+            <span id="sys">Systemstatus nicht verfügbar</span>
+          </section>
+          <section class="console-actions" aria-label="Konsolensteuerung">
+            <button id="consoleToggle" class="button button-secondary" type="button" title="KonsolenDocker-Status wird geprüft">
+              Konsole wird geprüft …
+            </button>
+            <button id="bluetoothConnect" class="button button-secondary" type="button" title="Controller zuerst in den Pairing-Modus setzen">
+              Bluetooth-Controller verbinden
+            </button>
+            <span id="bluetoothStatus" class="console-status" role="status" aria-live="polite"></span>
+          </section>
+        </div>
       </header>
 
       <aside id="radar" class="radar-card" aria-label="Regenradar">

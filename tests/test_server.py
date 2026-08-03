@@ -98,3 +98,21 @@ def test_state_endpoint_does_not_call_provider(config: dict, monkeypatch: pytest
     monkeypatch.setattr("bi_storchcam.providers.weather_smart.get_weather", forbidden)
     with running_server(config, monkeypatch, tmp_path) as address:
         assert request(address, "GET", "/api/state")[0] == 200
+
+
+def test_local_console_and_bluetooth_endpoints(config: dict, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    actions: list[str] = []
+
+    def fake_console_action(action: str) -> dict[str, object]:
+        actions.append(action)
+        state = "connected" if action == "bluetooth" else "stopped"
+        return {"ok": True, "available": True, "state": state, "message": state}
+
+    monkeypatch.setattr("bi_storchcam.server.run_console_action", fake_console_action)
+    with running_server(config, monkeypatch, tmp_path) as address:
+        assert request(address, "GET", "/api/console/status")[0] == 200
+        assert post_json(address, "/api/console/toggle", {})[0] == 200
+        status, _headers, payload = post_json(address, "/api/console/bluetooth", {})
+        assert status == 200 and payload["state"] == "connected"
+
+    assert actions == ["status", "toggle", "bluetooth"]
