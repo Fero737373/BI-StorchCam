@@ -1,0 +1,504 @@
+/*
+ * Touchscreen overrides for the Raspberry Pi 5 DSI display.
+ * Loaded after style.css and bluetooth.css so touch ergonomics win over
+ * desktop/kiosk density rules.
+ */
+
+@media (pointer: coarse), (max-width: 1400px) and (max-height: 850px) {
+  :root {
+    --touch: 58px;
+    --radius: 16px;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    overscroll-behavior: none;
+  }
+
+  body {
+    overscroll-behavior: none;
+    touch-action: manipulation;
+  }
+
+  button,
+  .toggle,
+  .bluetooth-device-actions,
+  .station-result {
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  button,
+  .button,
+  .icon-button,
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  .button,
+  .icon-button,
+  .field input,
+  .field select,
+  .field textarea,
+  .toggle {
+    min-height: var(--touch);
+  }
+
+  .button,
+  .icon-button {
+    border-radius: 12px;
+  }
+
+  .button:active,
+  .icon-button:active,
+  .toggle:active {
+    transform: scale(0.98);
+  }
+
+  .hud-top {
+    top: 14px;
+    left: 14px;
+    right: 14px;
+    grid-template-columns: 176px minmax(260px, 1fr) 280px;
+    align-items: start;
+    gap: 14px;
+  }
+
+  .clock-card {
+    min-width: 0;
+    padding: 12px 16px;
+    border-radius: 16px;
+  }
+
+  .clock-card strong {
+    font-size: 2.25rem;
+  }
+
+  .clock-card #date {
+    margin-top: 5px;
+    font-size: 0.82rem;
+  }
+
+  .eyebrow {
+    font-size: 0.72rem;
+  }
+
+  .weather-card {
+    justify-self: center;
+    min-height: 58px;
+    max-width: min(560px, 100%);
+    padding: 12px 16px;
+    border-radius: 16px;
+    font-size: 1rem;
+    line-height: 1.25;
+  }
+
+  .system-stack {
+    display: grid !important;
+    justify-self: end;
+    min-width: 260px;
+    max-width: 300px;
+    gap: 8px;
+  }
+
+  /* The Pi status is useful in admin mode, but wastes valuable touch space
+     on the 7-inch screen. Keep the actual console controls prominent. */
+  .system-stack .system-card {
+    display: none !important;
+  }
+
+  .console-actions {
+    display: grid;
+    gap: 8px;
+    padding: 8px;
+    border-radius: 16px;
+  }
+
+  .console-actions .button {
+    min-height: 58px !important;
+    padding: 10px 16px !important;
+    border-radius: 12px;
+    font-size: 0.92rem !important;
+    line-height: 1.2;
+  }
+
+  .console-status {
+    padding: 2px 6px 4px;
+    font-size: 0.76rem;
+  }
+
+  .radar-card,
+  .transit-card {
+    bottom: 14px;
+    border-radius: 16px;
+  }
+
+  .radar-card {
+    left: 14px;
+    width: min(310px, calc(100vw - 28px));
+  }
+
+  .radar-map {
+    height: 170px;
+  }
+
+  .radar-footer {
+    display: none;
+  }
+
+  .transit-card {
+    right: 14px;
+    width: min(380px, calc(100vw - 28px));
+    max-height: 46vh;
+  }
+
+  .card-header {
+    padding: 10px 13px 8px;
+  }
+
+  .card-header h2 {
+    font-size: 1rem;
+  }
+
+  .boards {
+    padding: 0 12px 11px;
+  }
+
+  .departure {
+    min-height: 34px;
+    gap: 10px;
+    font-size: 0.84rem;
+  }
+
+  .stream-status {
+    bottom: 12px;
+    min-height: 38px;
+    padding: 8px 12px;
+    font-size: 0.8rem;
+  }
+
+  .admin-hotspot {
+    width: 78px;
+    height: 78px;
+  }
+
+  .auth-dialog {
+    width: min(520px, calc(100vw - 24px));
+  }
+
+  .dialog-card {
+    gap: 20px;
+    padding: 26px;
+  }
+
+  .dialog-card h1,
+  .settings-header h1,
+  .bluetooth-header h1 {
+    font-size: 1.5rem;
+  }
+
+  .field {
+    gap: 8px;
+  }
+
+  .field > span {
+    font-size: 0.8rem;
+  }
+
+  .field input,
+  .field textarea,
+  .field select {
+    padding: 13px 14px;
+    border-radius: 12px;
+  }
+
+  .toggle {
+    padding: 10px 14px;
+    border-radius: 12px;
+  }
+
+  .toggle input {
+    width: 22px;
+    height: 22px;
+    margin-right: 10px;
+  }
+
+  .icon-button {
+    width: var(--touch);
+    min-width: var(--touch);
+    font-size: 1.8rem;
+  }
+
+  .settings-dialog {
+    width: calc(100vw - 20px);
+    height: calc(100vh - 20px);
+  }
+
+  .settings-header,
+  .settings-footer {
+    padding: 14px 18px;
+  }
+
+  .settings-content {
+    padding: 14px 18px 28px;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+  }
+
+  .settings-section {
+    padding: 16px 0 22px;
+  }
+
+  .form-grid,
+  .three-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .section-number {
+    width: 44px;
+    height: 44px;
+  }
+
+  .station-search {
+    gap: 12px;
+  }
+
+  .station-result {
+    min-height: 58px;
+    padding: 10px 12px;
+  }
+
+  .stop-actions button {
+    min-width: 52px;
+    min-height: 52px;
+  }
+
+  .bluetooth-dialog {
+    width: min(960px, calc(100vw - 20px));
+    max-height: calc(100vh - 20px);
+  }
+
+  .bluetooth-shell {
+    grid-template-rows: auto auto minmax(0, 1fr);
+    max-height: calc(100vh - 20px);
+    border-radius: 18px;
+  }
+
+  .bluetooth-header,
+  .bluetooth-toolbar {
+    gap: 18px;
+    padding: 16px 18px;
+  }
+
+  .bluetooth-header p {
+    font-size: 0.9rem;
+    line-height: 1.4;
+  }
+
+  .bluetooth-devices {
+    gap: 10px;
+    padding: 14px;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+  }
+
+  .bluetooth-device {
+    grid-template-columns: 56px minmax(0, 1fr) auto;
+    gap: 14px;
+    min-height: 82px;
+    padding: 12px 14px;
+    border-radius: 14px;
+  }
+
+  .bluetooth-device-icon {
+    width: 56px;
+    height: 56px;
+    font-size: 1.5rem;
+  }
+
+  .bluetooth-device-name {
+    font-size: 1rem;
+  }
+
+  .bluetooth-device-address {
+    font-size: 0.72rem;
+  }
+
+  .bluetooth-badge {
+    padding: 4px 8px;
+    font-size: 0.68rem;
+  }
+
+  .bluetooth-device-actions {
+    gap: 9px;
+  }
+
+  .bluetooth-device-actions .button {
+    min-width: 118px;
+    min-height: 56px;
+  }
+
+  .bluetooth-forget {
+    width: 56px !important;
+    min-width: 56px !important;
+    min-height: 56px !important;
+  }
+
+  input[type="range"] {
+    min-height: 58px;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    width: 28px;
+    height: 28px;
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+/* The physical DSI panel is used in landscape at roughly 1280x720 logical
+   pixels. This keeps all four information zones readable without shrinking
+   the controls below finger size. */
+@media (min-width: 900px) and (max-width: 1400px) and (max-height: 800px) {
+  .weather-card {
+    max-width: 500px;
+  }
+
+  .transit-card {
+    max-height: 43vh;
+  }
+
+  .settings-header p {
+    max-width: 560px;
+  }
+}
+
+/* Safe fallback if Chromium exposes the rotated DSI panel as a portrait
+   viewport instead of the logical landscape viewport. */
+@media (max-width: 800px), (orientation: portrait) and (max-width: 900px) {
+  .hud-top {
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    gap: 10px;
+  }
+
+  .clock-card {
+    min-width: 0;
+  }
+
+  .clock-card strong {
+    font-size: 2rem;
+  }
+
+  .weather-card {
+    justify-self: stretch;
+    min-width: 0;
+    font-size: 0.92rem;
+  }
+
+  .system-stack {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .console-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .console-actions .button {
+    min-width: 0;
+  }
+
+  .radar-card {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    width: auto !important;
+  }
+
+  .radar-map {
+    height: 165px;
+  }
+
+  .transit-card {
+    display: none !important;
+  }
+
+  .stream-status {
+    left: 50%;
+    bottom: 196px;
+    transform: translateX(-50%);
+    max-width: calc(100vw - 20px);
+  }
+
+  .settings-dialog,
+  .bluetooth-dialog {
+    width: calc(100vw - 8px);
+    height: calc(100vh - 8px);
+    max-height: calc(100vh - 8px);
+  }
+
+  .settings-header,
+  .settings-footer,
+  .bluetooth-header,
+  .bluetooth-toolbar {
+    padding: 12px;
+  }
+
+  .settings-header p,
+  .bluetooth-header p {
+    display: none;
+  }
+
+  .form-grid,
+  .three-columns,
+  .stop-fields,
+  .station-search {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-footer .dialog-actions,
+  .dialog-card .dialog-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bluetooth-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .bluetooth-device {
+    grid-template-columns: 52px minmax(0, 1fr);
+  }
+
+  .bluetooth-device-icon {
+    width: 52px;
+    height: 52px;
+  }
+
+  .bluetooth-device-actions {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 56px;
+  }
+
+  .bluetooth-device-actions .button:first-child {
+    width: 100%;
+  }
+}
