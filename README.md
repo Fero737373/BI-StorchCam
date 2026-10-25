@@ -132,4 +132,4 @@ Marken und Logos werden nicht unnötig eingebunden.
 
 ## Lizenz
 
-Der Quellcode steht weiterhin unter [GPL-3.0-only](LICENSE). Daten und Karten unterliegen den Bedingungen der jeweiligen Anbieter.
+Der Quellcode steht weiterhin unter [GPL-3.0-only](LICENSE). Daten unterliegen den Bedingungen der jeweiligen Anbieter.

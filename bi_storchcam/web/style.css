@@ -150,7 +150,6 @@ body.no-infobar .stream-empty { padding-bottom: 16px; }
   line-height: 1.2;
   white-space: nowrap;
 }
-.block-meta { color: var(--faint); font-weight: 500; }
 
 /* Uhr */
 .ib-clock { padding: calc(20px * var(--s)) calc(22px * var(--s)) calc(18px * var(--s)); }
@@ -327,11 +326,6 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.72); backdrop-filter: blur(4px); 
 .settings-header p { max-width: 660px; }
 .settings-footer { border-top: 1px solid var(--line); }
 .settings-content { overflow-y: auto; padding: 20px 22px 32px; }
-.settings-section { padding: 18px 0 24px; border-bottom: 1px solid var(--line); }
-.settings-section:last-child { border-bottom: 0; }
-.section-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-.section-heading h2 { margin: 2px 0 0; font-size: 1.15rem; font-weight: 600; }
-.section-number { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 9px; color: var(--accent); font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .three-columns { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .field { display: grid; align-content: start; gap: 6px; min-width: 0; }

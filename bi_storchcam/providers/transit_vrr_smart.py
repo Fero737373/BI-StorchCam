@@ -8,11 +8,10 @@ import logging
 import threading
 import time
 import urllib.parse
-import urllib.request
 from datetime import datetime, timezone
 from typing import Any
 
-from ..version import __version__
+from .http_json import USER_AGENT, fetch_json_object
 
 LOGGER = logging.getLogger(__name__)
 SEARCH_URL = "https://haltestellenmonitor.vrr.de/backend/api/stations/search"
@@ -22,18 +21,8 @@ _cache_lock = threading.Lock()
 
 
 def _fetch_json(url: str, data: dict[str, Any] | None = None, timeout: int = 12) -> dict[str, Any]:
-    headers = {"User-Agent": f"BI-StorchCam/{__version__}", "Accept": "application/json,text/plain,*/*"}
-    request = urllib.request.Request(
-        url,
-        data=urllib.parse.urlencode(data).encode("utf-8") if data is not None else None,
-        headers=headers,
-        method="POST" if data is not None else "GET",
-    )
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        result = json.loads(response.read().decode("utf-8", "replace"))
-    if not isinstance(result, dict):
-        raise ValueError("VRR lieferte kein JSON-Objekt")
-    return result
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/json,text/plain,*/*"}
+    return fetch_json_object(url, "VRR", headers=headers, timeout=timeout, form=data)
 
 
 def search_station(query: str) -> list[dict[str, str]]:

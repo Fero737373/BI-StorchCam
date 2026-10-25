@@ -17,6 +17,8 @@ SUPPORTED_NAMES = {
     "chrome": ("google-chrome-stable", "google-chrome", "chrome"),
     "edge": ("microsoft-edge", "microsoft-edge-stable", "msedge"),
 }
+PROFILE_ROTATIONS = {"raspberry_pi_dsi_portrait": "right", "raspberry_pi_dsi_landscape": "normal"}
+NO_ROTATION = {"", "none"}
 
 
 def session_type(env: dict[str, str] | None = None) -> str:
@@ -72,7 +74,7 @@ def find_browser(configured: str = "auto") -> tuple[str, str] | None:
 
 
 def browser_arguments(kind: str, executable: str, url: str, config: dict[str, Any], env: dict[str, str]) -> list[str]:
-    if kind not in {"chromium", "chrome", "edge"}:
+    if kind not in SUPPORTED_NAMES:
         raise ValueError(f"Nicht unterstützter Browsertyp: {kind}")
     kiosk = config.get("kiosk", {})
     raw_profile = str(kiosk.get("profile_dir", "")).strip()
@@ -124,52 +126,57 @@ def _x11_outputs(env: dict[str, str]) -> list[str]:
     return [line.split()[0] for line in result.stdout.splitlines() if " connected" in line]
 
 
-def prepare_display(config: dict[str, Any]) -> dict[str, str]:
-    env = os.environ.copy()
-    if os.name == "nt" or session_type(env) != "x11":
-        if config.get("screen", {}).get("rotation") not in {"", "none", "normal"}:
-            LOGGER.warning("Displayrotation wird außerhalb von X11 nicht automatisch angewendet")
-        return env
-
-    screen = config.get("screen", {})
-    profile = str(screen.get("hardware_profile", "generic"))
-    output = str(screen.get("output", "auto"))
-    rotation = str(screen.get("rotation", "none"))
-    matrix = str(screen.get("touch_matrix", "")).strip()
-    touch_device = str(screen.get("touch_device", "")).strip()
-    if profile == "raspberry_pi_dsi_portrait":
-        rotation = "right"
-    elif profile == "raspberry_pi_dsi_landscape":
-        rotation = "normal"
-    elif profile == "generic":
-        return env
-
+def _apply_rotation(env: dict[str, str], profile: str, output: str, rotation: str) -> None:
     outputs = _x11_outputs(env)
     if output == "auto" and profile.startswith("raspberry_pi_dsi"):
         dsi_outputs = [item for item in outputs if item.upper().startswith("DSI")]
         output = dsi_outputs[0] if len(dsi_outputs) == 1 else ""
-    if output and output in outputs and rotation not in {"", "none"}:
+    if output and output in outputs and rotation not in NO_ROTATION:
         result = _run_checked(["xrandr", "--output", output, "--rotate", rotation], env)
         if result and result.returncode:
             LOGGER.warning("Rotation für %s konnte nicht gesetzt werden: %s", output, result.stderr.strip())
-    elif rotation not in {"", "none"}:
+    elif rotation not in NO_ROTATION:
         LOGGER.warning("Konfiguriertes Display %s wurde nicht eindeutig gefunden; keine Rotation angewendet", output)
 
-    if matrix:
-        if not touch_device:
-            LOGGER.warning("Touchmatrix ist gesetzt, aber touch_device fehlt; keine Eingabeänderung angewendet")
-        elif shutil.which("xinput"):
-            result = _run_checked(["xinput", "list", "--name-only"], env)
-            names = result.stdout.splitlines() if result and not result.returncode else []
-            exact = [name for name in names if name.strip() == touch_device]
-            if len(exact) == 1:
-                _run_checked(["xinput", "set-prop", touch_device, "Coordinate Transformation Matrix", *matrix.split()], env)
-            else:
-                LOGGER.warning("Touchgerät %s wurde nicht eindeutig gefunden", touch_device)
 
+def _apply_touch_matrix(env: dict[str, str], touch_device: str, matrix: str) -> None:
+    if not matrix:
+        return
+    if not touch_device:
+        LOGGER.warning("Touchmatrix ist gesetzt, aber touch_device fehlt; keine Eingabeänderung angewendet")
+        return
+    if not shutil.which("xinput"):
+        return
+    result = _run_checked(["xinput", "list", "--name-only"], env)
+    names = result.stdout.splitlines() if result and not result.returncode else []
+    exact = [name for name in names if name.strip() == touch_device]
+    if len(exact) == 1:
+        _run_checked(["xinput", "set-prop", touch_device, "Coordinate Transformation Matrix", *matrix.split()], env)
+    else:
+        LOGGER.warning("Touchgerät %s wurde nicht eindeutig gefunden", touch_device)
+
+
+def _disable_screensaver(env: dict[str, str]) -> None:
+    for command in (["xset", "s", "off"], ["xset", "-dpms"], ["xset", "s", "noblank"]):
+        _run_checked(command, env)
+
+
+def prepare_display(config: dict[str, Any]) -> dict[str, str]:
+    env = os.environ.copy()
+    screen = config.get("screen", {})
+    if os.name == "nt" or session_type(env) != "x11":
+        if screen.get("rotation") not in {"", "none", "normal"}:
+            LOGGER.warning("Displayrotation wird außerhalb von X11 nicht automatisch angewendet")
+        return env
+
+    profile = str(screen.get("hardware_profile", "generic"))
+    if profile == "generic":
+        return env
+    rotation = PROFILE_ROTATIONS.get(profile, str(screen.get("rotation", "none")))
+    _apply_rotation(env, profile, str(screen.get("output", "auto")), rotation)
+    _apply_touch_matrix(env, str(screen.get("touch_device", "")).strip(), str(screen.get("touch_matrix", "")).strip())
     if config.get("kiosk", {}).get("disable_screensaver", True):
-        for command in (["xset", "s", "off"], ["xset", "-dpms"], ["xset", "s", "noblank"]):
-            _run_checked(command, env)
+        _disable_screensaver(env)
     return env
 
 

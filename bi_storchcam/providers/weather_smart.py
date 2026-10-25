@@ -9,12 +9,11 @@ import re
 import threading
 import time
 import urllib.parse
-import urllib.request
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from ..version import __version__
+from .http_json import USER_AGENT, fetch_json_object
 
 LOGGER = logging.getLogger(__name__)
 CODES = {
@@ -28,15 +27,8 @@ _cache_lock = threading.Lock()
 
 
 def _fetch_json(url: str, timeout: int = 12) -> dict[str, Any]:
-    request = urllib.request.Request(
-        url,
-        headers={"User-Agent": f"BI-StorchCam/{__version__}", "Accept": "application/json"},
-    )
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        result = json.loads(response.read().decode("utf-8", "replace"))
-    if not isinstance(result, dict):
-        raise ValueError("Open-Meteo lieferte kein JSON-Objekt")
-    return result
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+    return fetch_json_object(url, "Open-Meteo", headers=headers, timeout=timeout)
 
 
 def _clean_label(value: Any) -> str:
@@ -94,9 +86,17 @@ def is_rainy(item: dict[str, Any], cfg: dict[str, Any]) -> bool:
     return bool(item["rain_mm"] >= mm_threshold or item["probability"] >= probability_threshold)
 
 
+def _weather_code(current: dict[str, Any]) -> int:
+    return int(current.get("weather_code", 0) or 0)
+
+
+def _condition(current: dict[str, Any]) -> str:
+    return CODES.get(_weather_code(current), "aktuell")
+
+
 def _summary(label: str, current: dict[str, Any], forecast: list[dict[str, Any]], cfg: dict[str, Any]) -> str:
     temperature = round(float(current.get("temperature_2m", 0)))
-    condition = CODES.get(int(current.get("weather_code", 0) or 0), "aktuell")
+    condition = _condition(current)
     prefix = f"{_clean_label(label)} · {condition} · {temperature} °C"
     rainy = next((item for item in forecast if is_rainy(item, cfg)), None)
     if rainy:
@@ -108,6 +108,7 @@ def get_weather(config: dict[str, Any], *, force: bool = False, now: datetime | 
     weather = config.get("weather", {})
     location = config.get("location", {})
     timezone_name = str(config.get("app", {}).get("timezone", "Europe/Berlin"))
+    label = _clean_label(location.get("label"))
     key = cache_key(config)
     refresh = int(weather.get("refresh_seconds", 300))
     monotonic_now = time.monotonic()
@@ -138,10 +139,10 @@ def get_weather(config: dict[str, Any], *, force: bool = False, now: datetime | 
         result = {
             "ok": True,
             "provider": "openmeteo",
-            "label": _clean_label(location.get("label")),
+            "label": label,
             "text": _summary(str(location.get("label", "Bielefeld")), current_data, forecast, weather),
-            "condition": CODES.get(int(current_data.get("weather_code", 0) or 0), "aktuell"),
-            "code": int(current_data.get("weather_code", 0) or 0),
+            "condition": _condition(current_data),
+            "code": _weather_code(current_data),
             "temp": round(float(current_data.get("temperature_2m", 0))),
             "feels": round(float(current_data.get("apparent_temperature", 0))),
             "wind": round(float(current_data.get("wind_speed_10m", 0))),
@@ -165,8 +166,8 @@ def get_weather(config: dict[str, Any], *, force: bool = False, now: datetime | 
         return {
             "ok": False,
             "provider": "openmeteo",
-            "label": _clean_label(location.get("label")),
-            "text": f"{_clean_label(location.get('label'))} · Wetter offline",
+            "label": label,
+            "text": f"{label} · Wetter offline",
             "error": str(exc)[:160],
             "stale": False,
         }

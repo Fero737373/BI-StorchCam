@@ -24,6 +24,13 @@ from .state import StateManager
 from .version import DISPLAY_VERSION, __version__
 
 LOGGER = logging.getLogger(__name__)
+EXIT_OK = 0
+EXIT_CONFIG_ERROR = 2
+EXIT_PORT_UNAVAILABLE = 3
+EXIT_NOT_READY = 4
+EXIT_SERVER_FAILED = 5
+PORT_IN_USE_ERRNOS = {48, 98, 10048}  # EADDRINUSE auf macOS, Linux und Windows
+SUPERVISOR_INTERVAL_SECONDS = 0.5
 
 
 def parser() -> argparse.ArgumentParser:
@@ -65,10 +72,15 @@ def setup_interactive(config: dict[str, Any], path: Path) -> None:
     print(f"Konfiguration gespeichert: {path}")
 
 
-def _readiness_url(config: dict[str, Any]) -> str:
+def _base_url(config: dict[str, Any]) -> str:
+    """Adresse, unter der der eigene Server lokal erreichbar ist (Wildcard-Bindungen über 127.0.0.1)."""
     host = str(config["server"]["host"])
     request_host = "127.0.0.1" if host in {"0.0.0.0", "::", "::1", "localhost"} else host
-    return f"http://{request_host}:{int(config['server']['port'])}/api/health"
+    return f"http://{request_host}:{int(config['server']['port'])}/"
+
+
+def _readiness_url(config: dict[str, Any]) -> str:
+    return _base_url(config) + "api/health"
 
 
 def wait_for_health(config: dict[str, Any], timeout: float = 45) -> bool:
@@ -96,35 +108,80 @@ def _server_thread(server: StorchServer, errors: list[BaseException]) -> None:
 def _diagnostic_command(args: argparse.Namespace, config: dict[str, Any], path: Path) -> int | None:
     if args.test_config:
         _print_json({"version": __version__, "display_version": DISPLAY_VERSION, "path": str(path), "config": public_config(config)})
-        return 0
+        return EXIT_OK
     if args.test_weather:
         _print_json(get_weather(config, force=True))
-        return 0
+        return EXIT_OK
     if args.test_transit:
         _print_json(get_boards(config, force=True))
-        return 0
+        return EXIT_OK
     if args.station_search:
         _print_json(search_station(args.station_search))
-        return 0
+        return EXIT_OK
     return None
+
+
+def _load_initial_config(path: Path) -> dict[str, Any]:
+    config = load_config()
+    if not path.exists():
+        save_config(config, path)
+    return config
+
+
+def _shutdown_server(server: StorchServer, state: StateManager) -> None:
+    server.shutdown()
+    server.server_close()
+    state.stop()
+
+
+def _start_browser(args: argparse.Namespace, config: dict[str, Any], url: str) -> BrowserManager | None:
+    if args.no_browser or not config.get("kiosk", {}).get("enabled", True):
+        return None
+    browser = BrowserManager(config, url)
+    browser.start()
+    return browser
+
+
+def _install_stop_signals() -> threading.Event:
+    stop_requested = threading.Event()
+
+    def request_stop(_signum: int, _frame: Any) -> None:
+        stop_requested.set()
+
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGTERM, request_stop)
+        signal.signal(signal.SIGINT, request_stop)
+    return stop_requested
+
+
+def _supervise(
+    server: StorchServer,
+    thread: threading.Thread,
+    errors: list[BaseException],
+    browser: BrowserManager | None,
+    stop_requested: threading.Event,
+) -> None:
+    while thread.is_alive() and not errors and not stop_requested.is_set():
+        if browser:
+            browser.config = server.context.get_config()
+            browser.tick()
+        time.sleep(SUPERVISOR_INTERVAL_SECONDS)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
     path = config_path()
     try:
-        config = load_config()
-        if not path.exists():
-            save_config(config, path)
+        config = _load_initial_config(path)
     except ConfigError as exc:
         print(f"FEHLER: {exc}")
-        return 2
+        return EXIT_CONFIG_ERROR
 
     configure_logging(config)
     LOGGER.info("Starte BI-StorchCam %s", DISPLAY_VERSION)
     if args.setup:
         setup_interactive(config, path)
-        return 0
+        return EXIT_OK
     diagnostic = _diagnostic_command(args, config, path)
     if diagnostic is not None:
         return diagnostic
@@ -135,56 +192,37 @@ def main(argv: Sequence[str] | None = None) -> int:
         server = create_server(config, state)
     except OSError as exc:
         state.stop()
-        message = "Port ist bereits belegt" if exc.errno in {48, 98, 10048} else str(exc)
+        message = "Port ist bereits belegt" if exc.errno in PORT_IN_USE_ERRNOS else str(exc)
         LOGGER.error("Serverstart fehlgeschlagen auf %s:%s: %s", config["server"]["host"], config["server"]["port"], message)
-        return 3
+        return EXIT_PORT_UNAVAILABLE
 
     errors: list[BaseException] = []
     thread = threading.Thread(target=_server_thread, args=(server, errors), name="storchcam-http", daemon=True)
     thread.start()
     if not wait_for_health(config):
         LOGGER.error("Server/State wurde nicht innerhalb des Readiness-Zeitfensters bereit")
-        server.shutdown()
-        server.server_close()
-        state.stop()
-        return 4
+        _shutdown_server(server, state)
+        return EXIT_NOT_READY
 
-    host = "127.0.0.1" if config["server"]["host"] in {"0.0.0.0", "::", "::1", "localhost"} else config["server"]["host"]
-    url = f"http://{host}:{config['server']['port']}/"
+    url = _base_url(config)
     LOGGER.info("Server bereit: %s", url)
     LOGGER.info("Konfiguration: %s", path)
 
-    browser: BrowserManager | None = None
-    if not args.no_browser and config.get("kiosk", {}).get("enabled", True):
-        browser = BrowserManager(config, url)
-        browser.start()
-    stop_requested = threading.Event()
-
-    def request_stop(_signum: int, _frame: Any) -> None:
-        stop_requested.set()
-
-    if threading.current_thread() is threading.main_thread():
-        signal.signal(signal.SIGTERM, request_stop)
-        signal.signal(signal.SIGINT, request_stop)
+    browser = _start_browser(args, config, url)
+    stop_requested = _install_stop_signals()
     try:
-        while thread.is_alive() and not errors and not stop_requested.is_set():
-            if browser:
-                browser.config = server.context.get_config()
-                browser.tick()
-            time.sleep(0.5)
+        _supervise(server, thread, errors, browser, stop_requested)
     except KeyboardInterrupt:
         LOGGER.info("Beenden angefordert")
     finally:
         if browser:
             browser.stop()
-        server.shutdown()
-        server.server_close()
-        state.stop()
+        _shutdown_server(server, state)
         thread.join(timeout=5)
     if errors:
         LOGGER.error("Serverfehler wurde an den Hauptprozess weitergegeben: %s", errors[0])
-        return 5
-    return 0
+        return EXIT_SERVER_FAILED
+    return EXIT_OK
 
 
 if __name__ == "__main__":

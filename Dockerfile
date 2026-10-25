@@ -11,18 +11,26 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     BI_STORCHCAM_CONFIG=/data/config.json
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends chromium libegl1 libgles2 libgl1-mesa-dri fonts-dejavu-core ca-certificates \
+    && apt-get install -y --no-install-recommends \
+        chromium \
+        libegl1 \
+        libgles2 \
+        libgl1-mesa-dri \
+        fonts-dejavu-core \
+        ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /etc/chromium/policies/managed \
     && echo '{"TranslateEnabled": false}' > /etc/chromium/policies/managed/kiosk.json
 
-WORKDIR /app
-COPY pyproject.toml README.md LICENSE ./
-COPY bi_storchcam ./bi_storchcam
-COPY --chmod=644 docker-entrypoint.py ./
-RUN pip install . tzdata \
-    && rm -rf /app/bi_storchcam /app/build \
+# Aus einem temporären Quellordner installieren, damit im Image keine Build-Reste zurückbleiben.
+COPY pyproject.toml README.md LICENSE /tmp/src/
+COPY bi_storchcam /tmp/src/bi_storchcam
+RUN pip install /tmp/src tzdata \
+    && rm -rf /tmp/src \
     && mkdir -p /data && chown 1000:1000 /data
+
+WORKDIR /app
+COPY --chmod=644 docker-entrypoint.py ./
 
 USER 1000:1000
 VOLUME ["/data"]

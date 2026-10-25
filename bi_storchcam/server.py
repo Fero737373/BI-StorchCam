@@ -9,6 +9,7 @@ import logging
 import mimetypes
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -28,9 +29,17 @@ LOGGER = logging.getLogger(__name__)
 # Python 3.10/3.11 kennen woff2 nicht; ohne Typ würde nosniff die Schrift blockieren.
 mimetypes.add_type("font/woff2", ".woff2")
 
+QueryParams = dict[str, list[str]]
+GetRoute = Callable[[QueryParams], Any]
+PostRoute = Callable[[dict[str, Any]], Any]
+
 
 def web_directory() -> Path:
     return Path(__file__).resolve().parent / "web"
+
+
+def _query_value(params: QueryParams, name: str) -> str:
+    return params.get(name, [""])[0]
 
 
 @dataclass
@@ -101,16 +110,19 @@ class StorchHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Security-Policy", policy)
         self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 
-    def _json(self, value: Any, status: int = 200, *, head_only: bool = False) -> None:
-        raw = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    def _send_body(self, data: bytes, content_type: str, status: int, *, head_only: bool) -> None:
         self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Type", content_type)
         self.send_header("Cache-Control", "no-store")
         self._security_headers()
-        self.send_header("Content-Length", str(len(raw)))
+        self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         if not head_only:
-            self.wfile.write(raw)
+            self.wfile.write(data)
+
+    def _json(self, value: Any, status: int = 200, *, head_only: bool = False) -> None:
+        raw = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        self._send_body(raw, "application/json; charset=utf-8", status, head_only=head_only)
 
     def _error(self, status: int, message: str) -> None:
         self._json({"ok": False, "error": message}, status)
@@ -159,154 +171,179 @@ class StorchHandler(BaseHTTPRequestHandler):
         if not self._authenticated():
             raise RequestError(HTTPStatus.UNAUTHORIZED, "Admin-Anmeldung erforderlich")
 
+    def _new_session(self) -> dict[str, Any]:
+        token, expires = self.context.sessions.create()
+        return {"ok": True, "token": token, "expires_in": expires}
+
     def do_HEAD(self) -> None:  # noqa: N802
         self._dispatch(head_only=True)
 
     def do_GET(self) -> None:  # noqa: N802
         self._dispatch(head_only=False)
 
+    def _get_routes(self) -> dict[str, GetRoute]:
+        return {
+            "/api/health": self._get_health,
+            "/api/state": self._get_state,
+            "/api/admin/status": self._get_admin_status,
+            "/api/config": self._get_config,
+            "/api/station/search": self._get_station_search,
+            "/api/live/search": self._get_live_search,
+            "/api/location/search": self._get_location_search,
+            "/api/location/timezone": self._get_location_timezone,
+        }
+
     def _dispatch(self, *, head_only: bool) -> None:
         try:
             parsed = urlparse(self.path)
-            path = parsed.path
-            if path == "/api/health":
-                self._json({
-                    "ok": True,
-                    "version": __version__,
-                    "uptime_seconds": int(time.monotonic() - self.context.started_at),
-                    "state_ready": self.context.state.ready,
-                }, head_only=head_only)
+            route = self._get_routes().get(parsed.path)
+            if route is None:
+                self._serve_static(parsed.path, head_only=head_only)
                 return
-            if path == "/api/state":
-                self._json(self.context.state.snapshot(), head_only=head_only)
-                return
-            if path == "/api/admin/status":
-                self._json({
-                    "ok": True,
-                    "pin_required": self._pin_required(),
-                    "pin_configured": self._requires_auth(),
-                    "authenticated": self._authenticated(),
-                }, head_only=head_only)
-                return
-            if path == "/api/config":
-                if self._requires_auth():
-                    self._guard_admin()
-                elif not self._loopback_client():
-                    raise RequestError(HTTPStatus.FORBIDDEN, "Erstsetup ist nur lokal erlaubt")
-                self._json({
-                    "path": str(config_path()),
-                    "config": public_config(self._config()),
-                    "youtube_key_set": bool(youtube_api_key(self._config())),
-                }, head_only=head_only)
-                return
-            if path == "/api/station/search":
-                self._guard_admin()
-                query = parse_qs(parsed.query).get("q", [""])[0]
-                self._json({"query": query, "results": search_station(query)}, head_only=head_only)
-                return
-            if path == "/api/live/search":
-                self._guard_admin()
-                query = parse_qs(parsed.query).get("q", [""])[0]
-                try:
-                    results = search_live(query, youtube_api_key(self._config()))
-                except YouTubeError as exc:
-                    raise RequestError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
-                self._json({"query": query, "results": results}, head_only=head_only)
-                return
-            if path == "/api/location/search":
-                self._guard_admin()
-                query = parse_qs(parsed.query).get("q", [""])[0]
-                try:
-                    results = search_places(query)
-                except Exception as exc:
-                    LOGGER.warning("Ortssuche fehlgeschlagen: %s", exc)
-                    raise RequestError(HTTPStatus.BAD_GATEWAY, "Ortssuche ist gerade nicht erreichbar") from exc
-                self._json({"query": query, "results": results}, head_only=head_only)
-                return
-            if path == "/api/location/timezone":
-                self._guard_admin()
-                params = parse_qs(parsed.query)
-                try:
-                    latitude = float(params.get("lat", [""])[0])
-                    longitude = float(params.get("lon", [""])[0])
-                except ValueError as exc:
-                    raise RequestError(HTTPStatus.BAD_REQUEST, "lat und lon müssen Zahlen sein") from exc
-                try:
-                    timezone = timezone_for(latitude, longitude)
-                except Exception as exc:
-                    LOGGER.warning("Zeitzonenabfrage fehlgeschlagen: %s", exc)
-                    raise RequestError(HTTPStatus.BAD_GATEWAY, "Zeitzone konnte nicht ermittelt werden") from exc
-                self._json({"timezone": timezone}, head_only=head_only)
-                return
-            self._serve_static(path, head_only=head_only)
+            self._json(route(parse_qs(parsed.query)), head_only=head_only)
         except RequestError as exc:
             self._error(exc.status, str(exc))
         except Exception:
             LOGGER.exception("Unbehandelter GET-Fehler für %s", self.path)
             self._error(HTTPStatus.INTERNAL_SERVER_ERROR, "Interner Serverfehler")
 
+    def _get_health(self, _params: QueryParams) -> dict[str, Any]:
+        return {
+            "ok": True,
+            "version": __version__,
+            "uptime_seconds": int(time.monotonic() - self.context.started_at),
+            "state_ready": self.context.state.ready,
+        }
+
+    def _get_state(self, _params: QueryParams) -> dict[str, Any]:
+        return self.context.state.snapshot()
+
+    def _get_admin_status(self, _params: QueryParams) -> dict[str, Any]:
+        return {
+            "ok": True,
+            "pin_required": self._pin_required(),
+            "pin_configured": self._requires_auth(),
+            "authenticated": self._authenticated(),
+        }
+
+    def _get_config(self, _params: QueryParams) -> dict[str, Any]:
+        if self._requires_auth():
+            self._guard_admin()
+        elif not self._loopback_client():
+            raise RequestError(HTTPStatus.FORBIDDEN, "Erstsetup ist nur lokal erlaubt")
+        return {
+            "path": str(config_path()),
+            "config": public_config(self._config()),
+            "youtube_key_set": bool(youtube_api_key(self._config())),
+        }
+
+    def _get_station_search(self, params: QueryParams) -> dict[str, Any]:
+        self._guard_admin()
+        query = _query_value(params, "q")
+        return {"query": query, "results": search_station(query)}
+
+    def _get_live_search(self, params: QueryParams) -> dict[str, Any]:
+        self._guard_admin()
+        query = _query_value(params, "q")
+        try:
+            results = search_live(query, youtube_api_key(self._config()))
+        except YouTubeError as exc:
+            raise RequestError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
+        return {"query": query, "results": results}
+
+    def _get_location_search(self, params: QueryParams) -> dict[str, Any]:
+        self._guard_admin()
+        query = _query_value(params, "q")
+        try:
+            results = search_places(query)
+        except Exception as exc:
+            LOGGER.warning("Ortssuche fehlgeschlagen: %s", exc)
+            raise RequestError(HTTPStatus.BAD_GATEWAY, "Ortssuche ist gerade nicht erreichbar") from exc
+        return {"query": query, "results": results}
+
+    def _get_location_timezone(self, params: QueryParams) -> dict[str, Any]:
+        self._guard_admin()
+        try:
+            latitude = float(_query_value(params, "lat"))
+            longitude = float(_query_value(params, "lon"))
+        except ValueError as exc:
+            raise RequestError(HTTPStatus.BAD_REQUEST, "lat und lon müssen Zahlen sein") from exc
+        try:
+            timezone = timezone_for(latitude, longitude)
+        except Exception as exc:
+            LOGGER.warning("Zeitzonenabfrage fehlgeschlagen: %s", exc)
+            raise RequestError(HTTPStatus.BAD_GATEWAY, "Zeitzone konnte nicht ermittelt werden") from exc
+        return {"timezone": timezone}
+
+    def _post_routes(self) -> dict[str, PostRoute]:
+        return {
+            "/api/admin/setup": self._post_admin_setup,
+            "/api/admin/login": self._post_admin_login,
+            "/api/admin/logout": self._post_admin_logout,
+            "/api/config/save": self._post_config_save,
+        }
+
     def do_POST(self) -> None:  # noqa: N802
         try:
             body = self._read_json()
-            path = urlparse(self.path).path
-            if path == "/api/admin/setup":
-                if self._requires_auth():
-                    raise RequestError(HTTPStatus.FORBIDDEN, "Admin-PIN ist bereits eingerichtet")
-                if not self._loopback_client():
-                    raise RequestError(HTTPStatus.FORBIDDEN, "Erstsetup ist nur lokal erlaubt")
-                pin = str(body.get("pin", ""))
-                try:
-                    encoded = hash_pin(pin)
-                except ValueError as exc:
-                    raise RequestError(HTTPStatus.BAD_REQUEST, str(exc)) from exc
-                config = self._config()
-                config.setdefault("admin", {})["pin_hash"] = encoded
-                saved = validate_config(config)
-                save_config(saved)
-                self.context.replace_config(saved)
-                token, expires = self.context.sessions.create()
-                self._json({"ok": True, "token": token, "expires_in": expires})
-                return
-            if path == "/api/admin/login":
-                encoded = str(self._config().get("admin", {}).get("pin_hash", ""))
-                if not encoded:
-                    raise RequestError(HTTPStatus.CONFLICT, "Admin-PIN wurde noch nicht eingerichtet")
-                if not verify_pin(str(body.get("pin", "")), encoded):
-                    raise RequestError(HTTPStatus.UNAUTHORIZED, "PIN ist falsch")
-                token, expires = self.context.sessions.create()
-                self._json({"ok": True, "token": token, "expires_in": expires})
-                return
-            if path == "/api/admin/logout":
-                self._guard_admin()
-                self.context.sessions.revoke(self._token())
-                self._json({"ok": True})
-                return
-            if path == "/api/config/save":
-                self._guard_admin()
-                candidate = body.get("config")
-                if not isinstance(candidate, dict):
-                    raise RequestError(HTTPStatus.BAD_REQUEST, "config fehlt")
-                current = self._config()
-                candidate.setdefault("admin", {})["pin_hash"] = current.get("admin", {}).get("pin_hash", "")
-                candidate["admin"]["require_pin"] = current.get("admin", {}).get("require_pin", True)
-                # Der Schlüssel wird nie an die Oberfläche geschickt; leer heißt „unverändert lassen“.
-                youtube = candidate.setdefault("youtube", {})
-                if not str(youtube.get("api_key", "")).strip():
-                    youtube["api_key"] = current.get("youtube", {}).get("api_key", "")
-                try:
-                    validated = validate_config(candidate)
-                    save_config(validated)
-                except ConfigError as exc:
-                    raise RequestError(HTTPStatus.BAD_REQUEST, str(exc)) from exc
-                self.context.replace_config(validated)
-                self._json({"ok": True, "path": str(config_path()), "config": public_config(validated)})
-                return
-            raise RequestError(HTTPStatus.NOT_FOUND, "Unbekannter Endpunkt")
+            route = self._post_routes().get(urlparse(self.path).path)
+            if route is None:
+                raise RequestError(HTTPStatus.NOT_FOUND, "Unbekannter Endpunkt")
+            self._json(route(body))
         except RequestError as exc:
             self._error(exc.status, str(exc))
         except Exception:
             LOGGER.exception("Unbehandelter POST-Fehler für %s", self.path)
             self._error(HTTPStatus.INTERNAL_SERVER_ERROR, "Interner Serverfehler")
+
+    def _post_admin_setup(self, body: dict[str, Any]) -> dict[str, Any]:
+        if self._requires_auth():
+            raise RequestError(HTTPStatus.FORBIDDEN, "Admin-PIN ist bereits eingerichtet")
+        if not self._loopback_client():
+            raise RequestError(HTTPStatus.FORBIDDEN, "Erstsetup ist nur lokal erlaubt")
+        try:
+            encoded = hash_pin(str(body.get("pin", "")))
+        except ValueError as exc:
+            raise RequestError(HTTPStatus.BAD_REQUEST, str(exc)) from exc
+        config = self._config()
+        config.setdefault("admin", {})["pin_hash"] = encoded
+        saved = validate_config(config)
+        save_config(saved)
+        self.context.replace_config(saved)
+        return self._new_session()
+
+    def _post_admin_login(self, body: dict[str, Any]) -> dict[str, Any]:
+        encoded = str(self._config().get("admin", {}).get("pin_hash", ""))
+        if not encoded:
+            raise RequestError(HTTPStatus.CONFLICT, "Admin-PIN wurde noch nicht eingerichtet")
+        if not verify_pin(str(body.get("pin", "")), encoded):
+            raise RequestError(HTTPStatus.UNAUTHORIZED, "PIN ist falsch")
+        return self._new_session()
+
+    def _post_admin_logout(self, _body: dict[str, Any]) -> dict[str, Any]:
+        self._guard_admin()
+        self.context.sessions.revoke(self._token())
+        return {"ok": True}
+
+    def _post_config_save(self, body: dict[str, Any]) -> dict[str, Any]:
+        self._guard_admin()
+        candidate = body.get("config")
+        if not isinstance(candidate, dict):
+            raise RequestError(HTTPStatus.BAD_REQUEST, "config fehlt")
+        current = self._config()
+        candidate.setdefault("admin", {})["pin_hash"] = current.get("admin", {}).get("pin_hash", "")
+        candidate["admin"]["require_pin"] = current.get("admin", {}).get("require_pin", True)
+        # Der Schlüssel wird nie an die Oberfläche geschickt; leer heißt „unverändert lassen“.
+        youtube = candidate.setdefault("youtube", {})
+        if not str(youtube.get("api_key", "")).strip():
+            youtube["api_key"] = current.get("youtube", {}).get("api_key", "")
+        try:
+            validated = validate_config(candidate)
+            save_config(validated)
+        except ConfigError as exc:
+            raise RequestError(HTTPStatus.BAD_REQUEST, str(exc)) from exc
+        self.context.replace_config(validated)
+        return {"ok": True, "path": str(config_path()), "config": public_config(validated)}
 
     def _serve_static(self, path: str, *, head_only: bool) -> None:
         if path in {"", "/"}:
@@ -317,18 +354,10 @@ class StorchHandler(BaseHTTPRequestHandler):
         target = web_directory() / relative
         if not target.is_file():
             raise RequestError(HTTPStatus.NOT_FOUND, "Datei nicht gefunden")
-        data = target.read_bytes()
         content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
         if target.suffix in {".html", ".css", ".js"}:
             content_type += "; charset=utf-8"
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Cache-Control", "no-store")
-        self._security_headers()
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        if not head_only:
-            self.wfile.write(data)
+        self._send_body(target.read_bytes(), content_type, HTTPStatus.OK, head_only=head_only)
 
     def log_message(self, fmt: str, *args: Any) -> None:
         LOGGER.debug("%s - %s", self.client_address[0], fmt % args)

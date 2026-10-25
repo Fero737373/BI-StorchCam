@@ -19,7 +19,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-from ..version import __version__
+from .http_json import USER_AGENT, fetch_json_object
 
 LOGGER = logging.getLogger(__name__)
 SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
@@ -42,12 +42,8 @@ class YouTubeError(RuntimeError):
 
 
 def _fetch_json(url: str, timeout: int = 12) -> dict[str, Any]:
-    request = urllib.request.Request(url, headers={"User-Agent": f"BI-StorchCam/{__version__}", "Accept": "application/json"})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        result = json.loads(response.read().decode("utf-8", "replace"))
-    if not isinstance(result, dict):
-        raise ValueError("YouTube lieferte kein JSON-Objekt")
-    return result
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+    return fetch_json_object(url, "YouTube", headers=headers, timeout=timeout)
 
 
 def _api_error(exc: urllib.error.HTTPError) -> YouTubeError:

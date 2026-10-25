@@ -20,6 +20,16 @@ from .defaults import CONFIG_SCHEMA_VERSION, DEFAULT_CONFIG
 
 LOGGER = logging.getLogger(__name__)
 
+THEMES = {"dark", "light", "high-contrast"}
+LAYOUT_PROFILES = {"auto", "minimal", "standard", "information"}
+UI_BLOCKS = ("clock", "weather", "transit", "system")
+LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+BROWSER_KINDS = {"auto", "chromium", "chrome", "edge"}
+HARDWARE_PROFILES = {"generic", "raspberry_pi_dsi_portrait", "raspberry_pi_dsi_landscape", "custom"}
+ROTATIONS = {"none", "normal", "left", "right", "inverted"}
+LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR"}
+MAX_TRANSIT_STOPS = 20
+
 
 class ConfigError(ValueError):
     """Raised when a configuration cannot safely be used."""
@@ -38,9 +48,6 @@ def platform_app_dir(os_name: str | None = None) -> Path:
 def default_config_path() -> Path:
     override = os.environ.get("BI_STORCHCAM_CONFIG")
     return Path(os.path.expanduser(override)) if override else platform_app_dir() / "config.json"
-
-
-CONFIG_PATH = default_config_path()
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -92,6 +99,12 @@ def _string(value: Any, name: str, maximum: int = 512) -> str:
     return value
 
 
+def _string_list(value: Any, error: str) -> list[str]:
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ConfigError(error)
+    return value
+
+
 def _only(section: dict[str, Any], allowed: set[str], name: str) -> None:
     unknown = sorted(set(section) - allowed)
     if unknown:
@@ -135,22 +148,33 @@ def _validate_stream_url(value: str) -> str:
     return youtube_embed_url(value)
 
 
+def _validate_browser(browser: str) -> str:
+    if browser.lower() in BROWSER_KINDS:
+        return browser
+    browser_path = Path(os.path.expanduser(browser))
+    if not browser_path.is_absolute():
+        raise ConfigError("kiosk.browser muss auto, chromium, chrome, edge oder ein absoluter Pfad sein")
+    browser_name = browser_path.name.lower()
+    if not any(name in browser_name for name in ("chromium", "chrome", "msedge", "edge")):
+        raise ConfigError("Der absolute Browserpfad muss Chromium, Chrome oder Edge referenzieren")
+    return browser
+
+
 def _validate_stop(raw: Any, index: int, default_max: int) -> dict[str, Any]:
+    name = f"transit.stops[{index}]"
     if not isinstance(raw, dict):
-        raise ConfigError(f"transit.stops[{index}] muss ein Objekt sein")
+        raise ConfigError(f"{name} muss ein Objekt sein")
     allowed = {
         "title", "station_name", "station_id", "line_filter", "nightbus_only", "hide_if_empty", "max_rows"
     }
-    _only(raw, allowed, f"transit.stops[{index}]")
-    filters = raw.get("line_filter", [])
-    if not isinstance(filters, list) or not all(isinstance(item, str) for item in filters):
-        raise ConfigError(f"transit.stops[{index}].line_filter muss eine Textliste sein")
-    station_id = _string(raw.get("station_id", ""), f"transit.stops[{index}].station_id", 80)
-    station_name = _string(raw.get("station_name", ""), f"transit.stops[{index}].station_name", 160)
+    _only(raw, allowed, name)
+    filters = _string_list(raw.get("line_filter", []), f"{name}.line_filter muss eine Textliste sein")
+    station_id = _string(raw.get("station_id", ""), f"{name}.station_id", 80)
+    station_name = _string(raw.get("station_name", ""), f"{name}.station_name", 160)
     if not station_id and not station_name:
-        raise ConfigError(f"transit.stops[{index}] benötigt Haltestellen-ID oder -Name")
+        raise ConfigError(f"{name} benötigt Haltestellen-ID oder -Name")
     return {
-        "title": _string(raw.get("title", station_name), f"transit.stops[{index}].title", 80),
+        "title": _string(raw.get("title", station_name), f"{name}.title", 80),
         "station_name": station_name,
         "station_id": station_id,
         "line_filter": [_string(item, "Linienfilter", 20) for item in filters if item.strip()],
@@ -191,14 +215,14 @@ def migrate_config(raw: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     ui = migrated.setdefault("ui", {})
     ui.pop("menu_enabled", None)
     ui.pop("radar", None)  # Radar wurde entfernt; der Abschnitt „radar“ fällt oben automatisch weg.
-    for name in ("clock", "weather", "transit", "system"):
+    for name in UI_BLOCKS:
         section = ui.get(name)
         if isinstance(section, dict):
             for obsolete in ("position", "size", "mode", "diagnostic_only", "refresh_seconds"):
                 section.pop(obsolete, None)
-    if ui.get("layout_profile") not in {"auto", "minimal", "standard", "information"}:
+    if ui.get("layout_profile") not in LAYOUT_PROFILES:
         ui["layout_profile"] = "auto"
-    if ui.get("theme") not in {"dark", "light", "high-contrast"}:
+    if ui.get("theme") not in THEMES:
         ui["theme"] = "dark"
 
     transit = migrated.setdefault("transit", {})
@@ -212,13 +236,7 @@ def migrate_config(raw: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     return migrated, migrated != raw
 
 
-def validate_config(raw: dict[str, Any]) -> dict[str, Any]:
-    if not isinstance(raw, dict):
-        raise ConfigError("Die Konfiguration muss ein JSON-Objekt sein")
-    _only(raw, set(DEFAULT_CONFIG), "Konfiguration")
-    cfg = deep_merge(DEFAULT_CONFIG, raw)
-
-    app = cfg["app"]
+def _validate_app(app: dict[str, Any]) -> None:
     _only(app, {"name", "language", "timezone", "cache_dir", "config_schema_version"}, "app")
     timezone = _string(app["timezone"], "app.timezone", 80)
     try:
@@ -233,7 +251,8 @@ def validate_config(raw: dict[str, Any]) -> dict[str, Any]:
         "config_schema_version": CONFIG_SCHEMA_VERSION,
     })
 
-    server = cfg["server"]
+
+def _validate_server(server: dict[str, Any]) -> None:
     _only(server, {"host", "port", "max_request_bytes", "admin_session_minutes"}, "server")
     server.update({
         "host": _validate_host(_string(server["host"], "server.host", 80)),
@@ -242,23 +261,15 @@ def validate_config(raw: dict[str, Any]) -> dict[str, Any]:
         "admin_session_minutes": _bounded_int(server["admin_session_minutes"], "server.admin_session_minutes", 5, 240),
     })
 
-    kiosk = cfg["kiosk"]
+
+def _validate_kiosk(kiosk: dict[str, Any]) -> None:
     _only(kiosk, {
         "enabled", "browser", "profile_dir", "disable_screensaver", "use_gpu", "browser_restart_seconds",
         "browser_restart_max_seconds", "browser_stable_seconds", "browser_max_failures", "log_file",
         "log_max_bytes", "log_backups", "extra_flags",
     }, "kiosk")
-    browser = _string(kiosk["browser"], "kiosk.browser", 512)
-    if browser.lower() not in {"auto", "chromium", "chrome", "edge"}:
-        browser_path = Path(os.path.expanduser(browser))
-        if not browser_path.is_absolute():
-            raise ConfigError("kiosk.browser muss auto, chromium, chrome, edge oder ein absoluter Pfad sein")
-        browser_name = browser_path.name.lower()
-        if not any(name in browser_name for name in ("chromium", "chrome", "msedge", "edge")):
-            raise ConfigError("Der absolute Browserpfad muss Chromium, Chrome oder Edge referenzieren")
-    extra_flags = kiosk["extra_flags"]
-    if not isinstance(extra_flags, list) or not all(isinstance(item, str) for item in extra_flags):
-        raise ConfigError("kiosk.extra_flags muss eine Textliste sein")
+    browser = _validate_browser(_string(kiosk["browser"], "kiosk.browser", 512))
+    extra_flags = _string_list(kiosk["extra_flags"], "kiosk.extra_flags muss eine Textliste sein")
     kiosk.update({
         "enabled": _bool(kiosk["enabled"], "kiosk.enabled"),
         "browser": browser,
@@ -275,13 +286,14 @@ def validate_config(raw: dict[str, Any]) -> dict[str, Any]:
         "extra_flags": [_string(item, "Browserflag", 200) for item in extra_flags],
     })
 
-    screen = cfg["screen"]
+
+def _validate_screen(screen: dict[str, Any]) -> None:
     _only(screen, {"hardware_profile", "output", "rotation", "touch_device", "touch_matrix"}, "screen")
     profile = _string(screen["hardware_profile"], "screen.hardware_profile", 80)
-    if profile not in {"generic", "raspberry_pi_dsi_portrait", "raspberry_pi_dsi_landscape", "custom"}:
+    if profile not in HARDWARE_PROFILES:
         raise ConfigError("Ungültiges screen.hardware_profile")
     rotation = _string(screen["rotation"], "screen.rotation", 20)
-    if rotation not in {"none", "normal", "left", "right", "inverted"}:
+    if rotation not in ROTATIONS:
         raise ConfigError("Ungültige screen.rotation")
     screen.update({
         "hardware_profile": profile,
@@ -291,7 +303,8 @@ def validate_config(raw: dict[str, Any]) -> dict[str, Any]:
         "touch_matrix": _string(screen["touch_matrix"], "screen.touch_matrix", 200),
     })
 
-    location = cfg["location"]
+
+def _validate_location(location: dict[str, Any]) -> None:
     _only(location, {"label", "latitude", "longitude"}, "location")
     location.update({
         "label": _string(location["label"], "location.label", 120) or "Bielefeld",
@@ -299,7 +312,8 @@ def validate_config(raw: dict[str, Any]) -> dict[str, Any]:
         "longitude": _bounded_float(location["longitude"], "location.longitude", -180, 180),
     })
 
-    stream = cfg["stream"]
+
+def _validate_stream(stream: dict[str, Any]) -> None:
     _only(stream, {"url", "muted", "autoplay"}, "stream")
     stream.update({
         "url": _validate_stream_url(_string(stream["url"], "stream.url", 2048)),
@@ -307,14 +321,16 @@ def validate_config(raw: dict[str, Any]) -> dict[str, Any]:
         "autoplay": _bool(stream["autoplay"], "stream.autoplay"),
     })
 
-    admin = cfg["admin"]
+
+def _validate_admin(admin: dict[str, Any], server_host: str) -> None:
     _only(admin, {"pin_hash", "require_pin"}, "admin")
     admin["pin_hash"] = _string(admin["pin_hash"], "admin.pin_hash", 512)
     admin["require_pin"] = _bool(admin["require_pin"], "admin.require_pin")
-    if server["host"] not in {"127.0.0.1", "::1", "localhost"} and admin["require_pin"] and not admin["pin_hash"]:
+    if server_host not in LOOPBACK_HOSTS and admin["require_pin"] and not admin["pin_hash"]:
         raise ConfigError("Eine externe Bind-Adresse erfordert zuerst eine konfigurierte Admin-PIN")
 
-    youtube = cfg["youtube"]
+
+def _validate_youtube(youtube: dict[str, Any]) -> None:
     _only(youtube, {"api_key", "default_query"}, "youtube")
     api_key = _string(youtube["api_key"], "youtube.api_key", 200)
     if api_key and not re.fullmatch(r"[A-Za-z0-9_-]+", api_key):
@@ -324,21 +340,23 @@ def validate_config(raw: dict[str, Any]) -> dict[str, Any]:
         "default_query": _string(youtube["default_query"], "youtube.default_query", 100),
     })
 
-    ui = cfg["ui"]
-    _only(ui, {"theme", "layout_profile", "clock", "weather", "transit", "system"}, "ui")
+
+def _validate_ui(ui: dict[str, Any]) -> None:
+    _only(ui, {"theme", "layout_profile", *UI_BLOCKS}, "ui")
     theme = _string(ui["theme"], "ui.theme", 30)
     layout = _string(ui["layout_profile"], "ui.layout_profile", 30)
-    if theme not in {"dark", "light", "high-contrast"}:
+    if theme not in THEMES:
         raise ConfigError("Ungültiges ui.theme")
-    if layout not in {"auto", "minimal", "standard", "information"}:
+    if layout not in LAYOUT_PROFILES:
         raise ConfigError("Ungültiges ui.layout_profile")
     ui["theme"] = theme
     ui["layout_profile"] = layout
-    for name in ("clock", "weather", "transit", "system"):
+    for name in UI_BLOCKS:
         _only(ui[name], {"enabled"}, f"ui.{name}")
         ui[name]["enabled"] = _bool(ui[name]["enabled"], f"ui.{name}.enabled")
 
-    weather = cfg["weather"]
+
+def _validate_weather(weather: dict[str, Any]) -> None:
     _only(weather, {"provider", "refresh_seconds", "forecast_hours", "rain_mm_threshold", "rain_probability_threshold"}, "weather")
     if _string(weather["provider"], "weather.provider", 40) != "openmeteo":
         raise ConfigError("Derzeit wird nur der Wetterprovider openmeteo unterstützt")
@@ -350,14 +368,15 @@ def validate_config(raw: dict[str, Any]) -> dict[str, Any]:
         "rain_probability_threshold": _bounded_int(weather["rain_probability_threshold"], "rain_probability_threshold", 0, 100),
     })
 
-    transit = cfg["transit"]
+
+def _validate_transit(transit: dict[str, Any]) -> None:
     _only(transit, {"provider", "refresh_seconds", "default_max_rows", "target_len", "stops"}, "transit")
     if _string(transit["provider"], "transit.provider", 40) != "vrr":
         raise ConfigError("Derzeit wird nur der ÖPNV-Provider vrr unterstützt")
     default_max = _bounded_int(transit["default_max_rows"], "transit.default_max_rows", 1, 12)
     stops = transit["stops"]
-    if not isinstance(stops, list) or len(stops) > 20:
-        raise ConfigError("transit.stops muss eine Liste mit höchstens 20 Einträgen sein")
+    if not isinstance(stops, list) or len(stops) > MAX_TRANSIT_STOPS:
+        raise ConfigError(f"transit.stops muss eine Liste mit höchstens {MAX_TRANSIT_STOPS} Einträgen sein")
     transit.update({
         "provider": "vrr",
         "refresh_seconds": _bounded_int(transit["refresh_seconds"], "transit.refresh_seconds", 15, 3600),
@@ -366,47 +385,78 @@ def validate_config(raw: dict[str, Any]) -> dict[str, Any]:
         "stops": [_validate_stop(stop, index, default_max) for index, stop in enumerate(stops)],
     })
 
-    logging_cfg = cfg["logging"]
+
+def _validate_logging(logging_cfg: dict[str, Any]) -> None:
     _only(logging_cfg, {"level", "max_bytes", "backups"}, "logging")
     level = _string(logging_cfg["level"], "logging.level", 20).upper()
-    if level not in {"DEBUG", "INFO", "WARNING", "ERROR"}:
+    if level not in LOG_LEVELS:
         raise ConfigError("Ungültiges logging.level")
     logging_cfg.update({
         "level": level,
         "max_bytes": _bounded_int(logging_cfg["max_bytes"], "logging.max_bytes", 65536, 104857600),
         "backups": _bounded_int(logging_cfg["backups"], "logging.backups", 1, 20),
     })
+
+
+def validate_config(raw: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise ConfigError("Die Konfiguration muss ein JSON-Objekt sein")
+    _only(raw, set(DEFAULT_CONFIG), "Konfiguration")
+    cfg = deep_merge(DEFAULT_CONFIG, raw)
+    _validate_app(cfg["app"])
+    _validate_server(cfg["server"])
+    _validate_kiosk(cfg["kiosk"])
+    _validate_screen(cfg["screen"])
+    _validate_location(cfg["location"])
+    _validate_stream(cfg["stream"])
+    _validate_admin(cfg["admin"], cfg["server"]["host"])
+    _validate_youtube(cfg["youtube"])
+    _validate_ui(cfg["ui"])
+    _validate_weather(cfg["weather"])
+    _validate_transit(cfg["transit"])
+    _validate_logging(cfg["logging"])
     return cfg
+
+
+def _read_migrated(path: Path) -> tuple[dict[str, Any], bool]:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return migrate_config(raw)
+
+
+def _migrate_legacy_windows_config(target: Path) -> None:
+    legacy = Path.home() / ".config" / "BI-StorchCam" / "config.json"
+    if not legacy.exists() or legacy == target:
+        return
+    try:
+        migrated, _ = _read_migrated(legacy)
+        save_config(validate_config(migrated), target)
+        LOGGER.info("Windows-Konfiguration einmalig von %s nach %s migriert", legacy, target)
+    except (OSError, json.JSONDecodeError, ConfigError) as exc:
+        LOGGER.error("Legacy-Windows-Konfiguration konnte nicht migriert werden: %s", exc)
+
+
+def _backup_path(target: Path) -> Path:
+    return target.with_suffix(target.suffix + ".bak")
 
 
 def load_config(path: Path | None = None) -> dict[str, Any]:
     target = path or default_config_path()
     if path is None and os.name == "nt" and not target.exists():
-        legacy = Path.home() / ".config" / "BI-StorchCam" / "config.json"
-        if legacy.exists() and legacy != target:
-            try:
-                raw = json.loads(legacy.read_text(encoding="utf-8"))
-                migrated, _ = migrate_config(raw)
-                save_config(validate_config(migrated), target)
-                LOGGER.info("Windows-Konfiguration einmalig von %s nach %s migriert", legacy, target)
-            except (OSError, json.JSONDecodeError, ConfigError) as exc:
-                LOGGER.error("Legacy-Windows-Konfiguration konnte nicht migriert werden: %s", exc)
+        _migrate_legacy_windows_config(target)
     if not target.exists():
         return validate_config(copy.deepcopy(DEFAULT_CONFIG))
     try:
-        raw = json.loads(target.read_text(encoding="utf-8"))
-        migrated, changed = migrate_config(raw)
+        migrated, changed = _read_migrated(target)
         validated = validate_config(migrated)
         if changed:
             save_config(validated, target)
         return validated
     except (OSError, json.JSONDecodeError, ConfigError) as primary_error:
-        backup = target.with_suffix(target.suffix + ".bak")
+        backup = _backup_path(target)
         LOGGER.error("Konfiguration %s ist ungültig: %s", target, primary_error)
         if backup.exists():
             try:
-                raw = json.loads(backup.read_text(encoding="utf-8"))
-                migrated, _ = migrate_config(raw)
+                migrated, _ = _read_migrated(backup)
                 validated = validate_config(migrated)
                 LOGGER.warning("Verwende letzte gültige Sicherung %s", backup)
                 return validated
@@ -415,13 +465,22 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
         raise ConfigError(f"Konfiguration ist ungültig: {primary_error}") from primary_error
 
 
+def _fsync_directory(directory: Path) -> None:
+    if not hasattr(os, "O_DIRECTORY"):
+        return
+    directory_fd = os.open(directory, os.O_DIRECTORY)
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
 def save_config(config: dict[str, Any], path: Path | None = None) -> Path:
     target = path or default_config_path()
     validated = validate_config(config)
     target.parent.mkdir(parents=True, exist_ok=True)
-    backup = target.with_suffix(target.suffix + ".bak")
     if target.exists():
-        shutil.copy2(target, backup)
+        shutil.copy2(target, _backup_path(target))
     fd, temporary_name = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=target.parent)
     temporary = Path(temporary_name)
     try:
@@ -431,12 +490,7 @@ def save_config(config: dict[str, Any], path: Path | None = None) -> Path:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, target)
-        if hasattr(os, "O_DIRECTORY"):
-            directory_fd = os.open(target.parent, os.O_DIRECTORY)
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
+        _fsync_directory(target.parent)
     finally:
         temporary.unlink(missing_ok=True)
     return target

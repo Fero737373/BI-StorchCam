@@ -1,5 +1,3 @@
 from .version import __version__
 
-APP_NAME = "BI-StorchCam"
-
-__all__ = ["APP_NAME", "__version__"]
+__all__ = ["__version__"]

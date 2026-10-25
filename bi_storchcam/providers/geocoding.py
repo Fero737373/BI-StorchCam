@@ -7,26 +7,23 @@ Nominatim returns no timezone, so it is resolved after selection via Open-Meteo.
 
 from __future__ import annotations
 
-import json
 import logging
 import urllib.parse
-import urllib.request
 from typing import Any
 
-from ..version import __version__
+from . import http_json
 
 LOGGER = logging.getLogger(__name__)
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 SEARCH_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 # Nominatim verlangt einen aussagekräftigen User-Agent (Nutzungsrichtlinie).
-USER_AGENT = f"BI-StorchCam/{__version__} (+https://github.com/Fero737373/BI-StorchCam)"
+USER_AGENT = f"{http_json.USER_AGENT} (+https://github.com/Fero737373/BI-StorchCam)"
 
 
 def _fetch_json(url: str, timeout: int = 10) -> Any:
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json", "Accept-Language": "de"})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8", "replace"))
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/json", "Accept-Language": "de"}
+    return http_json.fetch_json(url, headers=headers, timeout=timeout)
 
 
 def _clean(query: str) -> str:

@@ -76,7 +76,7 @@ let oskShift = false;
 let runtimeConfig = null;
 let lastState = null;
 let backendDown = false;
-let streamView = { state: "loading", full: "Lokales Backend wird geladen", short: "Wird geladen", card: null };
+let streamView = { state: "loading", full: "Lokales Backend wird geladen", card: null };
 
 const NARROW_WIDTH = 760;
 const RAIN_NOW_CODES = new Set([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99]);
@@ -142,21 +142,21 @@ function showToast(text) {
   toastTimer = setTimeout(() => elements.toast.classList.add("hidden"), 3500);
 }
 
-function updateClock() {
-  const now = new Date();
-  // Uhr und Datum in der Zeitzone des gewählten Orts, nicht der des Geräts.
-  const timeZone = runtimeTimezone;
-  elements.clock.textContent = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit", timeZone }).format(now);
-  const weekday = elements.body.dataset.layout === "minimal" ? "short" : "long";
-  elements.date.textContent = new Intl.DateTimeFormat("de-DE", { weekday, day: "numeric", month: "long", timeZone }).format(now);
-}
-
 function isMinimal() {
   return elements.body.dataset.layout === "minimal";
 }
 
 function isNarrow() {
   return window.innerWidth < NARROW_WIDTH;
+}
+
+function updateClock() {
+  const now = new Date();
+  // Uhr und Datum in der Zeitzone des gewählten Orts, nicht der des Geräts.
+  const timeZone = runtimeTimezone;
+  elements.clock.textContent = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit", timeZone }).format(now);
+  const weekday = isMinimal() ? "short" : "long";
+  elements.date.textContent = new Intl.DateTimeFormat("de-DE", { weekday, day: "numeric", month: "long", timeZone }).format(now);
 }
 
 function formatTime(iso) {
@@ -265,12 +265,11 @@ function configureStream(stream, force = false) {
     setStreamView({
       state: "error",
       full: "Keine Stream-URL konfiguriert",
-      short: "Kein Stream",
       card: { title: "Kein Livestream konfiguriert", text: "Öffne den lokalen Adminmodus und hinterlege eine unterstützte Embed-URL." },
     });
     return;
   }
-  setStreamView({ state: "loading", full: "Stream-Seite wird geladen", short: "Stream wird geladen", card: null });
+  setStreamView({ state: "loading", full: "Stream-Seite wird geladen", card: null });
   elements.live.src = "about:blank";
   requestAnimationFrame(() => { elements.live.src = url; });
 }
@@ -495,7 +494,6 @@ async function refreshState() {
     renderStreamView({
       state: "error",
       full: "Lokales Backend nicht erreichbar",
-      short: "Backend offline",
       card: showCard ? { title: "Lokales Backend nicht erreichbar", text: "Die Anzeige fragt alle 5 Sekunden automatisch erneut an." } : null,
     });
     elements.weatherText.textContent = "Wetterdaten nicht erreichbar";
@@ -1036,13 +1034,12 @@ function requestSettingsClose() {
 
 elements.live.addEventListener("load", () => {
   if (!elements.live.getAttribute("src") || elements.live.src === "about:blank") return;
-  setStreamView({ state: "loaded", full: "Stream-Seite geladen · Wiedergabe nicht verifizierbar", short: "Stream-Seite geladen", card: null });
+  setStreamView({ state: "loaded", full: "Stream-Seite geladen · Wiedergabe nicht verifizierbar", card: null });
 });
 elements.live.addEventListener("error", () => {
   setStreamView({
     state: "error",
     full: "Stream-Einbettung möglicherweise blockiert",
-    short: "Stream-Fehler",
     card: { title: "Stream nicht erreichbar", text: "Die Stream-Seite meldet einen Fehler. Die Einbettung ist möglicherweise blockiert." },
   });
 });

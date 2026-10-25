@@ -16,6 +16,35 @@ from .providers.weather_smart import get_weather
 from .system_status import get_system_status
 
 LOGGER = logging.getLogger(__name__)
+SYSTEM_REFRESH_SECONDS = 5
+
+ProviderTask = tuple[str, int, Callable[[], Any]]
+
+
+def _utc_timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _system_enabled(config: dict[str, Any]) -> bool:
+    return bool(config.get("ui", {}).get("system", {}).get("enabled", False))
+
+
+def _provider_tasks(config: dict[str, Any]) -> list[ProviderTask]:
+    tasks: list[ProviderTask] = [
+        ("weather", int(config["weather"]["refresh_seconds"]), partial(get_weather, config, force=True)),
+        ("boards", int(config["transit"]["refresh_seconds"]), partial(get_boards, config, force=True)),
+    ]
+    if _system_enabled(config):
+        tasks.append(("system", SYSTEM_REFRESH_SECONDS, get_system_status))
+    return tasks
+
+
+def _fetch(name: str, task: Callable[[], Any]) -> Any:
+    try:
+        return task()
+    except Exception as exc:
+        LOGGER.exception("State-Provider %s fehlgeschlagen", name)
+        return [] if name == "boards" else {"ok": False, "error": str(exc)[:160]}
 
 
 class StateManager:
@@ -47,7 +76,7 @@ class StateManager:
             "config": self._public_runtime_config(config),
             "weather": {"ok": False, "text": "Wetter wird geladen"},
             "boards": [],
-            "system": {"enabled": bool(config.get("ui", {}).get("system", {}).get("enabled", False))},
+            "system": {"enabled": _system_enabled(config)},
         }
 
     @property
@@ -81,61 +110,43 @@ class StateManager:
     def wait_ready(self, timeout: float) -> bool:
         return self._ready.wait(timeout)
 
-    def refresh_all(self) -> None:
+    def _config_and_generation(self) -> tuple[dict[str, Any], int]:
         with self._lock:
-            config = copy.deepcopy(self._config)
-            generation = self._generation
-        updates: dict[str, Any] = {}
-        tasks: list[tuple[str, Callable[[], Any]]] = [
-            ("weather", lambda: get_weather(config, force=True)),
-            ("boards", lambda: get_boards(config, force=True)),
-        ]
-        if config.get("ui", {}).get("system", {}).get("enabled", False):
-            tasks.append(("system", get_system_status))
-        else:
+            return copy.deepcopy(self._config), self._generation
+
+    def refresh_all(self) -> None:
+        config, generation = self._config_and_generation()
+        tasks = _provider_tasks(config)
+        updates: dict[str, Any] = {name: _fetch(name, task) for name, _interval, task in tasks}
+        if not _system_enabled(config):
             updates["system"] = {"enabled": False}
-        for name, task in tasks:
-            try:
-                updates[name] = task()
-            except Exception as exc:
-                LOGGER.exception("State-Provider %s fehlgeschlagen", name)
-                updates[name] = {"ok": False, "error": str(exc)[:160]} if name != "boards" else []
-        updates["generated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        updates["generated_at"] = _utc_timestamp()
         with self._lock:
             if generation == self._generation:
                 self._snapshot.update(updates)
                 completed = time.monotonic()
-                self._last_run.update({name: completed for name, _task in tasks})
+                self._last_run.update({name: completed for name, _interval, _task in tasks})
         self._ready.set()
 
     def _due(self, name: str, interval: int, now: float) -> bool:
         with self._lock:
             return now - self._last_run.get(name, 0) >= interval
 
+    def _refresh_due(self) -> None:
+        config, generation = self._config_and_generation()
+        now = time.monotonic()
+        for name, interval, task in _provider_tasks(config):
+            if not self._due(name, interval, now):
+                continue
+            value = _fetch(name, task)
+            with self._lock:
+                if generation == self._generation:
+                    self._snapshot[name] = value
+                    self._snapshot["generated_at"] = _utc_timestamp()
+                    self._last_run[name] = time.monotonic()
+
     def _run(self) -> None:
         self._ready.set()
         self.refresh_all()
         while not self._stop.wait(1):
-            with self._lock:
-                config = copy.deepcopy(self._config)
-                generation = self._generation
-            now = time.monotonic()
-            tasks: list[tuple[str, int, Callable[[], Any]]] = [
-                ("weather", int(config["weather"]["refresh_seconds"]), partial(get_weather, config, force=True)),
-                ("boards", int(config["transit"]["refresh_seconds"]), partial(get_boards, config, force=True)),
-            ]
-            if config.get("ui", {}).get("system", {}).get("enabled", False):
-                tasks.append(("system", 5, get_system_status))
-            for name, interval, task in tasks:
-                if not self._due(name, interval, now):
-                    continue
-                try:
-                    value = task()
-                except Exception as exc:
-                    LOGGER.exception("State-Provider %s fehlgeschlagen", name)
-                    value = {"ok": False, "error": str(exc)[:160]} if name != "boards" else []
-                with self._lock:
-                    if generation == self._generation:
-                        self._snapshot[name] = value
-                        self._snapshot["generated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-                        self._last_run[name] = time.monotonic()
+            self._refresh_due()

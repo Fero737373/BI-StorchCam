@@ -6,12 +6,15 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from bi_storchcam.admin import hash_pin
 from bi_storchcam.config_store import ConfigError, config_path, load_config, save_config
-from bi_storchcam.kiosk_app import main
+from bi_storchcam.kiosk_app import EXIT_CONFIG_ERROR, main
 
 DISPLAY_WAIT_SECONDS = 300
+DISPLAY_POLL_SECONDS = 2
+CONTAINER_PORT = 8000
 
 
 def _enabled(name: str, default: str) -> bool:
@@ -30,49 +33,49 @@ def wait_for_display() -> bool:
         if not announced:
             print(f"Warte auf Display-Socket {socket} …", file=sys.stderr)
             announced = True
-        time.sleep(2)
+        time.sleep(DISPLAY_POLL_SECONDS)
     return True
+
+
+def _configure_admin(config: dict[str, Any]) -> None:
+    # Im Container ist das Menü standardmäßig ohne PIN offen; der Port ist nur auf dem Pi selbst erreichbar.
+    admin = config["admin"]
+    admin["require_pin"] = _enabled("BI_STORCHCAM_REQUIRE_PIN", "0")
+    if not admin["require_pin"] or admin["pin_hash"]:
+        return
+    pin = os.environ.get("BI_STORCHCAM_ADMIN_PIN", "").strip()
+    if not pin:
+        raise ConfigError(
+            "Keine Admin-PIN eingerichtet. Entweder BI_STORCHCAM_ADMIN_PIN setzen oder einmalig\n"
+            "  docker compose run --rm bi-storchcam --setup\n"
+            "ausführen."
+        )
+    try:
+        admin["pin_hash"] = hash_pin(pin)
+    except ValueError as exc:
+        raise ConfigError(f"BI_STORCHCAM_ADMIN_PIN: {exc}") from exc
+
+
+def _apply_container_overrides(config: dict[str, Any]) -> None:
+    stream_url = os.environ.get("BI_STORCHCAM_STREAM_URL", "").strip()
+    if stream_url:
+        config["stream"]["url"] = stream_url
+    # Im Container muss der Server auf allen Interfaces lauschen, damit der Port nach außen erreichbar ist.
+    config["server"]["host"] = "0.0.0.0"
+    config["server"]["port"] = CONTAINER_PORT
+    config["kiosk"]["enabled"] = _enabled("BI_STORCHCAM_KIOSK", "1") and wait_for_display()
 
 
 def prepare_config() -> int | None:
     path = config_path()
     try:
         config = load_config()
-    except ConfigError as exc:
-        print(f"FEHLER: {exc}", file=sys.stderr)
-        return 2
-
-    # Im Container ist das Menü standardmäßig ohne PIN offen; der Port ist nur auf dem Pi selbst erreichbar.
-    config["admin"]["require_pin"] = _enabled("BI_STORCHCAM_REQUIRE_PIN", "0")
-    pin = os.environ.get("BI_STORCHCAM_ADMIN_PIN", "").strip()
-    if config["admin"]["require_pin"] and not config["admin"]["pin_hash"]:
-        if not pin:
-            print(
-                "FEHLER: Keine Admin-PIN eingerichtet. Entweder BI_STORCHCAM_ADMIN_PIN setzen oder einmalig\n"
-                "  docker compose run --rm bi-storchcam --setup\n"
-                "ausführen.",
-                file=sys.stderr,
-            )
-            return 2
-        try:
-            config["admin"]["pin_hash"] = hash_pin(pin)
-        except ValueError as exc:
-            print(f"FEHLER: BI_STORCHCAM_ADMIN_PIN: {exc}", file=sys.stderr)
-            return 2
-
-    stream_url = os.environ.get("BI_STORCHCAM_STREAM_URL", "").strip()
-    if stream_url:
-        config["stream"]["url"] = stream_url
-
-    # Im Container muss der Server auf allen Interfaces lauschen, damit der Port nach außen erreichbar ist.
-    config["server"]["host"] = "0.0.0.0"
-    config["server"]["port"] = 8000
-    config["kiosk"]["enabled"] = _enabled("BI_STORCHCAM_KIOSK", "1") and wait_for_display()
-    try:
+        _configure_admin(config)
+        _apply_container_overrides(config)
         save_config(config, path)
     except ConfigError as exc:
         print(f"FEHLER: {exc}", file=sys.stderr)
-        return 2
+        return EXIT_CONFIG_ERROR
     return None
 
 

@@ -28,7 +28,7 @@ Die JSON-Konfiguration wird gegen ein geschlossenes Schema validiert. Unbekannte
 | `screen.touch_device` | exakter XInput-Name | leer = keine Änderung |
 | `screen.touch_matrix` | Transformation | leer = keine Änderung |
 | `location.label` | sichtbarer Standort | maximal 120 Zeichen |
-| `location.latitude` / `longitude` | Karten- und Wetterposition | −90…90 / −180…180 |
+| `location.latitude` / `longitude` | Wetterposition | −90…90 / −180…180 |
 | `stream.url` | Embed-URL; normale YouTube-Links werden in die Embed-Form umgewandelt | leer oder vollständiges HTTP(S) |
 | `stream.autoplay` / `muted` | Playerparameter | boolesch |
 | `admin.pin_hash` | lokaler PBKDF2-Hash | nur durch Setup setzen |
