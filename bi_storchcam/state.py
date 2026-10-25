@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from functools import partial
 from typing import Any
 
+from .providers.music import get_now_playing
+from .providers.music import refresh_seconds as music_refresh_seconds
 from .providers.transit_vrr_smart import get_boards
 from .providers.weather_smart import get_weather
 from .system_status import get_system_status
@@ -29,6 +31,10 @@ def _system_enabled(config: dict[str, Any]) -> bool:
     return bool(config.get("ui", {}).get("system", {}).get("enabled", False))
 
 
+def _music_enabled(config: dict[str, Any]) -> bool:
+    return config.get("music", {}).get("source", "off") != "off"
+
+
 def _provider_tasks(config: dict[str, Any]) -> list[ProviderTask]:
     tasks: list[ProviderTask] = [
         ("weather", int(config["weather"]["refresh_seconds"]), partial(get_weather, config, force=True)),
@@ -36,6 +42,8 @@ def _provider_tasks(config: dict[str, Any]) -> list[ProviderTask]:
     ]
     if _system_enabled(config):
         tasks.append(("system", SYSTEM_REFRESH_SECONDS, get_system_status))
+    if _music_enabled(config):
+        tasks.append(("music", music_refresh_seconds(config), partial(get_now_playing, config)))
     return tasks
 
 
@@ -77,6 +85,7 @@ class StateManager:
             "weather": {"ok": False, "text": "Wetter wird geladen"},
             "boards": [],
             "system": {"enabled": _system_enabled(config)},
+            "music": {"enabled": False},
         }
 
     @property
@@ -100,8 +109,15 @@ class StateManager:
             if config != self._config:
                 self._config = copy.deepcopy(config)
                 self._snapshot["config"] = self._public_runtime_config(config)
+                if not _music_enabled(config):
+                    self._snapshot["music"] = {"enabled": False}
                 self._last_run.clear()
                 self._generation += 1
+
+    def refresh_soon(self, name: str) -> None:
+        """Provider beim nächsten Durchlauf (spätestens nach einer Sekunde) neu abfragen."""
+        with self._lock:
+            self._last_run.pop(name, None)
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
@@ -120,6 +136,8 @@ class StateManager:
         updates: dict[str, Any] = {name: _fetch(name, task) for name, _interval, task in tasks}
         if not _system_enabled(config):
             updates["system"] = {"enabled": False}
+        if not _music_enabled(config):
+            updates["music"] = {"enabled": False}
         updates["generated_at"] = _utc_timestamp()
         with self._lock:
             if generation == self._generation:

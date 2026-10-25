@@ -20,13 +20,15 @@ Produktive Referenzscreenshots werden nach dem ersten bestandenen Pi-Hardwaretes
 - vollflächiger Livestream ohne Einblendungen; nur bei Fehlern erscheint ein Hinweis
 - Infoleiste unten aus Milchglas: Uhr mit Datum und Systemzeile, Wetter mit Stundenleiste der Regenwahrscheinlichkeit und die nächsten drei Abfahrten
 - Layoutprofile `minimal`, `standard`, `information` und Viewport-Auswahl über `auto`; ausgeschaltete Blöcke verschwinden samt Trenner
-- Themes `dark`, `light`, `high-contrast`, alle Texte mit mindestens 4,5:1 Kontrast
+- Themes `dark`, `light`, `high-contrast`, alle Texte mit mindestens 4,5:1 Kontrast, dazu `y2k` mit Wolken am Tag und Sternenhimmel bei Nacht sowie `dagobert` im Comic-Stil (Geldspeicher, fallende Taler, Sternenhimmel)
 - Schrift Barlow lokal eingebunden (SIL OFL 1.1), funktioniert offline
 - Open-Meteo-Wetter ab der aktuellen Uhrzeit, Regenstunden nach den konfigurierten Schwellen
 - mehrere VRR-Haltestellen mit Linien- und Nachtbusfiltern; Abfahrten aller Haltestellen nach Minuten sortiert
 - Menü-Knopf oben links (oder `Ctrl+Alt+S`) mit Touch-Oberfläche und Bildschirmtastatur
 - Livestream-Auswahl aus allem, was gerade auf YouTube live ist, ohne API-Schlüssel
 - weltweite Ortssuche; Uhr und Wetter folgen der Zeitzone des Orts
+- aktueller Song oben rechts mit Cover und Fortschritt: Spotify direkt, YouTube Music per Google-Anmeldung am Bildschirm
+- Musik abspielen (Menü „Abspielen“): YouTube Music oder Spotify durchsuchen oder eigene Playlists wählen und auf dem Pi abspielen, mit Pause/Weiter/Lautstärke im Menü und auf der Songkarte (klein nur Cover und Titel, antippen für groß mit Bedienung); Ton über Bluetooth-Lautsprecher (Suchen, Koppeln, Trennen im Menü). Braucht YouTube Premium bzw. Spotify Premium; ohne Bluetooth-Adapter zeigt das Menü einen Fehler
 - im Docker-Betrieb ohne PIN, sonst PBKDF2-gehashte PIN und zeitlich begrenzte Admin-Sessions
 - Hintergrund-State ohne Provideraufrufe pro Browseranfrage
 - überwachte Chromium-, Chrome- oder Edge-Prozesse mit begrenztem Backoff
@@ -48,7 +50,7 @@ BI-StorchCam läuft als Docker-Container (getestet auf Raspberry Pi OS / Debian 
 
 ## Externe Dienste
 
-Für Live-Daten benötigt BI-StorchCam Netzwerkzugriff zu Open-Meteo (Wetter, Ortssuche, Zeitzone), Nominatim/OpenStreetMap (Adresssuche), dem VRR-Haltestellenmonitor und für die Livestream-Suche zu YouTube (öffentliche Suchseite bzw. YouTube Data API, Vorschaubilder von i.ytimg.com). Der Stream benötigt Zugriff auf die konfigurierte Streamdomain. Die App enthält keine Cloud-Benutzerverwaltung und sendet keine lokale PIN.
+Für Live-Daten benötigt BI-StorchCam Netzwerkzugriff zu Open-Meteo (Wetter, Ortssuche, Zeitzone), Nominatim/OpenStreetMap (Adresssuche), dem VRR-Haltestellenmonitor, für die Musikanzeige zu Spotify bzw. YouTube Music (Google) und für die Livestream-Suche zu YouTube (öffentliche Suchseite bzw. YouTube Data API, Vorschaubilder von i.ytimg.com). Der Stream benötigt Zugriff auf die konfigurierte Streamdomain. Die App enthält keine Cloud-Benutzerverwaltung und sendet keine lokale PIN.
 
 ## Docker
 

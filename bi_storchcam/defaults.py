@@ -56,8 +56,13 @@ DEFAULT_CONFIG = {
         "api_key": "",
         "default_query": "Storch",
     },
+    "music": {
+        "source": "off",
+        "spotify": {"client_id": ""},
+    },
     "ui": {
         "theme": "dark",
+        "sky": "auto",
         "layout_profile": "auto",
         "clock": {"enabled": True},
         "weather": {"enabled": True},

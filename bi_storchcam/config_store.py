@@ -20,7 +20,10 @@ from .defaults import CONFIG_SCHEMA_VERSION, DEFAULT_CONFIG
 
 LOGGER = logging.getLogger(__name__)
 
-THEMES = {"dark", "light", "high-contrast"}
+THEMES = {"dark", "light", "high-contrast", "y2k", "dagobert"}
+# Tag/Nacht der Bild-Themes (Y2K, Dagobert): automatisch nach Open-Meteo oder fest.
+SKY_MODES = {"auto", "day", "night"}
+MUSIC_SOURCES = {"off", "auto", "spotify", "ytmusic"}
 LAYOUT_PROFILES = {"auto", "minimal", "standard", "information"}
 UI_BLOCKS = ("clock", "weather", "transit", "system")
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
@@ -224,6 +227,14 @@ def migrate_config(raw: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         ui["layout_profile"] = "auto"
     if ui.get("theme") not in THEMES:
         ui["theme"] = "dark"
+    if ui.get("sky", "auto") not in SKY_MODES:
+        ui["sky"] = "auto"
+    music = migrated.get("music")
+    if isinstance(music, dict):
+        music.pop("ytmusic", None)  # Google-Client der gesperrten Geräteanmeldung; YouTube Music meldet sich jetzt im Browser an.
+        music.pop("lastfm", None)  # Last.fm wurde entfernt.
+        if music.get("source") == "lastfm":
+            music["source"] = "auto"
 
     transit = migrated.setdefault("transit", {})
     stops = transit.get("stops")
@@ -341,9 +352,28 @@ def _validate_youtube(youtube: dict[str, Any]) -> None:
     })
 
 
+def _validate_music(music: dict[str, Any]) -> None:
+    _only(music, {"source", "spotify"}, "music")
+    source = _string(music["source"], "music.source", 10)
+    if source not in MUSIC_SOURCES:
+        raise ConfigError("Ungültige music.source")
+    _only(music["spotify"], {"client_id"}, "music.spotify")
+    client_id = _string(music["spotify"]["client_id"], "music.spotify.client_id", 64).strip()
+    if client_id and not re.fullmatch(r"[A-Za-z0-9]+", client_id):
+        raise ConfigError("Die Spotify-Client-ID enthält ungültige Zeichen")
+    music.update({
+        "source": source,
+        "spotify": {"client_id": client_id},
+    })
+
+
 def _validate_ui(ui: dict[str, Any]) -> None:
-    _only(ui, {"theme", "layout_profile", *UI_BLOCKS}, "ui")
+    _only(ui, {"theme", "sky", "layout_profile", *UI_BLOCKS}, "ui")
     theme = _string(ui["theme"], "ui.theme", 30)
+    sky = _string(ui["sky"], "ui.sky", 10)
+    if sky not in SKY_MODES:
+        raise ConfigError("Ungültiges ui.sky")
+    ui["sky"] = sky
     layout = _string(ui["layout_profile"], "ui.layout_profile", 30)
     if theme not in THEMES:
         raise ConfigError("Ungültiges ui.theme")
@@ -411,6 +441,7 @@ def validate_config(raw: dict[str, Any]) -> dict[str, Any]:
     _validate_stream(cfg["stream"])
     _validate_admin(cfg["admin"], cfg["server"]["host"])
     _validate_youtube(cfg["youtube"])
+    _validate_music(cfg["music"])
     _validate_ui(cfg["ui"])
     _validate_weather(cfg["weather"])
     _validate_transit(cfg["transit"])

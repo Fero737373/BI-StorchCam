@@ -90,3 +90,28 @@ def test_rows_expose_raw_minutes_and_boards_checked_at(monkeypatch: pytest.Monke
     for board in boards:
         assert datetime.fromisoformat(board["checked_at"]).tzinfo is not None
     assert boards[1]["ok"] is False
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("Gellershagen, Altdorferstraße", "Altdorferstraße"),
+        ("Bielefeld, Radrennb./Ziegelstr", "Radrennb./Ziegelstr"),
+        ("Bielefeld Jahnplatz", "Jahnplatz"),
+        ("Bi-Sennestadt", "Sennestadt"),
+        ("Universität", "Universität"),
+    ],
+)
+def test_short_name_drops_city_and_district(raw: str, expected: str) -> None:
+    assert transit.short_name(raw) == expected
+
+
+def test_board_title_uses_vrr_station_name_unless_customised(monkeypatch: pytest.MonkeyPatch, config: dict) -> None:
+    transit.clear_cache()
+    auto = {**stop(), "title": "Gellershagen Altdorferstraße", "station_name": "Gellershagen Altdorferstraße"}
+    config["transit"]["stops"] = [auto, {**stop("two"), "title": ""}, {**stop("three"), "title": "Zuhause"}]
+    data = {**departures(), "stationName": "Gellershagen, Altdorferstraße"}
+    monkeypatch.setattr(transit, "_fetch_json", lambda _url, _data=None, timeout=12: data)
+    boards = transit.get_boards(config, force=True)
+    assert [board["title"] for board in boards] == ["Altdorferstraße", "Altdorferstraße", "Zuhause"]
+    assert boards[0]["rows"][0]["target"] == "Schildesche"

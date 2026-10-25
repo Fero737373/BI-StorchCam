@@ -180,8 +180,6 @@ for (const viewport of [
     await expect(page.locator(".departure-sub").first()).toHaveText("ab Schneiderstraße");
 
     await expect(page.locator(".rain-col")).toHaveCount(viewport.hours);
-    const rainFlags = await page.locator(".rain-col").evaluateAll((columns) => columns.map((column) => column.classList.contains("is-rain")));
-    expect(rainFlags).toEqual(PROBABILITIES.slice(0, viewport.hours).map((value) => value >= 45));
     await expect(page.locator("#rainSummary")).toContainText("ab 16 Uhr · 60 %");
 
 

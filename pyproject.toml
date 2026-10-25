@@ -8,6 +8,9 @@ license = { text = "GPL-3.0-only" }
 authors = [{ name = "BI-StorchCam Contributors" }]
 dependencies = [
   "tzdata>=2024.1; platform_system == 'Windows'",
+  "ytmusicapi>=1.12",
+  "yt-dlp[default]>=2026.10.21",
+  "segno>=1.6",
 ]
 
 [project.optional-dependencies]
@@ -28,7 +31,7 @@ build-backend = "setuptools.build_meta"
 version = {attr = "bi_storchcam.version.__version__"}
 
 [tool.setuptools.package-data]
-bi_storchcam = ["web/*.html", "web/*.css", "web/*.js", "web/fonts/*.woff2", "web/fonts/*.txt"]
+bi_storchcam = ["web/*.html", "web/*.css", "web/*.js", "web/fonts/*.woff2", "web/fonts/*.txt", "web/theme/*.svg"]
 
 [tool.setuptools.packages.find]
 include = ["bi_storchcam*"]

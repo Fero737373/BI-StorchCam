@@ -71,10 +71,37 @@
 
       <span class="ib-sep" aria-hidden="true"></span>
       <section id="transitPanel" class="ib-block ib-transit" aria-label="ÖPNV-Abfahrten">
-        <header class="block-head transit-head"><span>Abfahrten</span></header>
+        <header class="block-head transit-head"><span>Abfahrten</span><span id="transitStation" class="transit-station"></span></header>
         <div id="boards" class="boards" aria-live="polite"></div>
       </section>
     </section>
+
+    <aside id="nowPlaying" class="now-playing hidden" aria-label="Läuft gerade" aria-live="polite">
+      <button id="npOpen" class="np-open" type="button" aria-expanded="false" aria-label="Song groß anzeigen">
+        <span class="np-art"><img id="npCover" class="np-cover hidden" alt=""></span>
+        <span class="np-head">
+          <strong id="npTitle" class="np-title"></strong>
+          <span id="npArtist" class="np-artist np-more"></span>
+        </span>
+      </button>
+      <div class="np-more">
+        <div id="npProgress" class="np-progress hidden" aria-hidden="true">
+          <span class="np-track"><span id="npBar" class="np-bar"></span></span>
+          <span id="npTime" class="np-time"></span>
+        </div>
+        <div id="npControls" class="np-controls hidden">
+          <button class="np-button" type="button" data-control="previous" aria-label="Zurück"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+          <button id="npToggle" class="np-button np-toggle" type="button" data-control="toggle" aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path class="icon-pause" d="M7 5h4v14H7zM13 5h4v14h-4z"/><path class="icon-play" d="M8 5v14l11-7z"/></svg></button>
+          <button class="np-button" type="button" data-control="next" aria-label="Vor"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+          <button class="np-button" type="button" data-control="stop" aria-label="Stopp"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6h12v12H6z"/></svg></button>
+        </div>
+        <label id="npVolumeRow" class="np-volume hidden" for="npVolume">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 9h4l5-4v14l-5-4H4zM16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"/></svg>
+          <span class="sr-only">Lautstärke</span>
+          <input id="npVolume" type="range" min="0" max="100" step="5" value="100">
+        </label>
+      </div>
+    </aside>
   </main>
 
   <dialog id="pinDialog" class="auth-dialog" aria-labelledby="pinTitle">
@@ -109,6 +136,8 @@
           <button class="menu-tab" type="button" role="tab" data-tab="place" aria-selected="false">Ort</button>
           <button class="menu-tab" type="button" role="tab" data-tab="display" aria-selected="false">Anzeige</button>
           <button class="menu-tab" type="button" role="tab" data-tab="transit" aria-selected="false">ÖPNV</button>
+          <button class="menu-tab" type="button" role="tab" data-tab="music" aria-selected="false">Musik</button>
+          <button class="menu-tab" type="button" role="tab" data-tab="player" aria-selected="false">Abspielen</button>
           <button class="menu-tab" type="button" role="tab" data-tab="system" aria-selected="false">System</button>
         </nav>
         <button id="closeSettings" class="icon-button" type="button" aria-label="Menü schließen">×</button>
@@ -158,7 +187,8 @@
           <h2 id="layoutSettingsTitle" class="sr-only">Anzeige</h2>
           <div class="form-grid">
             <label class="field" for="cfgLayout"><span>Layoutprofil</span><select id="cfgLayout"><option value="auto">Automatisch</option><option value="minimal">Minimal</option><option value="standard">Standard</option><option value="information">Information</option></select></label>
-            <label class="field" for="cfgTheme"><span>Theme</span><select id="cfgTheme"><option value="dark">Dunkel</option><option value="light">Hell</option><option value="high-contrast">Hoher Kontrast</option></select></label>
+            <label class="field" for="cfgTheme"><span>Theme</span><select id="cfgTheme"><option value="dark">Dunkel</option><option value="light">Hell</option><option value="high-contrast">Hoher Kontrast</option><option value="y2k">Y2K – Wolken &amp; Sterne</option><option value="dagobert">Dagobert – Geldspeicher</option></select></label>
+            <label class="field" for="cfgSky"><span>Tag/Nacht (Y2K und Dagobert)</span><select id="cfgSky"><option value="auto">Automatisch nach Sonnenstand</option><option value="day">Immer Tag (hell)</option><option value="night">Immer Nacht (dunkel)</option></select></label>
           </div>
           <div class="toggle-grid" aria-label="Sichtbare Elemente">
             <label class="toggle" for="showClock"><input id="showClock" type="checkbox"><span>Uhr</span></label>
@@ -178,6 +208,106 @@
           <div id="stationSearchStatus" class="status-message" role="status" aria-live="polite"></div>
           <div id="stationResults" class="station-results"></div>
           <div id="stopEditor" class="stop-editor" aria-label="Konfigurierte Haltestellen"></div>
+        </section>
+
+        <section class="menu-panel" data-panel="music" role="tabpanel" aria-labelledby="musicSettingsTitle" hidden>
+          <h2 id="musicSettingsTitle" class="sr-only">Musik</h2>
+          <p class="current-line">Oben rechts erscheint der Song, der gerade läuft. Jetzt: <strong id="musicNow">–</strong></p>
+          <div class="form-grid">
+            <label class="field" for="cfgMusicSource"><span>Quelle</span><select id="cfgMusicSource"><option value="off">Aus</option><option value="auto">Automatisch: was gerade verbunden ist</option><option value="ytmusic">Nur YouTube Music</option><option value="spotify">Nur Spotify</option></select></label>
+          </div>
+
+          <h3 class="settings-subhead">YouTube Music</h3>
+          <p id="ytState" class="current-line"></p>
+          <div class="music-actions">
+            <button id="ytConnect" class="button button-primary" type="button">Am Bildschirm anmelden</button>
+            <button id="ytCancel" class="button hidden" type="button">Anmeldung abbrechen</button>
+            <button id="ytDisconnect" class="button button-danger hidden" type="button">YouTube Music trennen</button>
+          </div>
+          <div id="ytStatus" class="status-message" role="status" aria-live="polite"></div>
+          <ol class="help-steps">
+            <li>„Am Bildschirm anmelden“ tippen. Über der StorchCam öffnet sich ein Fenster mit der normalen Google-Anmeldung, die Bildschirmtastatur erscheint beim Tippen ins Feld.</li>
+            <li>E-Mail und Passwort eingeben. Fragt Google nach einer Bestätigung, auf dem iPhone in der Google- oder YouTube-App „Ja“ tippen.</li>
+            <li>Sobald YouTube Music geladen ist, schließt sich das Fenster von selbst. Das kann bis zu einer halben Minute dauern; du kannst es auch selbst schließen.</li>
+          </ol>
+          <p class="current-line">YouTube Music verrät nicht direkt, was gerade läuft. Die Anzeige nimmt den neuesten Song aus deinem Verlauf und zeigt ihn so lange, wie er dauert. Pausen erkennt sie nicht, und ein neuer Song kann einige Sekunden später erscheinen.</p>
+
+          <h3 class="settings-subhead">Spotify</h3>
+          <p id="spotifyState" class="current-line"></p>
+          <div class="search-row">
+            <label class="field" for="cfgSpotifyClient"><span>Client-ID deiner Spotify-App</span><input id="cfgSpotifyClient" type="text" spellcheck="false" maxlength="64" data-enter="spotifyConnect" placeholder="32 Zeichen, z. B. 1a2b3c…"></label>
+            <button id="spotifyConnect" class="button button-primary" type="button">Mit Spotify verbinden</button>
+          </div>
+          <button id="spotifyDisconnect" class="button button-danger hidden" type="button">Spotify trennen</button>
+          <div id="spotifyStatus" class="status-message" role="status" aria-live="polite"></div>
+          <details class="advanced">
+            <summary>So bekommst du eine Spotify-Client-ID</summary>
+            <ol class="help-steps">
+              <li>Auf <strong>developer.spotify.com/dashboard</strong> mit deinem Spotify-Konto anmelden und „Create app“ wählen.</li>
+              <li>Name und Beschreibung beliebig. Als <strong>Redirect URI</strong> genau diese Adresse eintragen: <code id="spotifyRedirect"></code></li>
+              <li>Bei „Which API/SDKs are you planning to use?“ <strong>Web API</strong> ankreuzen und speichern.</li>
+              <li>Die <strong>Client ID</strong> kopieren, oben eintragen und „Mit Spotify verbinden“ tippen. Ein Client-Secret ist nicht nötig.</li>
+            </ol>
+            <p id="spotifyHostHint" class="status-message error hidden">Spotify erlaubt als Rücksprung nur 127.0.0.1, nicht „localhost“. Bitte die Anzeige über http://127.0.0.1 öffnen.</p>
+          </details>
+        </section>
+
+        <section class="menu-panel" data-panel="player" role="tabpanel" aria-labelledby="playerSettingsTitle" hidden>
+          <h2 id="playerSettingsTitle" class="sr-only">Musik abspielen</h2>
+          <div class="player-now">
+            <img id="playerCover" class="player-cover hidden" alt="">
+            <div class="player-now-text">
+              <strong id="playerTitle">Gerade läuft nichts</strong>
+              <span id="playerArtist"></span>
+            </div>
+            <div class="player-transport">
+              <button class="icon-button" type="button" data-player="previous" aria-label="Vorheriger Titel"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+              <button id="playerToggle" class="icon-button player-toggle" type="button" data-player="toggle" aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path class="icon-pause" d="M7 5h4v14H7zM13 5h4v14h-4z"/><path class="icon-play" d="M8 5v14l11-7z"/></svg></button>
+              <button class="icon-button" type="button" data-player="next" aria-label="Nächster Titel"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+              <button class="icon-button" type="button" data-player="stop" aria-label="Stopp"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6h12v12H6z"/></svg></button>
+            </div>
+            <label class="player-volume" for="playerVolume"><span>Lautstärke</span><input id="playerVolume" type="range" min="0" max="100" step="5" value="60"></label>
+          </div>
+
+          <div class="segmented" role="group" aria-label="Musikdienst">
+            <button class="segment" type="button" data-service="ytmusic" aria-pressed="true">YouTube Music</button>
+            <button class="segment" type="button" data-service="spotify" aria-pressed="false">Spotify</button>
+          </div>
+          <div class="search-row">
+            <label class="field" for="playerQuery"><span>Song, Album, Playlist oder Künstler</span><input id="playerQuery" type="search" data-enter="playerSearchBtn" maxlength="120" placeholder="z. B. Bohemian Rhapsody"></label>
+            <button id="playerSearchBtn" class="button button-primary" type="button">Suchen</button>
+          </div>
+          <div id="playerStatus" class="status-message" role="status" aria-live="polite"></div>
+          <div id="playerResults" class="player-results"></div>
+
+          <h3 class="settings-subhead">Meine Playlists</h3>
+          <div id="playlistStatus" class="status-message" role="status" aria-live="polite"></div>
+          <div id="playerPlaylists" class="player-results"></div>
+
+          <h3 class="settings-subhead">Bluetooth-Lautsprecher</h3>
+          <p id="btState" class="current-line">Wird geprüft …</p>
+          <div class="music-actions">
+            <button id="btScan" class="button button-primary" type="button">Lautsprecher suchen</button>
+          </div>
+          <div id="btStatus" class="status-message" role="status" aria-live="polite"></div>
+          <div id="btDevices" class="bt-devices"></div>
+          <p class="current-line">Lautsprecher vorher in den Kopplungsmodus schalten (meist die Bluetooth-Taste lange drücken). Ein verbundener Lautsprecher spielt den Ton des Pi automatisch ab.</p>
+
+          <h3 class="settings-subhead">Spotify auf dem Pi</h3>
+          <p id="spPairState" class="current-line"></p>
+          <div class="music-actions">
+            <button id="spPair" class="button button-primary" type="button">Pi als Spotify-Lautsprecher koppeln</button>
+            <button id="spUnpair" class="button button-danger hidden" type="button">Kopplung entfernen</button>
+          </div>
+          <div id="spPairStatus" class="status-message" role="status" aria-live="polite"></div>
+          <div id="spPairBox" class="pair-box hidden">
+            <img id="spPairQr" class="pair-qr" alt="QR-Code zur Spotify-Kopplung">
+            <ol class="help-steps">
+              <li>QR-Code mit dem Handy scannen (oder <strong id="spPairUrl"></strong> öffnen) und mit deinem Spotify-Konto anmelden.</li>
+              <li>Falls gefragt, diesen Code eingeben: <strong id="spPairCode"></strong></li>
+              <li>Danach erscheint „StorchCam“ in Spotify als Lautsprecher, und die Suche oben kann Spotify hier abspielen.</li>
+            </ol>
+          </div>
         </section>
 
         <section class="menu-panel" data-panel="system" role="tabpanel" aria-labelledby="systemSettingsTitle" hidden>

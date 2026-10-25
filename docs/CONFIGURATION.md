@@ -35,14 +35,17 @@ Die JSON-Konfiguration wird gegen ein geschlossenes Schema validiert. Unbekannte
 | `admin.require_pin` | Menü nur mit PIN öffnen; im Docker-Container per `BI_STORCHCAM_REQUIRE_PIN` gesetzt | `true`, Docker: `false` |
 | `youtube.api_key` | optionaler Schlüssel für die YouTube Data API v3; wird nie an die Oberfläche ausgeliefert, leer = öffentliche Suchseite oder `YOUTUBE_API_KEY` | leer |
 | `youtube.default_query` | Suchwort beim Öffnen der Livestream-Auswahl | `Storch` |
-| `ui.theme` | Farbsystem | `dark`, `light`, `high-contrast` |
+| `ui.theme` | Farbsystem; `y2k` zeigt tagsüber ziehende Wolken, nachts funkelnde Sterne; `dagobert` ist ein Comic-Geldspeicher mit fallenden Talern am Tag und Sternenhimmel bei Nacht (Tag/Nacht laut Open-Meteo) | `dark`, `light`, `high-contrast`, `y2k`, `dagobert` |
+| `ui.sky` | Tag/Nacht der Themes `y2k` und `dagobert`: automatisch nach Sonnenstand (Open-Meteo) oder fest | `auto`, `day`, `night` |
+| `music.source` | Quelle für „Läuft gerade“ oben rechts | `off`, `auto` (Spotify, sonst YouTube Music), `spotify`, `ytmusic` (Anmeldung im Menü unter Musik, siehe API_NOTES) |
+| `music.spotify.client_id` | Client-ID der eigenen Spotify-App (Redirect URI: `http://127.0.0.1:<Port>/api/music/spotify/callback`) | Text |
 | `ui.layout_profile` | Informationsdichte | `auto`, `minimal`, `standard`, `information` |
 | `ui.*.enabled` | Uhr/Wetter/ÖPNV/System in der Infoleiste; ausgeschaltete Blöcke entfallen samt Trenner | boolesch |
 | `weather.provider` | Wetterprovider | derzeit `openmeteo` |
 | `weather.refresh_seconds` | Wetterintervall | 60–3600 Sekunden |
 | `weather.forecast_hours` | Zukunftsfenster | 1–48 Stunden |
 | `weather.rain_mm_threshold` | Regenmenge-Grenze | 0–100 mm |
-| `weather.rain_probability_threshold` | Wahrscheinlichkeitsgrenze; beide Schwellen markieren Regenstunden in der Stundenleiste | 0–100 % |
+| `weather.rain_probability_threshold` | Wahrscheinlichkeitsgrenze; beide Schwellen bestimmen die Regenzusammenfassung („Regen ab …“) | 0–100 % |
 | `transit.provider` | ÖPNV-Provider | derzeit `vrr` |
 | `transit.refresh_seconds` | Abfahrtsintervall | 15–3600 Sekunden |
 | `transit.default_max_rows` | Standardzeilen | 1–12 |
@@ -54,5 +57,7 @@ Die JSON-Konfiguration wird gegen ein geschlossenes Schema validiert. Unbekannte
 Eine Haltestelle enthält `title`, `station_name`, `station_id`, `line_filter`, `nightbus_only`, `hide_if_empty` und `max_rows`. Die Oberfläche verwaltet diese Felder ohne manuelle JSON-Bearbeitung. Der VRR-Provider gilt nur für seine unterstützte Region.
 
 Die Infoleiste zeigt höchstens drei Abfahrten (unter 760 px Breite zwei) über alle Haltestellen hinweg, nach Minuten sortiert. `max_rows` begrenzt weiterhin, wie viele Zeilen je Haltestelle abgefragt werden.
+
+Im Theme `dagobert` steht eine Comicfigur auf der Infoleiste (tagsüber mit Taler, nachts mit Schlafmütze). Eigene Bilder ersetzen die mitgelieferte Zeichnung: `dagobert-tag` und `dagobert-nacht` als `.png`, `.webp` oder `.svg` in den Ordner `theme/` neben der `config.json` legen (Docker: `data/theme/`). Am besten eignen sich freigestellte Bilder mit transparentem Hintergrund.
 
 Das frühere Regenradar wurde entfernt. Alte Konfigurationen mit `ui.radar` oder `radar` werden beim Start automatisch bereinigt.

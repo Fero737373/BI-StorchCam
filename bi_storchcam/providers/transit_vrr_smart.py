@@ -77,6 +77,17 @@ def _format_minutes(value: Any) -> str:
     return f"{minutes} min" if minutes < 60 else f"{minutes // 60}h {minutes % 60:02d}"
 
 
+def short_name(name: str) -> str:
+    """Nur den Haltestellennamen ohne Ort/Stadtteil: „Gellershagen, Altdorferstraße“ → „Altdorferstraße“."""
+    clean = " ".join(str(name or "").split())
+    if "," in clean:
+        clean = clean.rsplit(",", 1)[1].strip()
+    for prefix in ("Bielefeld ", "Bi-"):
+        if clean.startswith(prefix):
+            clean = clean[len(prefix):].strip()
+    return clean
+
+
 def _board(stop: dict[str, Any], default_max: int, target_len: int) -> dict[str, Any]:
     station_id = str(stop.get("station_id", "")).strip()
     station_name = str(stop.get("station_name", "")).strip()
@@ -112,8 +123,7 @@ def _board(stop: dict[str, Any], default_max: int, target_len: int) -> dict[str,
         line = str(departure.get("lineNumber") or departure.get("name") or "–").strip()
         if not _matches_line(line, filters, nightbus):
             continue
-        target = str(departure.get("direction") or departure.get("route") or "–").strip()
-        target = target.replace("Bielefeld,", "").replace("Bi-", "").strip()
+        target = short_name(str(departure.get("direction") or departure.get("route") or "")) or "–"
         key = (line.casefold(), target.casefold())
         if key in seen:
             continue
@@ -124,7 +134,14 @@ def _board(stop: dict[str, Any], default_max: int, target_len: int) -> dict[str,
         rows.append({"line": line, "target": target, "mins": _format_minutes(countdown), "minutes": _minutes(countdown)})
         if len(rows) >= limit:
             break
-    title = str(stop.get("title") or station_name).replace("Bielefeld", "").strip(" ,") or "Haltestelle"
+    # Ohne eigenen Anzeigenamen (oder mit dem automatisch übernommenen Suchtreffer) zeigt die Tafel
+    # den Haltestellennamen aus der VRR-Antwort; dort sind Ort und Haltestelle per Komma getrennt.
+    custom = str(stop.get("title") or "").strip()
+    if custom and custom != station_name:
+        title = custom
+    else:
+        title = short_name(str(data.get("stationName") or station_name))
+    title = title or "Haltestelle"
     return {
         "title": title,
         "station_id": station_id,
@@ -153,7 +170,7 @@ def get_boards(config: dict[str, Any], *, force: bool = False) -> list[dict[str,
         except Exception as exc:
             LOGGER.warning("VRR-Abfrage für %s fehlgeschlagen: %s", stop.get("station_name"), exc)
             board = {
-                "title": str(stop.get("title") or stop.get("station_name") or "Haltestelle"),
+                "title": str(stop.get("title") or short_name(str(stop.get("station_name", ""))) or "Haltestelle"),
                 "station_id": str(stop.get("station_id", "")),
                 "station_name": str(stop.get("station_name", "")),
                 "rows": [],

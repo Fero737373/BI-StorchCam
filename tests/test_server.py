@@ -125,3 +125,15 @@ def test_open_mode_needs_no_pin_and_keeps_secret_key(config: dict, monkeypatch: 
         status, _headers, saved = post_json(address, "/api/config/save", {"config": candidate})
         assert status == 200 and saved["config"]["location"]["label"] == "Tokio"
         assert json.loads((tmp_path / "config.json").read_text())["youtube"]["api_key"] == "secretkey"
+
+
+def test_theme_image_prefers_custom_file_and_falls_back(config: dict, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    with running_server(config, monkeypatch, tmp_path) as address:
+        status, headers, body = request(address, "GET", "/theme/dagobert-tag")
+        assert status == 200 and headers["Content-Type"] == "image/svg+xml" and b"<svg" in body
+        (tmp_path / "theme").mkdir()
+        (tmp_path / "theme" / "dagobert-tag.png").write_bytes(b"\x89PNG custom")
+        status, headers, body = request(address, "GET", "/theme/dagobert-tag")
+        assert status == 200 and headers["Content-Type"] == "image/png" and body == b"\x89PNG custom"
+        assert request(address, "GET", "/theme/../config.json")[0] == 404
+        assert request(address, "GET", "/theme/config")[0] == 404

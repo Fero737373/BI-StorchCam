@@ -26,6 +26,8 @@ services:
         target: /run/user
         bind:
           propagation: rslave
+      # Bluetooth-Lautsprecher: bluetoothctl spricht über den System-D-Bus mit BlueZ auf dem Host.
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
 
     devices:
       - /dev/dri:/dev/dri

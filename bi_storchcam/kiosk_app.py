@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from . import player, spotify_connect
 from .admin import hash_pin
 from .config_store import ConfigError, config_path, load_config, public_config, save_config
 from .kiosk import BrowserManager
@@ -132,6 +133,8 @@ def _shutdown_server(server: StorchServer, state: StateManager) -> None:
     server.shutdown()
     server.server_close()
     state.stop()
+    player.shutdown()
+    spotify_connect.shutdown()
 
 
 def _start_browser(args: argparse.Namespace, config: dict[str, Any], url: str) -> BrowserManager | None:

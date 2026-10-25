@@ -56,6 +56,40 @@ const elements = {
   placeCurrent: byId("placeCurrent"),
   youtubeKeyState: byId("youtubeKeyState"),
   osk: byId("osk"),
+  nowPlaying: byId("nowPlaying"),
+  npCover: byId("npCover"),
+  npTitle: byId("npTitle"),
+  npArtist: byId("npArtist"),
+  npProgress: byId("npProgress"),
+  npBar: byId("npBar"),
+  npTime: byId("npTime"),
+  npOpen: byId("npOpen"),
+  npControls: byId("npControls"),
+  npToggle: byId("npToggle"),
+  npVolume: byId("npVolume"),
+  npVolumeRow: byId("npVolumeRow"),
+  playerNow: document.querySelector(".player-now"),
+  playerCover: byId("playerCover"),
+  playerTitle: byId("playerTitle"),
+  playerArtist: byId("playerArtist"),
+  playerToggle: byId("playerToggle"),
+  playerVolume: byId("playerVolume"),
+  playerQuery: byId("playerQuery"),
+  playerStatus: byId("playerStatus"),
+  playerResults: byId("playerResults"),
+  playerPlaylists: byId("playerPlaylists"),
+  playlistStatus: byId("playlistStatus"),
+  btState: byId("btState"),
+  btStatus: byId("btStatus"),
+  btDevices: byId("btDevices"),
+  spPairState: byId("spPairState"),
+  spPairStatus: byId("spPairStatus"),
+  spPairBox: byId("spPairBox"),
+  musicNow: byId("musicNow"),
+  spotifyState: byId("spotifyState"),
+  spotifyStatus: byId("spotifyStatus"),
+  ytState: byId("ytState"),
+  ytStatus: byId("ytStatus"),
 };
 
 let token = sessionStorage.getItem("bi-storchcam-admin-token") || "";
@@ -68,6 +102,15 @@ let streamSignature = "";
 let toastTimer = null;
 let runtimeTimezone = "Europe/Berlin";
 let youtubeKeySet = false;
+let spotifyConnected = false;
+let ytConnected = false;
+let ytPollTimer = null;
+let nowPlaying = null;
+let menuTab = "live";
+let playerService = "";
+let npCloseTimer = null;
+let btPollTimer = null;
+let pairPollTimer = null;
 let pendingTimezone = "";
 let liveTitle = "";
 let liveLoadedOnce = false;
@@ -85,13 +128,17 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const CLOUD = "M7 18.5h10.5a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.4 11.1 3.7 3.7 0 0 0 7 18.5z";
 const SUN_RAYS = "M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4";
 const SMALL_SUN = '<g class="wi-sun"><circle cx="7" cy="7" r="2.4"/><path d="M7 1.8v1.3M1.8 7h1.3M3.3 3.3l.9.9M10.7 3.3l-.9.9M3.3 10.7l.9-.9"/></g>';
+const SMALL_MOON = '<path class="wi-moon" d="M10.2 8.6A3.6 3.6 0 1 1 5.4 3.8a2.9 2.9 0 0 0 4.8 4.8z"/>';
 const WEATHER_ICONS = {
   sun: `<g class="wi-sun"><circle cx="12" cy="12" r="4"/><path d="${SUN_RAYS}"/></g>`,
+  moon: '<path class="wi-moon" d="M19 14.6A7.5 7.5 0 1 1 9.4 5a6 6 0 0 0 9.6 9.6z"/>',
   partly: `${SMALL_SUN}<path class="wi-cloud" transform="translate(1.5 2)" d="${CLOUD}"/>`,
+  "partly-night": `${SMALL_MOON}<path class="wi-cloud" transform="translate(1.5 2)" d="${CLOUD}"/>`,
   cloudy: `<path class="wi-cloud" d="${CLOUD}"/>`,
   fog: `<path class="wi-cloud" transform="translate(0 -4)" d="${CLOUD}"/><path class="wi-fog" d="M4.5 18.5h15M6.5 21.5h11"/>`,
   rain: `<path class="wi-cloud" transform="translate(0 -4)" d="${CLOUD}"/><path class="wi-drop" d="M8.5 17.5l-1 3M12.5 17.5l-1 3M16.5 17.5l-1 3"/>`,
   showers: `${SMALL_SUN}<path class="wi-cloud" transform="translate(1.5 1.5)" d="${CLOUD}"/><path class="wi-drop" d="M11 21l-.7 2.2M15.5 21l-.7 2.2"/>`,
+  "showers-night": `${SMALL_MOON}<path class="wi-cloud" transform="translate(1.5 1.5)" d="${CLOUD}"/><path class="wi-drop" d="M11 21l-.7 2.2M15.5 21l-.7 2.2"/>`,
   snow: `<path class="wi-cloud" transform="translate(0 -4)" d="${CLOUD}"/><path class="wi-snow" d="M8.5 18.5h.01M12 20.5h.01M15.5 18.5h.01M10 22h.01M14 22h.01"/>`,
   thunder: `<path class="wi-cloud" transform="translate(0 -4)" d="${CLOUD}"/><path class="wi-bolt" d="M12.8 15.5l-2.6 3.8h3.4l-2.4 3.7"/>`,
 };
@@ -217,6 +264,7 @@ function applyRuntimeConfig(runtime) {
   runtimeConfig = runtime;
   runtimeTimezone = runtime.timezone || runtime.app?.timezone || "Europe/Berlin";
   elements.body.dataset.theme = ui.theme || "dark";
+  applySky(lastState?.weather);
   const layout = resolveLayout(ui.layout_profile || "auto");
   if (elements.body.dataset.layout !== layout) {
     elements.body.dataset.layout = layout;
@@ -286,22 +334,22 @@ function renderSystem(system) {
   elements.sys.textContent = parts.join(" · ");
 }
 
-function weatherKind(code) {
-  if (code === 0 || code === 1) return "sun";
-  if (code === 2) return "partly";
+function weatherKind(code, isDay = true) {
+  if (code === 0 || code === 1) return isDay ? "sun" : "moon";
+  if (code === 2) return isDay ? "partly" : "partly-night";
   if (code === 45 || code === 48) return "fog";
   if (code >= 51 && code <= 67) return "rain";
   if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "snow";
-  if (code >= 80 && code <= 82) return "showers";
+  if (code >= 80 && code <= 82) return isDay ? "showers" : "showers-night";
   if (code >= 95 && code <= 99) return "thunder";
   return "cloudy";
 }
 
-function weatherIcon(code) {
+function weatherIcon(code, isDay) {
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("focusable", "false");
-  svg.innerHTML = WEATHER_ICONS[weatherKind(Number(code))];
+  svg.innerHTML = WEATHER_ICONS[weatherKind(Number(code), isDay)];
   return svg;
 }
 
@@ -314,28 +362,28 @@ function rainSummary(weather, forecast) {
   const minimal = isMinimal();
   if (weather.stale) {
     const time = formatTime(weather.updated_at);
-    return { text: time ? `Stand ${time} · offline` : "offline", alert: true };
+    return time ? `Stand ${time} · offline` : "offline";
   }
   const code = Number(weather.code);
   if (Number(weather.rain) > 0 || RAIN_NOW_CODES.has(code)) {
     const dry = forecast.find((item) => !item.rainy);
-    if (dry && !minimal) return { text: `Regen jetzt · trocken ab etwa ${hourOf(dry.time)} Uhr`, alert: true };
-    return { text: "Regen jetzt", alert: true };
+    if (dry && !minimal) return `Regen jetzt · trocken ab etwa ${hourOf(dry.time)} Uhr`;
+    return "Regen jetzt";
   }
   const rainy = forecast.find((item) => item.rainy);
   if (rainy) {
     const text = `ab ${hourOf(rainy.time)} Uhr · ${rainy.probability} %`;
-    return { text: minimal ? text : `Regen ${text}`, alert: true };
+    return minimal ? text : `Regen ${text}`;
   }
-  if (!forecast.length) return { text: "", alert: false };
+  if (!forecast.length) return "";
   const hours = forecast.length === 1 ? "Stunde" : `${forecast.length} Stunden`;
-  return { text: minimal ? `kein Regen · ${forecast.length} h` : `Kein Regen in den nächsten ${hours}`, alert: false };
+  return minimal ? `kein Regen · ${forecast.length} h` : `Kein Regen in den nächsten ${hours}`;
 }
 
 function renderRainHours(forecast) {
   const columns = forecast.slice(0, isMinimal() ? 6 : 8).map((item) => {
     const column = document.createElement("div");
-    column.className = `rain-col${item.rainy ? " is-rain" : ""}`;
+    column.className = "rain-col";
     const track = document.createElement("span");
     track.className = "rain-track";
     const bar = document.createElement("span");
@@ -351,7 +399,21 @@ function renderRainHours(forecast) {
   elements.rainHours.replaceChildren(...columns);
 }
 
+// Tag/Nacht kommt von Open-Meteo; ohne Wetterdaten entscheidet die Ortszeit (7–19 Uhr = Tag).
+function isDaytime(weather) {
+  if (typeof weather?.is_day === "boolean") return weather.is_day;
+  const hour = Number(new Intl.DateTimeFormat("de-DE", { hour: "numeric", hourCycle: "h23", timeZone: runtimeTimezone }).format(new Date()));
+  return hour >= 7 && hour < 19;
+}
+
+// Himmel der Bild-Themes: fest eingestellt oder nach Tag/Nacht. Das Wettersymbol folgt immer dem echten Sonnenstand.
+function applySky(weather) {
+  const mode = runtimeConfig?.ui?.sky || "auto";
+  elements.body.dataset.sky = mode === "auto" ? (isDaytime(weather) ? "day" : "night") : mode;
+}
+
 function renderWeather(weather) {
+  applySky(weather);
   if (!weather) return;
   elements.weatherText.textContent = weather.text || "Wetter nicht verfügbar";
   elements.weather.classList.toggle("provider-error", !weather.ok);
@@ -370,7 +432,7 @@ function renderWeather(weather) {
     elements.rainHours.replaceChildren();
     return;
   }
-  elements.weatherIcon.replaceChildren(weatherIcon(weather.code));
+  elements.weatherIcon.replaceChildren(weatherIcon(weather.code, isDaytime(weather)));
   elements.weatherTemp.textContent = `${formatMaybe(weather.temp)}°`;
   elements.weatherCondition.textContent = capitalize(weather.condition) || "Aktuell";
   const details = [];
@@ -380,9 +442,7 @@ function renderWeather(weather) {
   elements.weatherDetails.textContent = details.join(" · ");
   const forecast = Array.isArray(weather.forecast) ? weather.forecast : [];
   elements.rainLabel.textContent = isMinimal() ? "Regen" : "Regenwahrscheinlichkeit";
-  const summary = rainSummary(weather, forecast);
-  elements.rainSummary.textContent = summary.text;
-  elements.rainSummary.classList.toggle("is-alert", summary.alert);
+  elements.rainSummary.textContent = rainSummary(weather, forecast);
   renderRainHours(forecast);
 }
 
@@ -404,12 +464,13 @@ function textElement(tag, className, text) {
   return element;
 }
 
-function departureRow(row) {
+function departureRow(row, showStation) {
   const departure = document.createElement("div");
   departure.className = "departure";
   const main = document.createElement("span");
   main.className = "departure-main";
-  main.append(textElement("span", "departure-target", row.target), textElement("span", "departure-sub", `ab ${row.board}`));
+  main.append(textElement("span", "departure-target", row.target));
+  if (showStation) main.append(textElement("span", "departure-sub", `ab ${row.board}`));
   const time = document.createElement("span");
   time.className = "departure-time";
   const minutes = row.sortMinutes;
@@ -451,6 +512,7 @@ function boardMessage(title, text = "") {
 
 function renderBoards(boards) {
   elements.boards.replaceChildren();
+  byId("transitStation").textContent = "";
   const list = Array.isArray(boards) ? boards : [];
   if (runtimeConfig?.transit_stop_count === 0) {
     elements.boards.append(boardMessage("Keine Haltestellen eingerichtet", "Im Adminmodus hinzufügen"));
@@ -462,8 +524,11 @@ function renderBoards(boards) {
     .filter((board) => board.ok !== false)
     .flatMap((board) => (board.rows || []).map((row) => ({ ...row, board: board.title, sortMinutes: parseMinutes(row) })))
     .sort((a, b) => (a.sortMinutes ?? Infinity) - (b.sortMinutes ?? Infinity))
-    .map(departureRow);
-  const items = [...errors, ...rows].slice(0, isNarrow() ? 2 : 3);
+    .slice(0, isNarrow() ? 2 : 3);
+  // Eine Haltestelle steht neben der Überschrift; nur bei mehreren steht sie an jeder Zeile.
+  const stations = [...new Set(rows.map((row) => row.board))];
+  if (stations.length === 1) byId("transitStation").textContent = `ab ${stations[0]}`;
+  const items = [...errors, ...rows.map((row) => departureRow(row, stations.length > 1))].slice(0, isNarrow() ? 2 : 3);
   if (!items.length) {
     elements.boards.append(boardMessage("Keine passenden Abfahrten"));
     return;
@@ -471,10 +536,139 @@ function renderBoards(boards) {
   elements.boards.append(...items);
 }
 
+function formatDuration(ms) {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function musicLine(music) {
+  if (!music?.enabled) return "Musikanzeige ist aus";
+  if (music.playing) return `${music.title} · ${music.artist}`;
+  return music.error || "Gerade läuft nichts";
+}
+
+// Wen die Knöpfe steuern: „pi“ (YouTube Music über mpv) oder „spotify“ (Web API); sonst nichts.
+function musicTarget(music = nowPlaying) {
+  return music?.enabled && music.playing && ["pi", "spotify"].includes(music.controls) ? music.controls : "";
+}
+
+function setPausedLook(button, paused) {
+  button.classList.toggle("is-paused", paused);
+  button.setAttribute("aria-label", paused ? "Abspielen" : "Pause");
+}
+
+// Fortschritt läuft zwischen den Abfragen lokal weiter; fetched_at stammt vom selben Gerät.
+function updateMusicProgress() {
+  const music = nowPlaying;
+  const duration = Number(music?.duration_ms);
+  if (!music?.playing || !Number.isFinite(Number(music.progress_ms)) || !(duration > 0)) {
+    elements.npProgress.classList.add("hidden");
+    return;
+  }
+  const running = music.paused ? 0 : Math.max(0, Date.now() - Number(music.fetched_at || Date.now()));
+  const elapsed = Math.min(duration, Number(music.progress_ms) + running);
+  elements.npBar.style.width = `${(elapsed / duration) * 100}%`;
+  elements.npTime.textContent = `${formatDuration(elapsed)} / ${formatDuration(duration)}`;
+  elements.npProgress.classList.remove("hidden");
+}
+
+function renderPlayerNow(music) {
+  const target = musicTarget(music);
+  elements.playerNow.classList.toggle("is-idle", !target);
+  elements.playerTitle.textContent = music?.playing ? (music.title || "Unbekannter Titel") : "Gerade läuft nichts";
+  const where = music?.device === "pi" ? "auf dem Pi" : music?.device ? `auf ${music.device}` : "";
+  elements.playerArtist.textContent = music?.playing
+    ? [music.artist, music.loading ? "wird geladen …" : music.paused ? "pausiert" : "", where].filter(Boolean).join(" · ")
+    : "Suche unten einen Song aus.";
+  if (music?.error && music.controls === "pi") elements.playerArtist.textContent = music.error;
+  elements.playerCover.classList.toggle("hidden", !(music?.playing && music.cover));
+  if (music?.playing && music.cover && elements.playerCover.getAttribute("src") !== music.cover) elements.playerCover.src = music.cover;
+  setPausedLook(elements.playerToggle, !!music?.paused);
+  syncVolume(elements.playerVolume, music);
+}
+
+// Während ein Regler bedient wird, nicht mit dem alten Wert überschreiben.
+function syncVolume(slider, music) {
+  if (music?.volume === null || music?.volume === undefined || !Number.isFinite(Number(music.volume))) return;
+  if (document.activeElement !== slider) slider.value = String(music.volume);
+}
+
+const CARD_EASING = "cubic-bezier(0.2, 0.8, 0.2, 1)";
+
+// Karte und Cover wachsen fließend von der kleinen zur großen Form (und zurück): Anfangs- und Endmaß
+// messen, dann beide Größen animieren; der übrige Inhalt fließt mit, die Bedienung blendet ein.
+function animateCard(open) {
+  const card = elements.nowPlaying;
+  const art = card.querySelector(".np-art");
+  const before = card.getBoundingClientRect();
+  const artBefore = art.getBoundingClientRect();
+  // Eine noch laufende Animation endet hier; ihr aktueller Stand ist der neue Startpunkt.
+  card.getAnimations({ subtree: true }).forEach((animation) => animation.cancel());
+  card.classList.toggle("is-open", open);
+  if (card.classList.contains("hidden") || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const after = card.getBoundingClientRect();
+  const artAfter = art.getBoundingClientRect();
+  const timing = { duration: 380, easing: CARD_EASING };
+  card.animate([
+    { width: `${before.width}px`, height: `${before.height}px` },
+    { width: `${after.width}px`, height: `${after.height}px` },
+  ], timing);
+  art.animate([
+    { width: `${artBefore.width}px`, height: `${artBefore.height}px` },
+    { width: `${artAfter.width}px`, height: `${artAfter.height}px` },
+  ], timing);
+  if (open) {
+    card.querySelectorAll(".np-more").forEach((part) => part.animate(
+      [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }],
+      { duration: 260, delay: 140, easing: "ease-out", fill: "backwards" },
+    ));
+  }
+}
+
+// Die große Karte schließt sich nach einer Weile ohne Berührung wieder.
+function setCardOpen(open) {
+  clearTimeout(npCloseTimer);
+  if (elements.nowPlaying.classList.contains("is-open") !== open) animateCard(open);
+  elements.npOpen.setAttribute("aria-expanded", String(open));
+  elements.npOpen.setAttribute("aria-label", open ? "Song klein anzeigen" : "Song groß anzeigen");
+  if (open) npCloseTimer = setTimeout(() => setCardOpen(false), 20000);
+}
+
+function renderMusic(music) {
+  nowPlaying = music || null;
+  elements.musicNow.textContent = musicLine(music);
+  renderPlayerNow(music);
+  const playing = !!(music?.enabled && music.playing);
+  elements.nowPlaying.classList.toggle("hidden", !playing);
+  if (!playing) {
+    setCardOpen(false);
+    return;
+  }
+  const target = musicTarget(music);
+  elements.npControls.classList.toggle("hidden", !target);
+  const hasVolume = !!target && music.volume !== null && music.volume !== undefined;
+  elements.npVolumeRow.classList.toggle("hidden", !hasVolume);
+  syncVolume(elements.npVolume, music);
+  elements.nowPlaying.classList.toggle("is-paused", !!music.paused);
+  setPausedLook(elements.npToggle, !!music.paused);
+  elements.npTitle.textContent = music.title || "Unbekannter Titel";
+  elements.npArtist.textContent = music.artist || "";
+  elements.nowPlaying.dataset.source = music.source || "";
+  if (music.cover) {
+    if (elements.npCover.getAttribute("src") !== music.cover) elements.npCover.src = music.cover;
+    elements.npCover.classList.remove("hidden");
+  } else {
+    elements.npCover.removeAttribute("src");
+    elements.npCover.classList.add("hidden");
+  }
+  updateMusicProgress();
+}
+
 function renderPanels(state) {
   renderWeather(state.weather);
   renderBoards(state.boards);
   renderSystem(state.system);
+  renderMusic(state.music);
 }
 
 async function refreshState() {
@@ -526,7 +720,8 @@ function trapFocus(dialog, event) {
   }
 }
 
-async function beginAdmin(trigger) {
+async function beginAdmin(trigger, tab = "live") {
+  menuTab = tab;
   try {
     if (token) {
       await loadConfig();
@@ -592,6 +787,7 @@ function fillForm(config) {
   byId("cfgLon").value = config.location.longitude;
   byId("cfgLayout").value = config.ui.layout_profile;
   byId("cfgTheme").value = config.ui.theme;
+  byId("cfgSky").value = config.ui.sky || "auto";
   byId("showClock").checked = !!config.ui.clock.enabled;
   byId("showWeather").checked = !!config.ui.weather.enabled;
   byId("showTransit").checked = !!config.ui.transit.enabled;
@@ -601,6 +797,7 @@ function fillForm(config) {
   elements.youtubeKeyState.textContent = youtubeKeySet
     ? "Ein Schlüssel ist hinterlegt; die Suche nutzt die offizielle YouTube-API. Zum Ersetzen neuen Schlüssel eintragen und speichern."
     : "Kein Schlüssel nötig: Die Suche liest die öffentliche YouTube-Suche mit dem Filter „Live“. Ein eigener Schlüssel ist optional.";
+  fillMusicForm(config.music || {});
   elements.placeCurrent.textContent = `${config.location.label} (${config.app?.timezone || runtimeTimezone})`;
   elements.liveCurrent.textContent = liveTitle || config.stream.url || "kein Stream";
   pendingTimezone = "";
@@ -614,6 +811,8 @@ async function loadConfig() {
   try {
     const result = await api("/api/config");
     youtubeKeySet = !!result.youtube_key_set;
+    spotifyConnected = !!result.spotify_connected;
+    ytConnected = !!result.ytmusic_connected;
     currentConfig = result.config;
     fillForm(currentConfig);
   } catch (error) {
@@ -623,6 +822,396 @@ async function loadConfig() {
     }
     throw error;
   }
+}
+
+function spotifyRedirectUri() {
+  return `${window.location.origin}/api/music/spotify/callback`;
+}
+
+function fillMusicForm(music) {
+  byId("cfgMusicSource").value = music.source || "off";
+  byId("cfgSpotifyClient").value = music.spotify?.client_id || "";
+  updateYtState();
+  setStatus(elements.ytStatus, "");
+  stopYtPolling();
+  pollYtLogin(true);
+  byId("spotifyRedirect").textContent = spotifyRedirectUri();
+  byId("spotifyHostHint").classList.toggle("hidden", window.location.hostname !== "localhost");
+  updateSpotifyState();
+  elements.musicNow.textContent = musicLine(lastState?.music);
+  setStatus(elements.spotifyStatus, "");
+}
+
+function updateYtState(pending = false) {
+  elements.ytState.textContent = pending
+    ? "Anmeldefenster ist offen. Melde dich dort mit deinem Google-Konto an."
+    : ytConnected
+      ? "Verbunden. Neue Songs aus deinem YouTube-Music-Verlauf erscheinen oben rechts."
+      : "Nicht verbunden.";
+  byId("ytConnect").textContent = ytConnected ? "Neu anmelden" : "Am Bildschirm anmelden";
+  byId("ytConnect").classList.toggle("hidden", pending);
+  byId("ytCancel").classList.toggle("hidden", !pending);
+  byId("ytDisconnect").classList.toggle("hidden", !ytConnected || pending);
+}
+
+function stopYtPolling() {
+  clearTimeout(ytPollTimer);
+  ytPollTimer = null;
+}
+
+// quiet: nur nachsehen (Menü geöffnet), alte Fehler nicht erneut anzeigen.
+async function pollYtLogin(quiet = false) {
+  try {
+    const status = await api("/api/music/ytmusic/login");
+    ytConnected = !!status.connected;
+    if (status.status === "pending") {
+      updateYtState(true);
+      ytPollTimer = setTimeout(pollYtLogin, 2000);
+      return;
+    }
+    updateYtState();
+    if (quiet) return;
+    if (status.status === "connected") {
+      setStatus(elements.ytStatus, `Verbunden. Zuletzt gehört: ${status.latest || "–"}`, "success");
+      showToast("YouTube Music verbunden");
+    } else if (status.status === "error") {
+      setStatus(elements.ytStatus, status.error || "Anmeldung fehlgeschlagen", "error");
+    }
+  } catch (error) {
+    updateYtState();
+    if (!quiet) setStatus(elements.ytStatus, `Anmeldestatus nicht abrufbar: ${error.message}`, "error");
+  }
+}
+
+async function connectYt() {
+  stopYtPolling();
+  hideKeyboard();
+  byId("ytConnect").disabled = true;
+  setStatus(elements.ytStatus, "Anmeldefenster wird geöffnet …");
+  try {
+    await api("/api/music/ytmusic/login", { method: "POST", body: "{}" });
+    setStatus(elements.ytStatus, "");
+    updateYtState(true);
+    ytPollTimer = setTimeout(pollYtLogin, 2000);
+  } catch (error) {
+    setStatus(elements.ytStatus, `Anmelden fehlgeschlagen: ${error.message}`, "error");
+  } finally {
+    byId("ytConnect").disabled = false;
+  }
+}
+
+async function cancelYt() {
+  stopYtPolling();
+  try {
+    await api("/api/music/ytmusic/cancel", { method: "POST", body: "{}" });
+    setStatus(elements.ytStatus, "Anmeldung abgebrochen");
+  } catch (error) {
+    setStatus(elements.ytStatus, `Abbrechen fehlgeschlagen: ${error.message}`, "error");
+  }
+  updateYtState();
+}
+
+async function disconnectYt() {
+  if (!window.confirm("YouTube Music trennen?")) return;
+  try {
+    await api("/api/music/ytmusic/disconnect", { method: "POST", body: "{}" });
+    stopYtPolling();
+    ytConnected = false;
+    updateYtState();
+    showToast("YouTube Music getrennt");
+  } catch (error) {
+    setStatus(elements.ytStatus, `Trennen fehlgeschlagen: ${error.message}`, "error");
+  }
+}
+
+function updateSpotifyState() {
+  elements.spotifyState.textContent = spotifyConnected
+    ? "Verbunden. Der Zugang erneuert sich automatisch."
+    : "Nicht verbunden. Die Anmeldung öffnet sich hier auf dem Bildschirm und kehrt danach automatisch zurück.";
+  byId("spotifyConnect").textContent = spotifyConnected ? "Neu verbinden" : "Mit Spotify verbinden";
+  byId("spotifyDisconnect").classList.toggle("hidden", !spotifyConnected);
+}
+
+async function connectSpotify() {
+  const clientId = byId("cfgSpotifyClient").value.trim();
+  if (!clientId) {
+    setStatus(elements.spotifyStatus, "Bitte zuerst die Client-ID eintragen (Anleitung unten).", "error");
+    return;
+  }
+  // Ungespeicherte Änderungen zuerst sichern, denn die Anmeldung verlässt kurz die Seite.
+  if (dirty) {
+    await saveConfig();
+    if (dirty) return;
+  }
+  byId("spotifyConnect").disabled = true;
+  setStatus(elements.spotifyStatus, "Spotify-Anmeldung wird geöffnet …");
+  try {
+    const result = await api("/api/music/spotify/authorize", {
+      method: "POST",
+      body: JSON.stringify({ client_id: clientId, redirect_uri: spotifyRedirectUri() }),
+    });
+    window.location.assign(result.url);
+  } catch (error) {
+    setStatus(elements.spotifyStatus, `Verbinden fehlgeschlagen: ${error.message}`, "error");
+    byId("spotifyConnect").disabled = false;
+  }
+}
+
+async function disconnectSpotify() {
+  if (!window.confirm("Spotify-Verbindung trennen?")) return;
+  try {
+    await api("/api/music/spotify/disconnect", { method: "POST", body: "{}" });
+    spotifyConnected = false;
+    updateSpotifyState();
+    showToast("Spotify getrennt");
+  } catch (error) {
+    setStatus(elements.spotifyStatus, `Trennen fehlgeschlagen: ${error.message}`, "error");
+  }
+}
+
+async function sendControl(action, value) {
+  const target = musicTarget();
+  if (!target) return;
+  if (action === "toggle" && nowPlaying) {
+    nowPlaying = { ...nowPlaying, paused: !nowPlaying.paused, progress_ms: Number(nowPlaying.progress_ms || 0) + (nowPlaying.paused ? 0 : Date.now() - Number(nowPlaying.fetched_at || Date.now())), fetched_at: Date.now() };
+    renderMusic(nowPlaying);
+  }
+  try {
+    await api("/api/player/control", { method: "POST", body: JSON.stringify({ target, action, value }) });
+  } catch (error) {
+    showToast(error.message);
+  }
+  setTimeout(refreshState, 700);
+}
+
+function selectService(service) {
+  playerService = service;
+  document.querySelectorAll(".segment[data-service]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.service === service)));
+  elements.playerResults.replaceChildren();
+  const missing = service === "spotify" ? !spotifyConnected : !ytConnected;
+  setStatus(elements.playerStatus, missing ? `${service === "spotify" ? "Spotify" : "YouTube Music"} ist noch nicht verbunden (Tab „Musik“).` : "", missing ? "error" : "");
+  elements.playerPlaylists.replaceChildren();
+  setStatus(elements.playlistStatus, "");
+  if (!missing) loadPlaylists(service);
+}
+
+function playerCard(item, list) {
+  const card = document.createElement("button");
+  card.type = "button";
+  card.className = "player-card";
+  let art;
+  if (item.cover) {
+    art = document.createElement("img");
+    art.alt = "";
+    art.loading = "lazy";
+    art.src = item.cover;
+  } else {
+    art = textElement("span", "player-noart", "");
+  }
+  const subtitle = [KIND_LABELS[item.kind] || "", item.subtitle].filter(Boolean).join(" · ");
+  card.append(art, textElement("strong", "", item.title), textElement("span", "", subtitle));
+  card.addEventListener("click", () => playItem(item, card, list));
+  return card;
+}
+
+async function loadPlaylists(service) {
+  setStatus(elements.playlistStatus, "Playlists werden geladen …");
+  try {
+    const result = await api("/api/player/playlists", { method: "POST", body: JSON.stringify({ service }) });
+    if (service !== playerService) return;
+    setStatus(elements.playlistStatus, result.results.length ? "" : "Keine eigenen Playlists gefunden.");
+    elements.playerPlaylists.replaceChildren(...result.results.map((item) => playerCard(item, elements.playerPlaylists)));
+  } catch (error) {
+    if (service === playerService) setStatus(elements.playlistStatus, error.message, "error");
+  }
+}
+
+const KIND_LABELS = { song: "Song", video: "Video", album: "Album", playlist: "Playlist", track: "Song" };
+
+async function searchPlayer() {
+  const query = elements.playerQuery.value.trim();
+  if (!query) return;
+  hideKeyboard();
+  elements.playerResults.replaceChildren();
+  byId("playerSearchBtn").disabled = true;
+  setStatus(elements.playerStatus, `Suche „${query}“ …`);
+  try {
+    const result = await api("/api/player/search", { method: "POST", body: JSON.stringify({ service: playerService, query }) });
+    if (!result.results.length) {
+      setStatus(elements.playerStatus, "Nichts gefunden. Anderes Suchwort versuchen.");
+      return;
+    }
+    setStatus(elements.playerStatus, "Zum Abspielen antippen");
+    elements.playerResults.replaceChildren(...result.results.map((item) => playerCard(item, elements.playerResults)));
+  } catch (error) {
+    setStatus(elements.playerStatus, error.message, "error");
+  } finally {
+    byId("playerSearchBtn").disabled = false;
+  }
+}
+
+async function playItem(item, card, list) {
+  const status = list === elements.playerPlaylists ? elements.playlistStatus : elements.playerStatus;
+  const cards = document.querySelectorAll(".player-card");
+  cards.forEach((button) => { button.disabled = true; button.classList.remove("is-current"); });
+  setStatus(status, `Starte „${item.title}“ …`);
+  try {
+    await api("/api/player/play", { method: "POST", body: JSON.stringify({ service: playerService, kind: item.kind, id: item.id }) });
+    setStatus(status, `Läuft: ${item.title}`, "success");
+    card.classList.add("is-current");
+  } catch (error) {
+    setStatus(status, error.message, "error");
+  } finally {
+    cards.forEach((button) => { button.disabled = false; });
+    setTimeout(refreshState, 1500);
+  }
+}
+
+const BT_ACTIONS = { scan: "Suche läuft", connect: "Verbinde", disconnect: "Trenne", remove: "Entferne" };
+
+function stopPlayerPolling() {
+  clearTimeout(btPollTimer);
+  clearTimeout(pairPollTimer);
+  btPollTimer = null;
+  pairPollTimer = null;
+}
+
+function bluetoothRow(device, busy) {
+  const row = document.createElement("div");
+  row.className = `bt-device${device.connected ? " is-connected" : ""}`;
+  const text = document.createElement("div");
+  text.append(textElement("strong", "", device.name), textElement("span", "", device.connected ? "Verbunden" : device.paired ? "Gekoppelt" : "Gefunden"));
+  row.append(text);
+  const actions = device.connected
+    ? [["disconnect", "Trennen", "button-secondary"]]
+    : [["connect", "Verbinden", "button-primary"]];
+  if (device.paired) actions.push(["remove", "Entfernen", "button-danger"]);
+  actions.forEach(([action, label, style]) => {
+    const button = textElement("button", `button ${style}`, label);
+    button.type = "button";
+    button.disabled = busy;
+    button.addEventListener("click", () => bluetoothAction(action, device.mac));
+    row.append(button);
+  });
+  return row;
+}
+
+function renderBluetooth(status) {
+  byId("btScan").disabled = !status.available || status.busy;
+  if (!status.available) {
+    elements.btState.textContent = "";
+    setStatus(elements.btStatus, status.error || "Bluetooth nicht verfügbar", "error");
+    elements.btDevices.replaceChildren();
+    return;
+  }
+  const connected = status.devices.filter((device) => device.connected).map((device) => device.name);
+  elements.btState.textContent = connected.length ? `Ton läuft über: ${connected.join(", ")}` : "Kein Lautsprecher verbunden.";
+  if (status.busy) {
+    const name = status.devices.find((device) => device.mac === status.mac)?.name || "";
+    setStatus(elements.btStatus, `${BT_ACTIONS[status.action] || "Bitte warten"}${name ? ` mit ${name}` : ""} …`);
+  } else if (status.message) {
+    setStatus(elements.btStatus, status.message, status.ok ? "success" : "error");
+  } else {
+    setStatus(elements.btStatus, status.devices.length ? "" : "Noch keine Lautsprecher gefunden. „Lautsprecher suchen“ tippen.");
+  }
+  elements.btDevices.replaceChildren(...status.devices.map((device) => bluetoothRow(device, status.busy)));
+}
+
+async function loadBluetooth() {
+  clearTimeout(btPollTimer);
+  try {
+    const status = await api("/api/bluetooth");
+    renderBluetooth(status);
+    if (status.busy && elements.settings.open) btPollTimer = setTimeout(loadBluetooth, 1500);
+  } catch (error) {
+    setStatus(elements.btStatus, `Bluetooth-Status nicht abrufbar: ${error.message}`, "error");
+  }
+}
+
+async function bluetoothAction(action, mac = "") {
+  if (action === "remove" && !window.confirm("Lautsprecher entfernen? Danach muss er neu gekoppelt werden.")) return;
+  try {
+    await api(`/api/bluetooth/${action}`, { method: "POST", body: JSON.stringify({ mac }) });
+  } catch (error) {
+    setStatus(elements.btStatus, error.message, "error");
+    return;
+  }
+  loadBluetooth();
+}
+
+function renderSpotifyPair(status) {
+  const pairing = status.status === "pairing";
+  elements.spPairState.textContent = status.paired
+    ? status.running ? `Gekoppelt. „${status.name}“ steht in Spotify als Lautsprecher bereit.` : "Gekoppelt, startet gerade …"
+    : pairing ? "Warte auf die Bestätigung in Spotify …" : "Nicht gekoppelt. Damit Spotify auf dem Pi (und dem Bluetooth-Lautsprecher) spielt, einmal koppeln.";
+  byId("spPair").textContent = status.paired ? "Neu koppeln" : "Pi als Spotify-Lautsprecher koppeln";
+  byId("spUnpair").classList.toggle("hidden", !status.paired);
+  elements.spPairBox.classList.toggle("hidden", !(pairing && status.qr));
+  if (pairing && status.qr) {
+    byId("spPairQr").src = status.qr;
+    byId("spPairUrl").textContent = status.url;
+    byId("spPairCode").textContent = status.code || "–";
+  }
+  if (status.status === "error" || status.status === "crashed") setStatus(elements.spPairStatus, status.error || "Der Spotify-Lautsprecher ist abgestürzt", "error");
+}
+
+async function loadSpotifyPair(fromPairing = false) {
+  clearTimeout(pairPollTimer);
+  try {
+    const status = await api("/api/music/spotify/pair");
+    renderSpotifyPair(status);
+    if (status.status === "pairing" && elements.settings.open) pairPollTimer = setTimeout(() => loadSpotifyPair(true), 2000);
+    else if (fromPairing && status.paired) {
+      setStatus(elements.spPairStatus, "Gekoppelt", "success");
+      showToast("Spotify-Lautsprecher gekoppelt");
+    }
+  } catch (error) {
+    setStatus(elements.spPairStatus, `Status nicht abrufbar: ${error.message}`, "error");
+  }
+}
+
+async function pairSpotify() {
+  byId("spPair").disabled = true;
+  setStatus(elements.spPairStatus, "Kopplungscode wird angefordert …");
+  try {
+    renderSpotifyPair(await api("/api/music/spotify/pair", { method: "POST", body: "{}" }));
+    setStatus(elements.spPairStatus, "");
+    pairPollTimer = setTimeout(() => loadSpotifyPair(true), 2000);
+  } catch (error) {
+    setStatus(elements.spPairStatus, error.message, "error");
+  } finally {
+    byId("spPair").disabled = false;
+  }
+}
+
+async function unpairSpotify() {
+  if (!window.confirm("Spotify-Kopplung des Pi entfernen?")) return;
+  try {
+    await api("/api/music/spotify/unpair", { method: "POST", body: "{}" });
+    setStatus(elements.spPairStatus, "Kopplung entfernt");
+  } catch (error) {
+    setStatus(elements.spPairStatus, error.message, "error");
+  }
+  loadSpotifyPair();
+}
+
+function showPlayerTab() {
+  if (!playerService) selectService(!ytConnected && spotifyConnected ? "spotify" : "ytmusic");
+  renderPlayerNow(nowPlaying);
+  setStatus(elements.btStatus, "");
+  setStatus(elements.spPairStatus, "");
+  loadBluetooth();
+  loadSpotifyPair();
+}
+
+// Rücksprung von der Spotify-Anmeldung: Meldung zeigen und den Musik-Tab wieder öffnen.
+function handleMusicReturn() {
+  const params = new URLSearchParams(window.location.search);
+  const outcome = params.get("music");
+  if (!outcome) return;
+  window.history.replaceState(null, "", window.location.pathname);
+  showToast(outcome === "connected" ? "Spotify verbunden" : `Spotify: ${params.get("reason") || "Anmeldung fehlgeschlagen"}`);
+  beginAdmin(elements.hotspot, "music");
 }
 
 function renderStopEditor() {
@@ -648,7 +1237,7 @@ function renderStopEditor() {
         </div>
       </header>
       <div class="stop-fields">
-        <label class="field wide"><span>Anzeigename</span><input name="title" value="${escapeHtml(stop.title || "")}" maxlength="80"></label>
+        <label class="field wide"><span>Anzeigename</span><input name="title" value="${escapeHtml(stop.title || "")}" maxlength="80" placeholder="automatisch (nur Haltestelle)"></label>
         <label class="field wide"><span>Haltestellenname</span><input name="station_name" value="${escapeHtml(stop.station_name || "")}" maxlength="160" required></label>
         <label class="field"><span>Haltestellen-ID</span><input name="station_id" value="${escapeHtml(stop.station_id || "")}" maxlength="80"></label>
         <label class="field"><span>Linienfilter (Komma)</span><input name="line_filter" value="${escapeHtml((stop.line_filter || []).join(", "))}" maxlength="160"></label>
@@ -715,7 +1304,7 @@ async function searchStations() {
       add.textContent = "Hinzufügen";
       add.addEventListener("click", () => {
         workingStops.push({
-          title: station.station_name.replace("Bielefeld", "").trim() || station.station_name,
+          title: "",
           station_name: station.station_name,
           station_id: station.station_id,
           line_filter: [],
@@ -749,6 +1338,7 @@ function collectConfig() {
   config.location.longitude = Number(byId("cfgLon").value);
   config.ui.layout_profile = byId("cfgLayout").value;
   config.ui.theme = byId("cfgTheme").value;
+  config.ui.sky = byId("cfgSky").value;
   config.ui.clock.enabled = byId("showClock").checked;
   config.ui.weather.enabled = byId("showWeather").checked;
   config.ui.transit.enabled = byId("showTransit").checked;
@@ -758,6 +1348,10 @@ function collectConfig() {
     config.youtube.api_key = byId("cfgYoutubeKey").value.trim();
     config.youtube.default_query = byId("cfgYoutubeQuery").value.trim();
   }
+  config.music = {
+    source: byId("cfgMusicSource").value,
+    spotify: { client_id: byId("cfgSpotifyClient").value.trim() },
+  };
   if (pendingTimezone) config.app.timezone = pendingTimezone;
   if (!config.location.label) throw new Error("Standortname fehlt");
   if (!Number.isFinite(config.location.latitude) || !Number.isFinite(config.location.longitude)) throw new Error("Koordinaten sind ungültig");
@@ -795,11 +1389,14 @@ function showTab(name) {
   document.querySelectorAll(".menu-panel").forEach((panel) => { panel.hidden = panel.dataset.panel !== name; });
   hideKeyboard();
   if (name === "live" && !liveLoadedOnce) searchLive(byId("cfgYoutubeQuery").value.trim() || "Storch");
+  if (name === "player") showPlayerTab();
+  else stopPlayerPolling();
 }
 
 function openMenu(trigger) {
   openDialog(elements.settings, trigger);
-  showTab("live");
+  showTab(menuTab);
+  menuTab = "live";
 }
 
 async function searchLive(query) {
@@ -950,9 +1547,13 @@ function buildKeyboard() {
   elements.osk.replaceChildren(handle, ...rows);
 }
 
+// Nur Beschriftungen tauschen statt die Tastatur neu aufzubauen; das hält das Tippen flüssig.
 function setShift(value) {
   oskShift = value;
-  buildKeyboard();
+  elements.osk.querySelectorAll(".osk-char").forEach((button) => {
+    button.textContent = oskShift ? oskUpper(button.dataset.key) : button.dataset.key;
+  });
+  elements.osk.querySelector(".osk-shift")?.setAttribute("aria-pressed", String(oskShift));
 }
 
 function showKeyboard(input) {
@@ -1009,7 +1610,7 @@ function typeKey(key) {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-const RIPPLE_TARGETS = ".button, .icon-button, .menu-button, .menu-tab, .live-card, .place-card, .toggle, .osk-key, .osk-close";
+const RIPPLE_TARGETS = ".button, .icon-button, .menu-button, .menu-tab, .live-card, .place-card, .player-card, .segment, .toggle, .osk-key, .osk-close";
 
 function ripple(event) {
   const target = event.target.closest(RIPPLE_TARGETS);
@@ -1059,12 +1660,18 @@ elements.liveQuery.addEventListener("keydown", (event) => {
 elements.placeQuery.addEventListener("keydown", (event) => {
   if (event.key === "Enter") { event.preventDefault(); searchPlaces(); }
 });
-// Fokuswechsel verhindern, damit das Eingabefeld Fokus und Cursor behält; getippt wird beim Loslassen (click).
-elements.osk.addEventListener("pointerdown", (event) => event.preventDefault());
+// Getippt wird schon beim Berühren (pointerdown), nicht erst beim Loslassen; preventDefault verhindert
+// den Fokuswechsel, damit das Eingabefeld Fokus und Cursor behält.
+elements.osk.addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  const button = event.target.closest("[data-key]");
+  if (button && event.button === 0) typeKey(button.dataset.key);
+});
 elements.osk.addEventListener("mousedown", (event) => event.preventDefault());
+// Bedienung per Hardwaretastatur (Enter/Leertaste auf einer Taste) löst nur click ohne pointerdown aus.
 elements.osk.addEventListener("click", (event) => {
   const button = event.target.closest("[data-key]");
-  if (button) typeKey(button.dataset.key);
+  if (button && event.detail === 0) typeKey(button.dataset.key);
 });
 document.addEventListener("pointerdown", ripple);
 document.addEventListener("focusin", (event) => {
@@ -1072,7 +1679,7 @@ document.addEventListener("focusin", (event) => {
   if (input instanceof HTMLInputElement && ["text", "search", "password", "number"].includes(input.type) && input.closest("dialog")) showKeyboard(input);
   else if (input instanceof HTMLTextAreaElement && input.closest("dialog")) showKeyboard(input);
 });
-elements.settings.addEventListener("close", hideKeyboard);
+elements.settings.addEventListener("close", () => { hideKeyboard(); stopYtPolling(); stopPlayerPolling(); });
 elements.pinDialog.addEventListener("close", hideKeyboard);
 document.addEventListener("keydown", (event) => {
   if (event.ctrlKey && event.altKey && event.key.toLowerCase() === "s") {
@@ -1110,6 +1717,39 @@ elements.stopEditor.addEventListener("click", (event) => {
   if (button) stopAction(button);
 });
 byId("stationSearchBtn").addEventListener("click", searchStations);
+byId("spotifyConnect").addEventListener("click", connectSpotify);
+byId("spotifyDisconnect").addEventListener("click", disconnectSpotify);
+byId("ytConnect").addEventListener("click", connectYt);
+byId("ytCancel").addEventListener("click", cancelYt);
+byId("ytDisconnect").addEventListener("click", disconnectYt);
+elements.npOpen.addEventListener("click", () => setCardOpen(!elements.nowPlaying.classList.contains("is-open")));
+elements.npControls.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-control]");
+  if (!button) return;
+  setCardOpen(true);
+  sendControl(button.dataset.control);
+});
+elements.npVolume.addEventListener("input", () => setCardOpen(true));
+elements.npVolume.addEventListener("change", () => {
+  sendControl("volume", Number(elements.npVolume.value));
+  elements.npVolume.blur();
+});
+document.querySelectorAll("[data-player]").forEach((button) => button.addEventListener("click", () => sendControl(button.dataset.player)));
+// Die Lautstärke gehört nicht zur gespeicherten Konfiguration, darum nicht als „ungespeichert“ zählen.
+elements.playerVolume.addEventListener("input", (event) => event.stopPropagation());
+elements.playerVolume.addEventListener("change", (event) => {
+  event.stopPropagation();
+  sendControl("volume", Number(elements.playerVolume.value));
+});
+document.querySelectorAll(".segment[data-service]").forEach((button) => button.addEventListener("click", () => selectService(button.dataset.service)));
+byId("playerSearchBtn").addEventListener("click", searchPlayer);
+elements.playerQuery.addEventListener("input", (event) => event.stopPropagation());
+elements.playerQuery.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") { event.preventDefault(); searchPlayer(); }
+});
+byId("btScan").addEventListener("click", () => bluetoothAction("scan"));
+byId("spPair").addEventListener("click", pairSpotify);
+byId("spUnpair").addEventListener("click", unpairSpotify);
 byId("stationQuery").addEventListener("keydown", (event) => {
   if (event.key === "Enter") { event.preventDefault(); searchStations(); }
 });
@@ -1124,7 +1764,9 @@ window.addEventListener("beforeunload", (event) => {
   if (dirty) { event.preventDefault(); event.returnValue = ""; }
 });
 
+applySky(null);
 updateClock();
-setInterval(updateClock, 1000);
+setInterval(() => { updateClock(); updateMusicProgress(); }, 1000);
 refreshState();
 setInterval(refreshState, 5000);
+handleMusicReturn();

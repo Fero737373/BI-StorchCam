@@ -90,3 +90,16 @@ def test_old_config_with_radar_is_migrated(tmp_path: Path) -> None:
     loaded = load_config(target)
     assert "radar" not in loaded and "radar" not in loaded["ui"]
     assert "radar" not in json.loads(target.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("theme", ["y2k", "dagobert"])
+def test_picture_themes_are_valid(config: dict, theme: str) -> None:
+    validated = validate_config({**config, "ui": {**config["ui"], "theme": theme}})
+    assert validated["ui"]["theme"] == theme
+
+
+def test_sky_mode_defaults_to_auto_and_rejects_unknown(config: dict) -> None:
+    assert validate_config(config)["ui"]["sky"] == "auto"
+    assert validate_config({**config, "ui": {**config["ui"], "sky": "night"}})["ui"]["sky"] == "night"
+    with pytest.raises(ConfigError):
+        validate_config({**config, "ui": {**config["ui"], "sky": "dusk"}})

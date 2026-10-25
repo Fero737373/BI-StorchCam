@@ -121,7 +121,7 @@ def get_weather(config: dict[str, Any], *, force: bool = False, now: datetime | 
     params = {
         "latitude": str(location.get("latitude", 52.0302)),
         "longitude": str(location.get("longitude", 8.5325)),
-        "current": "temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m",
+        "current": "temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,is_day",
         "hourly": "precipitation,precipitation_probability,weather_code",
         "forecast_days": "3",
         "timezone": timezone_name,
@@ -143,6 +143,7 @@ def get_weather(config: dict[str, Any], *, force: bool = False, now: datetime | 
             "text": _summary(str(location.get("label", "Bielefeld")), current_data, forecast, weather),
             "condition": _condition(current_data),
             "code": _weather_code(current_data),
+            "is_day": bool(current_data.get("is_day", 1)),
             "temp": round(float(current_data.get("temperature_2m", 0))),
             "feels": round(float(current_data.get("apparent_temperature", 0))),
             "wind": round(float(current_data.get("wind_speed_10m", 0))),

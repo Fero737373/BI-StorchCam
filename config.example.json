@@ -48,8 +48,15 @@
     "pin_hash": "",
     "require_pin": true
   },
+  "music": {
+    "source": "off",
+    "spotify": {
+      "client_id": ""
+    }
+  },
   "ui": {
     "theme": "dark",
+    "sky": "auto",
     "layout_profile": "auto",
     "clock": {
       "enabled": true

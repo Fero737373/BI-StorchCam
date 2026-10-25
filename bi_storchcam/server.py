@@ -15,10 +15,12 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
+from . import bluetooth, player, spotify_connect
 from .admin import SessionStore, hash_pin, verify_pin
 from .config_store import ConfigError, config_path, public_config, save_config, validate_config, youtube_api_key
+from .providers import music, ytmusic
 from .providers.geocoding import search_places, timezone_for
 from .providers.transit_vrr_smart import search_station
 from .providers.youtube import YouTubeError, search_live
@@ -36,6 +38,24 @@ PostRoute = Callable[[dict[str, Any]], Any]
 
 def web_directory() -> Path:
     return Path(__file__).resolve().parent / "web"
+
+
+# Theme-Bilder, die man selbst in <Konfigordner>/theme/ ablegen kann (z. B. data/theme/dagobert-tag.png);
+# fehlt die Datei, liefert der Server die mitgelieferte Zeichnung aus web/theme/.
+THEME_IMAGES = {"dagobert-tag", "dagobert-nacht"}
+THEME_IMAGE_SUFFIXES = (".png", ".webp", ".svg")
+
+
+def theme_image(name: str) -> Path | None:
+    if name not in THEME_IMAGES:
+        return None
+    custom_dir = config_path().parent / "theme"
+    for suffix in THEME_IMAGE_SUFFIXES:
+        candidate = custom_dir / f"{name}{suffix}"
+        if candidate.is_file():
+            return candidate
+    builtin = web_directory() / "theme" / f"{name}.svg"
+    return builtin if builtin.is_file() else None
 
 
 def _query_value(params: QueryParams, name: str) -> str:
@@ -100,7 +120,9 @@ class StorchHandler(BaseHTTPRequestHandler):
         policy = (
             "default-src 'self'; "
             "script-src 'self'; style-src 'self'; "
-            "img-src 'self' data: https://i.ytimg.com; "
+            # Albumcover von Spotify (i.scdn.co) und YouTube Music (googleusercontent).
+            "img-src 'self' data: https://i.ytimg.com https://i.scdn.co "
+            "https://*.googleusercontent.com https://yt3.ggpht.com; "
             # YouTube fest erlaubt, damit ein im Menü gewählter Stream ohne Neuladen der Seite eingebettet werden darf.
             f"frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com{frame_origin}; "
             "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
@@ -191,12 +213,21 @@ class StorchHandler(BaseHTTPRequestHandler):
             "/api/live/search": self._get_live_search,
             "/api/location/search": self._get_location_search,
             "/api/location/timezone": self._get_location_timezone,
+            "/api/music/ytmusic/login": self._get_ytmusic_login,
+            "/api/music/spotify/pair": self._get_spotify_pair,
+            "/api/bluetooth": self._get_bluetooth,
         }
 
     def _dispatch(self, *, head_only: bool) -> None:
         try:
             parsed = urlparse(self.path)
             route = self._get_routes().get(parsed.path)
+            if parsed.path == music.SPOTIFY_CALLBACK_PATH:
+                self._spotify_callback(parse_qs(parsed.query))
+                return
+            if parsed.path.startswith("/theme/"):
+                self._serve_theme_image(parsed.path.removeprefix("/theme/"), head_only=head_only)
+                return
             if route is None:
                 self._serve_static(parsed.path, head_only=head_only)
                 return
@@ -235,6 +266,8 @@ class StorchHandler(BaseHTTPRequestHandler):
             "path": str(config_path()),
             "config": public_config(self._config()),
             "youtube_key_set": bool(youtube_api_key(self._config())),
+            "spotify_connected": music.spotify_connected(),
+            "ytmusic_connected": ytmusic.connected(),
         }
 
     def _get_station_search(self, params: QueryParams) -> dict[str, Any]:
@@ -281,6 +314,21 @@ class StorchHandler(BaseHTTPRequestHandler):
             "/api/admin/login": self._post_admin_login,
             "/api/admin/logout": self._post_admin_logout,
             "/api/config/save": self._post_config_save,
+            "/api/music/spotify/authorize": self._post_spotify_authorize,
+            "/api/music/spotify/disconnect": self._post_spotify_disconnect,
+            "/api/music/ytmusic/login": self._post_ytmusic_login,
+            "/api/music/ytmusic/cancel": self._post_ytmusic_cancel,
+            "/api/music/ytmusic/disconnect": self._post_ytmusic_disconnect,
+            "/api/music/spotify/pair": self._post_spotify_pair,
+            "/api/music/spotify/unpair": self._post_spotify_unpair,
+            "/api/player/search": self._post_player_search,
+            "/api/player/playlists": self._post_player_playlists,
+            "/api/player/play": self._post_player_play,
+            "/api/player/control": self._post_player_control,
+            "/api/bluetooth/scan": self._post_bluetooth_scan,
+            "/api/bluetooth/connect": self._post_bluetooth_connect,
+            "/api/bluetooth/disconnect": self._post_bluetooth_disconnect,
+            "/api/bluetooth/remove": self._post_bluetooth_remove,
         }
 
     def do_POST(self) -> None:  # noqa: N802
@@ -345,6 +393,186 @@ class StorchHandler(BaseHTTPRequestHandler):
         self.context.replace_config(validated)
         return {"ok": True, "path": str(config_path()), "config": public_config(validated)}
 
+    def _post_spotify_authorize(self, body: dict[str, Any]) -> dict[str, Any]:
+        self._guard_admin()
+        client_id = str(body.get("client_id", "")).strip()
+        redirect_uri = str(body.get("redirect_uri", "")).strip()
+        parsed = urlparse(redirect_uri)
+        if parsed.scheme not in {"http", "https"} or parsed.path != music.SPOTIFY_CALLBACK_PATH or parsed.query:
+            raise RequestError(HTTPStatus.BAD_REQUEST, "Ungültige Weiterleitungsadresse")
+        # Die Client-ID wird gleich mitgespeichert, damit sie nach dem Login nicht verloren geht.
+        config = self._config()
+        config.setdefault("music", {}).setdefault("spotify", {})["client_id"] = client_id
+        try:
+            validated = validate_config(config)
+        except ConfigError as exc:
+            raise RequestError(HTTPStatus.BAD_REQUEST, str(exc)) from exc
+        if not client_id:
+            raise RequestError(HTTPStatus.BAD_REQUEST, "Bitte zuerst die Spotify-Client-ID eintragen")
+        if validated != self._config():
+            save_config(validated)
+            self.context.replace_config(validated)
+        return {"ok": True, "url": music.spotify_authorize_url(client_id, redirect_uri)}
+
+    def _post_spotify_disconnect(self, _body: dict[str, Any]) -> dict[str, Any]:
+        self._guard_admin()
+        music.spotify_disconnect()
+        self.context.state.refresh_soon("music")
+        return {"ok": True}
+
+    def _post_ytmusic_login(self, _body: dict[str, Any]) -> dict[str, Any]:
+        """Öffnet auf dem Bildschirm ein Fenster mit der Google-Anmeldung für YouTube Music."""
+        self._guard_admin()
+        try:
+            return {"ok": True, **ytmusic.start_login(self._config())}
+        except ytmusic.YTMusicError as exc:
+            raise RequestError(HTTPStatus.BAD_REQUEST, str(exc)) from exc
+
+    def _get_ytmusic_login(self, _params: QueryParams) -> dict[str, Any]:
+        self._guard_admin()
+        status = ytmusic.login_status()
+        if status.get("status") == "connected":
+            self.context.state.refresh_soon("music")
+        return {"ok": True, **status}
+
+    def _post_ytmusic_cancel(self, _body: dict[str, Any]) -> dict[str, Any]:
+        self._guard_admin()
+        ytmusic.cancel_login()
+        return {"ok": True}
+
+    def _post_ytmusic_disconnect(self, _body: dict[str, Any]) -> dict[str, Any]:
+        self._guard_admin()
+        ytmusic.disconnect()
+        self.context.state.refresh_soon("music")
+        return {"ok": True}
+
+    def _get_spotify_pair(self, _params: QueryParams) -> dict[str, Any]:
+        self._guard_admin()
+        return {"ok": True, **spotify_connect.status()}
+
+    def _post_spotify_pair(self, _body: dict[str, Any]) -> dict[str, Any]:
+        """Startet librespot mit Gerätecode; das Menü zeigt die Kopplungsadresse als QR-Code."""
+        self._guard_admin()
+        try:
+            return {"ok": True, **spotify_connect.pair()}
+        except spotify_connect.SpotifyConnectError as exc:
+            raise RequestError(HTTPStatus.BAD_REQUEST, str(exc)) from exc
+
+    def _post_spotify_unpair(self, _body: dict[str, Any]) -> dict[str, Any]:
+        self._guard_admin()
+        spotify_connect.unpair()
+        return {"ok": True}
+
+    @staticmethod
+    def _service(body: dict[str, Any]) -> str:
+        service = str(body.get("service", ""))
+        if service not in {"ytmusic", "spotify"}:
+            raise RequestError(HTTPStatus.BAD_REQUEST, "Unbekannter Musikdienst")
+        return service
+
+    def _post_player_search(self, body: dict[str, Any]) -> dict[str, Any]:
+        self._guard_admin()
+        query = str(body.get("query", ""))[:120]
+        try:
+            if self._service(body) == "spotify":
+                return {"ok": True, "results": music.spotify_search(query)}
+            return {"ok": True, "results": player.search(query)}
+        except (music.MusicError, player.PlayerError, ytmusic.YTMusicError) as exc:
+            raise RequestError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
+
+    def _post_player_playlists(self, body: dict[str, Any]) -> dict[str, Any]:
+        self._guard_admin()
+        try:
+            if self._service(body) == "spotify":
+                return {"ok": True, "results": music.spotify_playlists()}
+            return {"ok": True, "results": player.my_playlists()}
+        except (music.MusicError, player.PlayerError, ytmusic.YTMusicError) as exc:
+            raise RequestError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
+
+    def _post_player_play(self, body: dict[str, Any]) -> dict[str, Any]:
+        self._guard_admin()
+        kind, identifier = str(body.get("kind", "")), str(body.get("id", ""))[:200]
+        try:
+            if self._service(body) == "spotify":
+                # Nur ein Player gleichzeitig: YouTube Music auf dem Pi anhalten.
+                if player.now_playing():
+                    player.control("stop")
+                music.spotify_play(kind, identifier)
+            else:
+                current = self.context.state.snapshot().get("music", {})
+                if current.get("controls") == "spotify" and current.get("device") == "pi" and not current.get("paused"):
+                    music.spotify_control("stop")
+                player.play(kind, identifier)
+        except (music.MusicError, player.PlayerError, ytmusic.YTMusicError) as exc:
+            raise RequestError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
+        player.full_output_volume()
+        self.context.state.refresh_soon("music")
+        return {"ok": True}
+
+    def _post_player_control(self, body: dict[str, Any]) -> dict[str, Any]:
+        # Die Knöpfe auf der Songkarte gehen am Pi-Bildschirm selbst auch ohne Admin-Anmeldung.
+        if not self._loopback_client():
+            self._guard_admin()
+        target, action = str(body.get("target", "")), str(body.get("action", ""))
+        LOGGER.info("Wiedergabe steuern: %s %s (von %s)", target, action, self.client_address[0])
+        try:
+            if target == "pi":
+                player.control(action, body.get("value"))
+            elif target == "spotify":
+                music.spotify_control(action, body.get("value"))
+            else:
+                raise RequestError(HTTPStatus.BAD_REQUEST, "Unbekanntes Ziel")
+        except (music.MusicError, player.PlayerError) as exc:
+            raise RequestError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
+        self.context.state.refresh_soon("music")
+        return {"ok": True}
+
+    def _get_bluetooth(self, _params: QueryParams) -> dict[str, Any]:
+        self._guard_admin()
+        return {"ok": True, **bluetooth.status()}
+
+    def _bluetooth(self, action: Callable[..., None], *arguments: str) -> dict[str, Any]:
+        self._guard_admin()
+        try:
+            action(*arguments)
+        except bluetooth.BluetoothError as exc:
+            raise RequestError(HTTPStatus.BAD_REQUEST, str(exc)) from exc
+        return {"ok": True}
+
+    def _post_bluetooth_scan(self, _body: dict[str, Any]) -> dict[str, Any]:
+        return self._bluetooth(bluetooth.scan)
+
+    def _post_bluetooth_connect(self, body: dict[str, Any]) -> dict[str, Any]:
+        return self._bluetooth(bluetooth.connect, str(body.get("mac", "")))
+
+    def _post_bluetooth_disconnect(self, body: dict[str, Any]) -> dict[str, Any]:
+        return self._bluetooth(bluetooth.disconnect, str(body.get("mac", "")))
+
+    def _post_bluetooth_remove(self, body: dict[str, Any]) -> dict[str, Any]:
+        return self._bluetooth(bluetooth.remove, str(body.get("mac", "")))
+
+    def _redirect(self, location: str) -> None:
+        self.send_response(HTTPStatus.FOUND)
+        self.send_header("Location", location)
+        self.send_header("Cache-Control", "no-store")
+        self._security_headers()
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def _spotify_callback(self, params: QueryParams) -> None:
+        """Rücksprung von Spotify; geschützt über den einmaligen state-Wert aus der Anmeldung."""
+        error = _query_value(params, "error")
+        try:
+            if error:
+                raise music.MusicError("Anmeldung abgebrochen" if error == "access_denied" else f"Spotify meldet: {error}")
+            music.spotify_finish(_query_value(params, "state"), _query_value(params, "code"))
+        except (music.MusicError, OSError) as exc:
+            LOGGER.warning("Spotify-Anmeldung fehlgeschlagen: %s", exc)
+            self._redirect("/?" + urlencode({"music": "error", "reason": str(exc)[:160]}))
+            return
+        self.context.state.refresh_soon("music")
+        self._redirect("/?music=connected")
+
     def _serve_static(self, path: str, *, head_only: bool) -> None:
         if path in {"", "/"}:
             path = "/index.html"
@@ -357,6 +585,13 @@ class StorchHandler(BaseHTTPRequestHandler):
         content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
         if target.suffix in {".html", ".css", ".js"}:
             content_type += "; charset=utf-8"
+        self._send_body(target.read_bytes(), content_type, HTTPStatus.OK, head_only=head_only)
+
+    def _serve_theme_image(self, name: str, *, head_only: bool) -> None:
+        target = theme_image(name)
+        if target is None:
+            raise RequestError(HTTPStatus.NOT_FOUND, "Datei nicht gefunden")
+        content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
         self._send_body(target.read_bytes(), content_type, HTTPStatus.OK, head_only=head_only)
 
     def log_message(self, fmt: str, *args: Any) -> None:

@@ -50,7 +50,8 @@ body {
 
 * { box-sizing: border-box; }
 html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
-body { background: var(--bg); color: var(--text); }
+/* Schrift der Infoleiste und Songkarte etwas größer als das übrige Layoutmaß. */
+body { --t: calc(var(--s) * 1.1); background: var(--bg); color: var(--text); }
 button, input, textarea, select { font: inherit; }
 button { cursor: pointer; }
 .hidden, [hidden] { display: none !important; }
@@ -145,7 +146,7 @@ body.no-infobar .stream-empty { padding-bottom: 16px; }
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  font-size: calc(14px * var(--s));
+  font-size: calc(14px * var(--t));
   font-weight: 600;
   line-height: 1.2;
   white-space: nowrap;
@@ -154,9 +155,9 @@ body.no-infobar .stream-empty { padding-bottom: 16px; }
 /* Uhr */
 .ib-clock { padding: calc(20px * var(--s)) calc(22px * var(--s)) calc(18px * var(--s)); }
 .clock-main { display: flex; flex-direction: column; }
-.clock-time { font-size: calc(66px * var(--s)); font-weight: 600; line-height: 0.92; letter-spacing: -0.02em; }
-.clock-date { margin-top: calc(8px * var(--s)); color: var(--date-text); font-size: calc(18px * var(--s)); font-weight: 500; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.clock-sys { margin-top: auto; color: var(--sys-text); font-size: calc(13px * var(--s)); font-weight: 500; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clock-time { font-size: calc(66px * var(--t)); font-weight: 600; line-height: 0.92; letter-spacing: -0.02em; }
+.clock-date { margin-top: calc(8px * var(--s)); color: var(--date-text); font-size: calc(18px * var(--t)); font-weight: 500; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clock-sys { margin-top: auto; color: var(--sys-text); font-size: calc(13px * var(--t)); font-weight: 500; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Wetter */
 .ib-weather { padding: calc(18px * var(--s)) calc(24px * var(--s)) calc(16px * var(--s)); }
@@ -164,34 +165,32 @@ body.no-infobar .stream-empty { padding-bottom: 16px; }
 .weather-icon { flex: 0 0 auto; width: calc(46px * var(--s)); height: calc(46px * var(--s)); }
 .weather-icon svg { display: block; width: 100%; height: 100%; fill: none; stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round; }
 .wi-sun, .wi-bolt { stroke: var(--hint); }
-.wi-cloud, .wi-fog, .wi-snow { stroke: var(--text); }
+.wi-cloud, .wi-fog, .wi-snow, .wi-moon { stroke: var(--text); }
 .wi-drop { stroke: var(--drop); }
-.weather-temp { flex: 0 0 auto; font-size: calc(58px * var(--s)); font-weight: 600; line-height: 1; letter-spacing: -0.02em; }
+.weather-temp { flex: 0 0 auto; font-size: calc(58px * var(--t)); font-weight: 600; line-height: 1; letter-spacing: -0.02em; }
 .weather-desc { display: flex; flex-direction: column; gap: calc(2px * var(--s)); min-width: 0; }
 .weather-condition, .weather-details { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.weather-condition { font-size: calc(20px * var(--s)); font-weight: 600; line-height: 1.2; }
-.weather-details { color: var(--muted); font-size: calc(15px * var(--s)); font-weight: 500; line-height: 1.25; }
+.weather-condition { font-size: calc(20px * var(--t)); font-weight: 600; line-height: 1.2; }
+.weather-details { color: var(--muted); font-size: calc(15px * var(--t)); font-weight: 500; line-height: 1.25; }
 .rain-strip { margin-top: auto; }
-.rain-head { display: flex; justify-content: space-between; gap: 10px; font-size: calc(14px * var(--s)); line-height: 1.2; white-space: nowrap; }
+.rain-head { display: flex; justify-content: space-between; gap: 10px; font-size: calc(14px * var(--t)); line-height: 1.2; white-space: nowrap; }
 .rain-label { flex: 0 0 auto; color: var(--muted); font-weight: 500; }
 .rain-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-weight: 600; }
-.rain-summary.is-alert { color: var(--hint); }
 .rain-hours { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: 6px; margin-top: calc(6px * var(--s)); }
 .rain-col { display: flex; flex-direction: column; align-items: center; gap: calc(3px * var(--s)); min-width: 0; }
 .rain-track { position: relative; width: 100%; height: calc(30px * var(--s)); overflow: hidden; border-radius: 5px; background: var(--bar-track); }
 .rain-bar { position: absolute; left: 0; right: 0; bottom: 0; min-height: 3px; background: var(--bar-dry); }
-.rain-hour { color: var(--faint); font-size: calc(13px * var(--s)); line-height: 1.2; }
-.rain-col.is-rain .rain-bar { background: var(--hint); }
-.rain-col.is-rain .rain-hour { color: var(--hint); }
+.rain-hour { color: var(--faint); font-size: calc(13px * var(--t)); line-height: 1.2; }
 .weather-error { display: none; flex-direction: column; justify-content: center; gap: 4px; height: 100%; min-width: 0; }
-.weather-error strong { font-size: calc(20px * var(--s)); font-weight: 600; }
-.weather-error span { color: var(--muted); font-size: calc(15px * var(--s)); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.weather-error strong { font-size: calc(20px * var(--t)); font-weight: 600; }
+.weather-error span { color: var(--muted); font-size: calc(15px * var(--t)); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ib-weather.is-error .weather-head, .ib-weather.is-error .rain-strip { display: none; }
 .ib-weather.is-error .weather-error { display: flex; }
 
 /* Abfahrten */
 .ib-transit { padding: calc(15px * var(--s)) calc(22px * var(--s)) calc(14px * var(--s)); }
-.transit-head { margin-bottom: calc(4px * var(--s)); }
+.transit-head { justify-content: flex-start; min-width: 0; margin-bottom: calc(4px * var(--s)); }
+.transit-station { min-width: 0; overflow: hidden; color: var(--muted); font-weight: 500; text-overflow: ellipsis; text-transform: none; letter-spacing: 0; }
 .boards { display: flex; flex-direction: column; min-height: 0; }
 .departure {
   display: grid;
@@ -210,26 +209,26 @@ body.no-infobar .stream-empty { padding-bottom: 16px; }
   color: var(--on-accent);
   background: var(--accent);
   font-family: "Barlow Semi Condensed", Barlow, ui-sans-serif, system-ui, sans-serif;
-  font-size: calc(19px * var(--s));
+  font-size: calc(19px * var(--t));
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
 }
 .departure-main { display: flex; flex-direction: column; min-width: 0; }
 .departure-target, .departure-sub, .departure-error { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.departure-target { font-size: calc(19px * var(--s)); font-weight: 600; line-height: 1.15; }
-.departure-sub { color: var(--faint); font-size: calc(13px * var(--s)); font-weight: 500; line-height: 1.2; }
+.departure-target { font-size: calc(19px * var(--t)); font-weight: 600; line-height: 1.15; }
+.departure-sub { color: var(--faint); font-size: calc(13px * var(--t)); font-weight: 500; line-height: 1.2; }
 .departure-time { display: flex; align-items: baseline; gap: 3px; white-space: nowrap; }
-.departure-num { font-size: calc(30px * var(--s)); font-weight: 600; line-height: 1; }
-.departure-unit { color: var(--muted); font-size: calc(15px * var(--s)); font-weight: 500; }
-.departure-now { color: var(--accent); font-size: calc(26px * var(--s)); font-weight: 700; line-height: 1; }
+.departure-num { font-size: calc(30px * var(--t)); font-weight: 600; line-height: 1; }
+.departure-unit { color: var(--muted); font-size: calc(15px * var(--t)); font-weight: 500; }
+.departure-now { color: var(--accent); font-size: calc(26px * var(--t)); font-weight: 700; line-height: 1; }
 .departure-icon { display: grid; place-items: center; }
 .departure-icon svg { width: calc(22px * var(--s)); height: calc(22px * var(--s)); fill: none; stroke: var(--danger); stroke-width: 2; stroke-linecap: round; }
-.departure-error { color: var(--danger); font-size: calc(16px * var(--s)); font-weight: 600; line-height: 1.2; }
+.departure-error { color: var(--danger); font-size: calc(16px * var(--t)); font-weight: 600; line-height: 1.2; }
 .departure.is-error .departure-main { grid-column: 2 / -1; }
 .board-message { display: flex; flex-direction: column; gap: 2px; padding-top: calc(10px * var(--s)); }
-.board-message strong { font-size: calc(16px * var(--s)); font-weight: 600; }
-.board-message span { color: var(--faint); font-size: calc(13px * var(--s)); font-weight: 500; }
+.board-message strong { font-size: calc(16px * var(--t)); font-weight: 600; }
+.board-message span { color: var(--faint); font-size: calc(13px * var(--t)); font-weight: 500; }
 .stop-editor .board-message { padding: 10px 2px; color: var(--muted); font-size: 0.85rem; }
 
 .menu-button {
@@ -254,7 +253,8 @@ body[data-layout="minimal"] .menu-button { width: 46px; height: 46px; border-rad
 
 /* Dialoge */
 dialog { color: var(--text); border: 0; padding: 0; background: transparent; }
-dialog::backdrop { background: rgba(0, 0, 0, 0.72); backdrop-filter: blur(4px); }
+/* Ohne Weichzeichner: über dem laufenden Video müsste er sonst jedes Bild neu rechnen und bremst Eingaben. */
+dialog::backdrop { background: rgba(0, 0, 0, 0.78); }
 .auth-dialog { width: min(430px, calc(100vw - 24px)); }
 .dialog-card, .settings-shell { border: 1px solid var(--line); border-radius: 18px; background: var(--panel-solid); box-shadow: 0 28px 80px rgba(0, 0, 0, 0.54); }
 .dialog-card { display: grid; gap: 18px; padding: 24px; }
@@ -342,6 +342,8 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.72); backdrop-filter: blur(4px); 
   outline: 0;
 }
 .field textarea { resize: vertical; }
+/* Die Auswahlliste des Dropdowns erbt sonst helle Schrift auf weißem Systemhintergrund. */
+.field select option { color: var(--text); background: var(--panel-solid); }
 .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(94, 214, 196, 0.2); }
 .field input[type="range"] { padding-inline: 4px; }
 .toggle-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
@@ -442,8 +444,8 @@ body[data-theme="light"] .osk-enter, body[data-theme="light"] .osk-shift[aria-pr
 body[data-theme="light"] .live-card, body[data-theme="light"] .place-card { background: rgba(13, 35, 45, 0.05); }
 
 /* Klick-Feedback: Welle vom Berührpunkt plus leichtes Eindrücken */
-.button, .icon-button, .menu-button, .menu-tab, .live-card, .place-card, .toggle { position: relative; overflow: hidden; transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease; }
-.button:active:not(:disabled), .icon-button:active, .menu-button:active, .menu-tab:active, .live-card:active, .place-card:active, .toggle:active { transform: scale(0.97); }
+.button, .icon-button, .menu-button, .menu-tab, .live-card, .place-card, .player-card, .toggle { position: relative; overflow: hidden; transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease; }
+.button:active:not(:disabled), .icon-button:active, .menu-button:active, .menu-tab:active, .live-card:active, .place-card:active, .player-card:active, .toggle:active { transform: scale(0.97); }
 .ripple {
   position: absolute;
   z-index: 0;
@@ -456,6 +458,129 @@ body[data-theme="light"] .live-card, body[data-theme="light"] .place-card { back
 }
 @keyframes ripple { to { transform: scale(1); opacity: 0; } }
 .live-card:active { box-shadow: 0 0 0 2px var(--accent); }
+
+/* Läuft gerade (oben rechts) */
+.now-playing {
+  position: fixed;
+  z-index: 20;
+  top: var(--gap);
+  right: var(--gap);
+  display: flex;
+  flex-direction: column;
+  gap: calc(10px * var(--s));
+  width: max-content;
+  max-width: min(calc(380px * var(--s)), calc(100vw - 2 * var(--gap) - 80px));
+  padding: calc(8px * var(--s)) calc(16px * var(--s)) calc(8px * var(--s)) calc(8px * var(--s));
+  overflow: hidden;
+  border: 1px solid var(--glass-line);
+  border-radius: calc(18px * var(--s));
+  color: var(--text);
+  background: var(--card-bg);
+  box-shadow: var(--glass-shadow);
+  font-variant-numeric: tabular-nums;
+}
+.np-art {
+  position: relative;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: calc(52px * var(--s));
+  height: calc(52px * var(--s));
+  overflow: hidden;
+  border-radius: calc(10px * var(--s));
+  background: var(--bar-track);
+}
+.np-art::before { content: "♪"; color: var(--muted); font-size: calc(30px * var(--t)); }
+.np-cover { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* Klein: nur Cover und Titel. Antippen öffnet die große Karte mit Bedienung. */
+.np-open { display: flex; align-items: center; gap: calc(12px * var(--s)); min-width: 0; padding: 0; border: 0; color: inherit; background: none; font: inherit; text-align: left; cursor: pointer; }
+.np-head { display: flex; flex-direction: column; gap: calc(2px * var(--s)); min-width: 0; }
+.now-playing:not(.is-open) .np-more { display: none; }
+/* Groß, aber nie über die Infoleiste: die Breite bestimmt die Covergröße und damit die Höhe der Karte. */
+.now-playing.is-open { width: min(calc(340px * var(--s)), calc(100vw - 2 * var(--gap) - 80px), calc(100vh - var(--bar-h) - 3 * var(--gap) - 250px * var(--s))); padding: calc(14px * var(--s)); }
+.now-playing.is-open .np-open { flex-direction: column; align-items: stretch; }
+.now-playing.is-open .np-art { width: 100%; height: auto; aspect-ratio: 1; border-radius: calc(12px * var(--s)); }
+.now-playing.is-open .np-art::before { font-size: calc(90px * var(--t)); }
+.now-playing.is-open .np-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; font-size: calc(22px * var(--t)); }
+.now-playing.is-open .np-artist { font-size: calc(17px * var(--t)); }
+.np-volume { display: flex; align-items: center; gap: calc(10px * var(--s)); margin-top: calc(8px * var(--s)); color: var(--muted); }
+.np-volume svg { flex: 0 0 auto; width: calc(26px * var(--s)); height: calc(26px * var(--s)); fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.np-volume input { flex: 1 1 auto; min-width: 0; height: 44px; accent-color: var(--accent); }
+.np-title, .np-artist { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.np-title { font-size: calc(18px * var(--t)); font-weight: 600; line-height: 1.2; }
+.np-title::before { content: "♪ "; color: var(--accent); }
+.np-artist { color: var(--muted); font-size: calc(15px * var(--t)); font-weight: 500; line-height: 1.25; }
+.np-progress { display: flex; align-items: center; gap: calc(8px * var(--s)); margin-top: calc(4px * var(--s)); }
+.np-track { position: relative; flex: 1 1 auto; height: calc(5px * var(--s)); overflow: hidden; border-radius: 3px; background: var(--bar-track); }
+.np-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: inherit; background: var(--accent); }
+.np-time { color: var(--faint); font-size: calc(12px * var(--t)); font-weight: 500; white-space: nowrap; }
+body[data-layout="minimal"] .now-playing { max-width: min(320px, calc(100vw - 2 * var(--gap) - 70px)); padding: 8px 12px 8px 8px; gap: 10px; }
+body[data-layout="minimal"] .np-art { width: 46px; height: 46px; }
+body[data-layout="minimal"] .np-title { font-size: 16px; }
+body[data-layout="minimal"] .np-artist { font-size: 13px; }
+
+.music-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.music-actions .button { min-height: 52px; padding: 0 22px; font-size: 1.05rem; }
+.settings-subhead { margin: 26px 0 8px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 1.05rem; font-weight: 700; }
+.help-steps { margin: 0 0 10px; padding-left: 22px; color: var(--muted); line-height: 1.5; }
+.help-steps li { margin-bottom: 6px; }
+.help-steps strong, .help-steps code { color: var(--text); }
+.help-steps code { padding: 1px 6px; border-radius: 5px; background: var(--bar-track); font-size: 0.9em; word-break: break-all; }
+
+/* Bedienknöpfe auf der Songkarte (nur wenn der Pi oder Spotify steuerbar ist) */
+.np-controls { display: flex; justify-content: center; gap: calc(12px * var(--s)); margin-top: calc(10px * var(--s)); }
+.np-button {
+  display: grid;
+  place-items: center;
+  width: max(48px, calc(52px * var(--s)));
+  height: max(48px, calc(52px * var(--s)));
+  padding: 0;
+  border: 1px solid var(--glass-line);
+  border-radius: 50%;
+  color: var(--text);
+  background: var(--bar-track);
+}
+.np-button svg, .player-transport svg { width: 55%; height: 55%; fill: currentColor; }
+.np-toggle { color: var(--on-accent); border-color: var(--accent); background: var(--accent); }
+.np-button:active, .player-transport .icon-button:active { transform: scale(0.94); }
+.is-paused .icon-pause, :not(.is-paused) > svg > .icon-play { display: none; }
+.now-playing.is-paused .np-bar { opacity: 0.5; }
+body[data-theme="dagobert"] .np-button { border: 3px solid var(--ink); border-radius: 6px; }
+
+/* Abspielen-Tab */
+.player-now { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px 14px; margin-bottom: 18px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255, 255, 255, 0.035); }
+.player-cover { width: 64px; height: 64px; border-radius: 10px; object-fit: cover; background: var(--bar-track); }
+.player-cover.hidden + .player-now-text { grid-column: 1 / 3; }
+.player-now-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.player-now-text strong, .player-now-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.player-now-text span { color: var(--muted); font-size: 0.9rem; }
+.player-transport { display: flex; gap: 8px; }
+.player-transport .icon-button { display: grid; place-items: center; width: 52px; min-height: 52px; }
+.player-toggle { color: var(--on-accent); border-color: var(--accent); background: var(--accent); }
+.player-volume { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 0.85rem; font-weight: 600; }
+.player-volume input { flex: 1 1 auto; height: 36px; accent-color: var(--accent); }
+.player-now.is-idle .player-transport, .player-now.is-idle .player-volume { opacity: 0.45; pointer-events: none; }
+.segmented { display: inline-flex; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.segment { min-height: 48px; padding: 0 20px; border: 0; color: var(--muted); background: transparent; font-weight: 700; }
+.segment[aria-pressed="true"] { color: var(--on-accent); background: var(--accent); }
+.player-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; margin-top: 10px; }
+.player-card { display: grid; grid-template-columns: 56px minmax(0, 1fr); align-items: center; gap: 2px 12px; min-height: 72px; padding: 8px; border: 1px solid var(--line); border-radius: 12px; color: var(--text); background: rgba(255, 255, 255, 0.04); text-align: left; }
+.player-card img, .player-card .player-noart { grid-row: 1 / 3; width: 56px; height: 56px; border-radius: 8px; object-fit: cover; background: var(--bar-track); }
+.player-card strong, .player-card span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.player-card strong { align-self: end; font-size: 1rem; font-weight: 600; }
+.player-card span { align-self: start; color: var(--muted); font-size: 0.85rem; }
+.player-card:disabled { opacity: 0.55; cursor: wait; }
+.player-card.is-current { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.bt-devices { display: grid; gap: 8px; margin: 10px 0; }
+.bt-device { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.bt-device.is-connected { border-color: var(--accent); }
+.bt-device > div { display: flex; flex: 1 1 180px; flex-direction: column; min-width: 0; }
+.bt-device strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bt-device span { color: var(--muted); font-size: 0.85rem; }
+.bt-device .button { min-height: 48px; }
+.pair-box { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 12px; }
+.pair-qr { width: 200px; height: 200px; border-radius: 10px; background: #fff; }
+.pair-box .help-steps { flex: 1 1 260px; }
 
 .toast {
   position: fixed;
@@ -526,6 +651,334 @@ body[data-theme="high-contrast"] {
 }
 body[data-theme="high-contrast"] .infobar { backdrop-filter: none; }
 
+/* Y2K: am Tag Himmel mit ziehenden Wolken, nachts Sternenhimmel mit Funkeln; dazu Glanz wie um 2000.
+   data-sky (day/night) setzt app.js nach Open-Meteo „is_day“. */
+body[data-theme="y2k"] {
+  --y2k-clouds: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='720' height='200'><g fill='%23fff' fill-opacity='.82'><circle cx='110' cy='150' r='32'/><circle cx='150' cy='130' r='42'/><circle cx='198' cy='148' r='30'/><circle cx='76' cy='160' r='22'/><rect x='52' y='150' width='176' height='30' rx='15'/><circle cx='420' cy='62' r='20'/><circle cx='445' cy='50' r='26'/><circle cx='475' cy='61' r='19'/><circle cx='399' cy='68' r='14'/><rect x='384' y='62' width='109' height='19' rx='9'/><circle cx='610' cy='140' r='27'/><circle cx='644' cy='123' r='35'/><circle cx='685' cy='138' r='26'/><circle cx='581' cy='148' r='19'/><rect x='561' y='140' width='150' height='26' rx='13'/></g></svg>");
+  --y2k-far-clouds: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='520' height='200'><g fill='%23fff' fill-opacity='.38'><circle cx='80' cy='60' r='16'/><circle cx='100' cy='50' r='21'/><circle cx='124' cy='59' r='15'/><circle cx='63' cy='65' r='11'/><rect x='51' y='60' width='88' height='15' rx='8'/><circle cx='330' cy='110' r='22'/><circle cx='358' cy='96' r='29'/><circle cx='392' cy='109' r='21'/><circle cx='306' cy='117' r='16'/><rect x='289' y='110' width='123' height='21' rx='10'/></g></svg>");
+  --y2k-stars: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='200'><g fill='%23fff'><circle cx='72' cy='149' r='0.7' fill-opacity='0.75'/><circle cx='64' cy='130' r='1.4' fill-opacity='0.75'/><circle cx='198' cy='57' r='0.7' fill-opacity='0.75'/><circle cx='18' cy='103' r='1.4' fill-opacity='0.95'/><circle cx='5' cy='182' r='1.4' fill-opacity='0.75'/><circle cx='121' cy='155' r='0.7' fill-opacity='0.75'/><circle cx='19' cy='9' r='0.7' fill-opacity='0.95'/><circle cx='281' cy='6' r='1.4' fill-opacity='0.95'/><circle cx='114' cy='112' r='0.7' fill-opacity='0.95'/><circle cx='117' cy='116' r='1.4' fill-opacity='0.95'/><circle cx='123' cy='92' r='0.9' fill-opacity='0.95'/><circle cx='116' cy='121' r='1.1' fill-opacity='0.55'/><circle cx='217' cy='146' r='0.7' fill-opacity='0.55'/><circle cx='155' cy='34' r='1.1' fill-opacity='0.95'/><circle cx='260' cy='112' r='0.9' fill-opacity='0.75'/><circle cx='149' cy='154' r='1.4' fill-opacity='0.95'/><circle cx='205' cy='154' r='0.7' fill-opacity='0.75'/><circle cx='128' cy='194' r='1.4' fill-opacity='0.75'/><circle cx='92' cy='97' r='1.1' fill-opacity='0.55'/><circle cx='228' cy='173' r='0.7' fill-opacity='0.55'/><circle cx='270' cy='104' r='1.1' fill-opacity='0.75'/><circle cx='19' cy='124' r='0.7' fill-opacity='0.75'/><circle cx='307' cy='152' r='1.4' fill-opacity='0.95'/><circle cx='91' cy='47' r='0.9' fill-opacity='0.55'/><circle cx='106' cy='142' r='0.9' fill-opacity='0.75'/><circle cx='267' cy='92' r='1.1' fill-opacity='0.75'/><circle cx='141' cy='172' r='0.7' fill-opacity='0.75'/><circle cx='266' cy='37' r='0.9' fill-opacity='0.75'/><circle cx='32' cy='127' r='1.1' fill-opacity='0.95'/><circle cx='287' cy='55' r='1.4' fill-opacity='0.75'/><circle cx='186' cy='110' r='1.1' fill-opacity='0.55'/><circle cx='279' cy='142' r='1.1' fill-opacity='0.75'/><circle cx='311' cy='11' r='0.9' fill-opacity='0.95'/><circle cx='94' cy='144' r='0.9' fill-opacity='0.55'/><path fill='%23dff6ff' d='M150 22L151.4 26.6L156 28L151.4 29.4L150 34L148.6 29.4L144 28L148.6 26.6ZM56 37L57.0 40.0L60 41L57.0 42.0L56 45L55.0 42.0L52 41L55.0 40.0Z'/></g></svg>");
+  --gloss: linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.12) 48%, rgba(255, 255, 255, 0) 52%);
+  --y2k-twinkle: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='200'><g fill='%23fff'><circle cx='32' cy='27' r='0.7' fill-opacity='0.75'/><circle cx='90' cy='192' r='1.1' fill-opacity='0.75'/><circle cx='314' cy='58' r='0.7' fill-opacity='0.95'/><circle cx='85' cy='114' r='1.4' fill-opacity='0.95'/><circle cx='264' cy='99' r='1.4' fill-opacity='0.95'/><circle cx='141' cy='13' r='0.7' fill-opacity='0.75'/><circle cx='242' cy='85' r='1.4' fill-opacity='0.75'/><circle cx='273' cy='46' r='0.9' fill-opacity='0.55'/><circle cx='122' cy='10' r='0.9' fill-opacity='0.75'/><circle cx='92' cy='38' r='1.1' fill-opacity='0.95'/><circle cx='290' cy='50' r='1.4' fill-opacity='0.75'/><circle cx='272' cy='97' r='1.1' fill-opacity='0.75'/><circle cx='232' cy='45' r='1.4' fill-opacity='0.95'/><circle cx='240' cy='171' r='0.9' fill-opacity='0.75'/><circle cx='146' cy='131' r='1.1' fill-opacity='0.95'/><circle cx='236' cy='122' r='1.1' fill-opacity='0.95'/><circle cx='289' cy='189' r='1.4' fill-opacity='0.75'/><circle cx='117' cy='87' r='0.9' fill-opacity='0.95'/><circle cx='141' cy='126' r='1.1' fill-opacity='0.75'/><circle cx='262' cy='147' r='1.4' fill-opacity='0.75'/><circle cx='110' cy='129' r='1.1' fill-opacity='0.95'/><circle cx='42' cy='91' r='0.7' fill-opacity='0.55'/><path fill='%23dff6ff' d='M74 29L75.4 33.6L80 35L75.4 36.4L74 41L72.6 36.4L68 35L72.6 33.6ZM45 83L46.4 87.6L51 89L46.4 90.4L45 95L43.6 90.4L39 89L43.6 87.6ZM136 41L137.4 45.6L142 47L137.4 48.4L136 53L134.6 48.4L130 47L134.6 45.6Z'/></g></svg>");
+}
+body[data-theme="y2k"][data-sky="day"] {
+  color-scheme: light;
+  --text: #0b2a5b;
+  --muted: #163a66;
+  --faint: #163a66;
+  --sys-text: #163a66;
+  --date-text: #0f3263;
+  --chip-text: #0b2a5b;
+  --accent: #0d5fc4;
+  --on-accent: #fff;
+  --hint: #c46a00;
+  --danger: #a3241a;
+  --drop: #0d5fc4;
+  --bar-dry: rgba(13, 95, 196, 0.62);
+  --bar-track: rgba(255, 255, 255, 0.5);
+  --glass-line: rgba(255, 255, 255, 0.85);
+  --sep: rgba(11, 42, 91, 0.2);
+  --chip-bg: linear-gradient(180deg, #bfe3ff, #6fb8ff);
+  --chip-line: rgba(255, 255, 255, 0.85);
+  --card-bg: rgba(234, 246, 255, 0.94);
+  --bg: #8fcaff;
+  --panel-solid: #e6f3ff;
+  --line: rgba(11, 42, 91, 0.24);
+  --field-bg: rgba(255, 255, 255, 0.72);
+  --sky: radial-gradient(circle at 94% -10%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0) 32%),
+    var(--y2k-far-clouds) 0 0 / auto 100% repeat-x,
+    linear-gradient(180deg, #4aa8ff 0%, #8fcfff 55%, #d9efff 100%);
+  --sky-layer: var(--y2k-clouds);
+  --glow: 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+body[data-theme="y2k"][data-sky="night"] {
+  color-scheme: dark;
+  --text: #f4f7ff;
+  --muted: #cdd5ff;
+  --faint: #c3ccf7;
+  --sys-text: #c3ccf7;
+  --date-text: #dfe4ff;
+  --chip-text: #f4f7ff;
+  --accent: #7ee8ff;
+  --on-accent: #04103a;
+  --hint: #ffd27a;
+  --danger: #ff9a8a;
+  --drop: #8fc4ff;
+  --bar-dry: rgba(126, 232, 255, 0.62);
+  --bar-track: rgba(255, 255, 255, 0.12);
+  --glass-line: rgba(160, 200, 255, 0.5);
+  --sep: rgba(200, 215, 255, 0.2);
+  --chip-bg: linear-gradient(180deg, #3b3f9e, #151a5c);
+  --chip-line: rgba(160, 200, 255, 0.55);
+  --card-bg: rgba(14, 18, 70, 0.92);
+  --bg: #070a2e;
+  --panel-solid: #11164a;
+  --line: rgba(200, 215, 255, 0.22);
+  --field-bg: rgba(5, 8, 36, 0.55);
+  --sky: var(--y2k-stars) 0 0 / 320px 200px repeat,
+    radial-gradient(ellipse at 80% 120%, rgba(150, 90, 220, 0.55), rgba(150, 90, 220, 0) 60%),
+    linear-gradient(180deg, #070a2e 0%, #141a63 62%, #2a2275 100%);
+  --sky-layer: var(--y2k-twinkle);
+  --glow: 0 0 10px rgba(126, 232, 255, 0.35);
+}
+body[data-theme="y2k"] .infobar,
+body[data-theme="y2k"] .settings-shell,
+body[data-theme="y2k"] .dialog-card {
+  border: 2px solid var(--glass-line);
+  background: var(--sky);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -2px 6px rgba(0, 0, 0, 0.12), 0 18px 44px rgba(0, 0, 0, 0.35);
+}
+body[data-theme="y2k"] .infobar { backdrop-filter: none; text-shadow: var(--glow); }
+body[data-theme="y2k"] .now-playing { border: 2px solid var(--glass-line); background: var(--gloss), var(--sky); text-shadow: var(--glow); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 10px 28px rgba(0, 0, 0, 0.35); }
+body[data-theme="y2k"] .infobar::before,
+body[data-theme="y2k"] .infobar::after { content: ""; position: absolute; pointer-events: none; }
+/* Wolken ziehen bzw. Sterne funkeln auf einer eigenen Ebene; nur transform/opacity, damit der Pi das per GPU erledigt. */
+body[data-theme="y2k"] .infobar::before {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 200%;
+  background: var(--sky-layer) 0 0 / auto 100% repeat-x;
+  will-change: transform;
+}
+body[data-theme="y2k"][data-sky="day"] .infobar::before { animation: sky-drift 140s linear infinite; }
+body[data-theme="y2k"][data-sky="night"] .infobar::before { background-size: 320px 200px; background-repeat: repeat; animation: sky-twinkle 3.2s ease-in-out infinite alternate; }
+body[data-theme="y2k"] .infobar::after { inset: 0; border-radius: inherit; background: var(--gloss); opacity: 0.55; }
+body[data-theme="y2k"] .infobar > * { position: relative; z-index: 1; }
+@keyframes sky-drift { to { transform: translateX(-50%); } }
+@keyframes sky-twinkle { from { opacity: 0.15; } to { opacity: 1; } }
+body[data-theme="y2k"] .departure-line,
+body[data-theme="y2k"] .button-primary,
+body[data-theme="y2k"] .menu-tab[aria-selected="true"],
+body[data-theme="y2k"] .osk-enter {
+  background: var(--gloss), var(--accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 2px 4px rgba(0, 0, 0, 0.25);
+  text-shadow: none;
+}
+body[data-theme="y2k"] .departure-line { border-radius: 999px; }
+body[data-theme="y2k"] .menu-button { background: var(--chip-bg); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 4px 12px rgba(0, 0, 0, 0.3); }
+body[data-theme="y2k"] .field input,
+body[data-theme="y2k"] .field textarea,
+body[data-theme="y2k"] .field select,
+body[data-theme="y2k"] .stop-card,
+body[data-theme="y2k"] .station-result,
+body[data-theme="y2k"] .live-card,
+body[data-theme="y2k"] .place-card,
+body[data-theme="y2k"] .toggle,
+body[data-theme="y2k"] .button-secondary { background-color: var(--field-bg); }
+body[data-theme="y2k"][data-sky="day"] .osk-key { background: rgba(255, 255, 255, 0.8); box-shadow: 0 2px 0 rgba(11, 42, 91, 0.25); }
+body[data-theme="y2k"][data-sky="day"] .osk-enter,
+body[data-theme="y2k"][data-sky="day"] .osk-shift[aria-pressed="true"] { background: var(--gloss), var(--accent); }
+
+/* Dagobert: Comic aus Entenhausen. Dicke Tuschekonturen, flache Farben, Rasterpunkte, Panels mit hartem
+   Schatten und ein gelber Erzählkasten für die Uhr. Tag: Himmel mit Wolken und fallenden Talern,
+   Nacht: Sternenhimmel. data-sky (day/night) setzt app.js nach Open-Meteo „is_day“. */
+body[data-theme="dagobert"] {
+  --ink: #111;
+  --duck-s: var(--s);
+  --duck-right: calc(var(--gap) + 28px * var(--duck-s));
+  --caption: #ffd400;
+  --dago-clouds: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='760' height='200'><g fill='%23fff' stroke='%23111' stroke-width='5'><circle cx='90' cy='70' r='23'/><circle cx='121' cy='54' r='29'/><circle cx='157' cy='66' r='23'/><circle cx='63' cy='75' r='18'/><circle cx='126' cy='79' r='26'/></g><g fill='%23fff'><circle cx='90' cy='70' r='23'/><circle cx='121' cy='54' r='29'/><circle cx='157' cy='66' r='23'/><circle cx='63' cy='75' r='18'/><circle cx='126' cy='79' r='26'/></g><g fill='%23fff' stroke='%23111' stroke-width='5'><circle cx='420' cy='120' r='18'/><circle cx='444' cy='107' r='23'/><circle cx='472' cy='117' r='18'/><circle cx='399' cy='124' r='14'/><circle cx='448' cy='127' r='20'/></g><g fill='%23fff'><circle cx='420' cy='120' r='18'/><circle cx='444' cy='107' r='23'/><circle cx='472' cy='117' r='18'/><circle cx='399' cy='124' r='14'/><circle cx='448' cy='127' r='20'/></g><g fill='%23fff' stroke='%23111' stroke-width='5'><circle cx='640' cy='48' r='16'/><circle cx='660' cy='37' r='20'/><circle cx='684' cy='46' r='16'/><circle cx='622' cy='52' r='12'/><circle cx='664' cy='54' r='17'/></g><g fill='%23fff'><circle cx='640' cy='48' r='16'/><circle cx='660' cy='37' r='20'/><circle cx='684' cy='46' r='16'/><circle cx='622' cy='52' r='12'/><circle cx='664' cy='54' r='17'/></g></svg>");
+  --dago-coins: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='220'><ellipse cx='60' cy='40' rx='12' ry='12.0' fill='%23ffd400' stroke='%23111' stroke-width='2.4'/><ellipse cx='60' cy='40' rx='7.9' ry='7.9' fill='none' stroke='%23111' stroke-width='1.4'/><path d='M53.4 38.2q1.8 -6.0 6.0 -6.6' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'/><ellipse cx='250' cy='120' rx='11' ry='5.5' fill='%23ffd400' stroke='%23111' stroke-width='2.4'/><ellipse cx='250' cy='120' rx='7.3' ry='3.6' fill='none' stroke='%23111' stroke-width='1.4'/><path d='M243.9 119.2q1.6 -2.8 5.5 -3.0' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'/><ellipse cx='150' cy='190' rx='10' ry='10.0' fill='%23ffd400' stroke='%23111' stroke-width='2.4'/><ellipse cx='150' cy='190' rx='6.6' ry='6.6' fill='none' stroke='%23111' stroke-width='1.4'/><path d='M144.5 188.5q1.5 -5.0 5.0 -5.5' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'/></svg>");
+  --dago-sun: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><g stroke='%23111' stroke-width='3' stroke-linecap='round'><path d='M40 4v12M40 64v12M4 40h12M64 40h12M14 14l9 9M57 57l9 9M14 66l9-9M57 23l9-9' /><circle cx='40' cy='40' r='17' fill='%23ffd400'/></g></svg>");
+  --dago-stars: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='200'><path d='M135.0 161.0L136.1 163.5L138.8 163.8L136.7 165.6L137.4 168.2L135.0 166.8L132.6 168.2L133.3 165.6L131.2 163.8L133.9 163.5Z' fill='%23ffe14d' stroke='%23111' stroke-width='1.8' stroke-linejoin='round'/><path d='M203.0 163.0L204.3 166.2L207.8 166.5L205.1 168.7L205.9 172.0L203.0 170.2L200.1 172.0L200.9 168.7L198.2 166.5L201.7 166.2Z' fill='%23ffe14d' stroke='%23111' stroke-width='1.8' stroke-linejoin='round'/><path d='M47.0 165.0L48.1 167.5L50.8 167.8L48.7 169.6L49.4 172.2L47.0 170.8L44.6 172.2L45.3 169.6L43.2 167.8L45.9 167.5Z' fill='%23ffe14d' stroke='%23111' stroke-width='1.8' stroke-linejoin='round'/><path d='M254.0 76.0L255.1 78.5L257.8 78.8L255.7 80.6L256.4 83.2L254.0 81.8L251.6 83.2L252.3 80.6L250.2 78.8L252.9 78.5Z' fill='%23ffe14d' stroke='%23111' stroke-width='1.8' stroke-linejoin='round'/><path d='M112.0 129.0L113.3 132.2L116.8 132.5L114.1 134.7L114.9 138.0L112.0 136.2L109.1 138.0L109.9 134.7L107.2 132.5L110.7 132.2Z' fill='%23ffe14d' stroke='%23111' stroke-width='1.8' stroke-linejoin='round'/><circle cx='207' cy='167' r='1.6' fill='%23fff'/><circle cx='81' cy='63' r='1.6' fill='%23fff'/><circle cx='81' cy='137' r='1.6' fill='%23fff'/><circle cx='203' cy='193' r='1.6' fill='%23fff'/><circle cx='11' cy='175' r='1.6' fill='%23fff'/><circle cx='36' cy='44' r='1.6' fill='%23fff'/><circle cx='306' cy='14' r='1.6' fill='%23fff'/><circle cx='158' cy='11' r='1.6' fill='%23fff'/><circle cx='141' cy='125' r='1.6' fill='%23fff'/><circle cx='308' cy='188' r='1.6' fill='%23fff'/><circle cx='202' cy='186' r='1.6' fill='%23fff'/><circle cx='222' cy='105' r='1.6' fill='%23fff'/><circle cx='299' cy='117' r='1.6' fill='%23fff'/><circle cx='72' cy='97' r='1.6' fill='%23fff'/></svg>");
+  --dago-twinkle: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='200'><path d='M63.0 17.0L64.6 20.8L68.7 21.1L65.6 23.8L66.5 27.9L63.0 25.7L59.5 27.9L60.4 23.8L57.3 21.1L61.4 20.8Z' fill='%23ffe14d' stroke='%23111' stroke-width='1.8' stroke-linejoin='round'/><path d='M267.0 61.0L269.1 66.1L274.6 66.5L270.4 70.1L271.7 75.5L267.0 72.6L262.3 75.5L263.6 70.1L259.4 66.5L264.9 66.1Z' fill='%23ffe14d' stroke='%23111' stroke-width='1.8' stroke-linejoin='round'/><path d='M237.0 166.0L239.1 171.1L244.6 171.5L240.4 175.1L241.7 180.5L237.0 177.6L232.3 180.5L233.6 175.1L229.4 171.5L234.9 171.1Z' fill='%23ffe14d' stroke='%23111' stroke-width='1.8' stroke-linejoin='round'/><path d='M229.0 135.0L231.1 140.1L236.6 140.5L232.4 144.1L233.7 149.5L229.0 146.6L224.3 149.5L225.6 144.1L221.4 140.5L226.9 140.1Z' fill='%23ffe14d' stroke='%23111' stroke-width='1.8' stroke-linejoin='round'/></svg>");
+  --dago-heap-day: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='340' height='44'><ellipse cx='327' cy='14' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='281' cy='18' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='252' cy='20' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='238' cy='21' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='255' cy='21' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='268' cy='21' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='275' cy='22' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='262' cy='24' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='217' cy='25' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='292' cy='25' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='206' cy='25' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='203' cy='26' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='211' cy='26' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='311' cy='26' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='246' cy='26' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='239' cy='27' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='208' cy='27' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='258' cy='27' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='259' cy='28' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='175' cy='28' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='245' cy='28' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='224' cy='29' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='289' cy='30' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='234' cy='30' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='153' cy='30' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='328' cy='30' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='323' cy='30' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='224' cy='31' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='205' cy='31' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='109' cy='34' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='215' cy='34' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='220' cy='34' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='107' cy='34' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='91' cy='35' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='104' cy='35' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='115' cy='35' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='166' cy='36' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='155' cy='36' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='170' cy='36' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='145' cy='36' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='141' cy='36' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='237' cy='37' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='84' cy='37' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='78' cy='37' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='203' cy='37' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='68' cy='37' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='100' cy='38' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='123' cy='38' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='87' cy='39' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='190' cy='39' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='69' cy='39' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='46' cy='39' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='38' cy='39' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='68' cy='39' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='29' cy='39' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='152' cy='39' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='32' cy='39' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='32' cy='39' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='46' cy='39' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='155' cy='39' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='86' cy='39' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='19' cy='39' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='60' cy='40' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='44' cy='40' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='55' cy='40' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='145' cy='40' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='33' cy='40' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='8' cy='40' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='107' cy='40' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='237' cy='40' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='178' cy='40' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='18' cy='40' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='134' cy='41' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='63' cy='41' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='161' cy='41' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='72' cy='41' rx='13' ry='4.9' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='8' cy='41' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='22' cy='41' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='15' cy='41' rx='11' ry='4.2' fill='%23ffd400' stroke='%23111' stroke-width='2'/><ellipse cx='69' cy='41' rx='15' ry='5.7' fill='%23ffd400' stroke='%23111' stroke-width='2'/></svg>");
+  --dago-heap-night: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='340' height='44'><ellipse cx='327' cy='14' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='281' cy='18' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='252' cy='20' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='238' cy='21' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='255' cy='21' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='268' cy='21' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='275' cy='22' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='262' cy='24' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='217' cy='25' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='292' cy='25' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='206' cy='25' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='203' cy='26' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='211' cy='26' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='311' cy='26' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='246' cy='26' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='239' cy='27' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='208' cy='27' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='258' cy='27' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='259' cy='28' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='175' cy='28' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='245' cy='28' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='224' cy='29' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='289' cy='30' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='234' cy='30' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='153' cy='30' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='328' cy='30' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='323' cy='30' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='224' cy='31' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='205' cy='31' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='109' cy='34' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='215' cy='34' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='220' cy='34' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='107' cy='34' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='91' cy='35' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='104' cy='35' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='115' cy='35' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='166' cy='36' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='155' cy='36' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='170' cy='36' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='145' cy='36' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='141' cy='36' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='237' cy='37' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='84' cy='37' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='78' cy='37' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='203' cy='37' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='68' cy='37' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='100' cy='38' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='123' cy='38' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='87' cy='39' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='190' cy='39' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='69' cy='39' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='46' cy='39' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='38' cy='39' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='68' cy='39' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='29' cy='39' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='152' cy='39' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='32' cy='39' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='32' cy='39' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='46' cy='39' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='155' cy='39' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='86' cy='39' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='19' cy='39' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='60' cy='40' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='44' cy='40' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='55' cy='40' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='145' cy='40' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='33' cy='40' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='8' cy='40' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='107' cy='40' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='237' cy='40' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='178' cy='40' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='18' cy='40' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='134' cy='41' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='63' cy='41' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='161' cy='41' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='72' cy='41' rx='13' ry='4.9' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='8' cy='41' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='22' cy='41' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='15' cy='41' rx='11' ry='4.2' fill='%23e0b400' stroke='%23111' stroke-width='2'/><ellipse cx='69' cy='41' rx='15' ry='5.7' fill='%23e0b400' stroke='%23111' stroke-width='2'/></svg>");
+  --dago-spill: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='270' height='36'><ellipse cx='255' cy='2' rx='10' ry='3.8' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='188' cy='3' rx='10' ry='3.8' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='202' cy='3' rx='14' ry='5.3' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='166' cy='3' rx='10' ry='3.8' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='252' cy='3' rx='10' ry='3.8' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='22' cy='4' rx='10' ry='3.8' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='185' cy='4' rx='12' ry='4.6' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='40' cy='4' rx='12' ry='4.6' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='246' cy='4' rx='12' ry='4.6' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='147' cy='5' rx='12' ry='4.6' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='241' cy='5' rx='14' ry='5.3' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='97' cy='5' rx='14' ry='5.3' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='249' cy='5' rx='12' ry='4.6' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='85' cy='5' rx='10' ry='3.8' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='194' cy='6' rx='10' ry='3.8' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='73' cy='6' rx='14' ry='5.3' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='17' cy='6' rx='10' ry='3.8' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='63' cy='7' rx='12' ry='4.6' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='147' cy='7' rx='10' ry='3.8' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='86' cy='7' rx='10' ry='3.8' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='231' cy='8' rx='10' ry='3.8' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='247' cy='8' rx='12' ry='4.6' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='160' cy='8' rx='10' ry='3.8' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='247' cy='9' rx='14' ry='5.3' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='167' cy='9' rx='14' ry='5.3' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='241' cy='9' rx='10' ry='3.8' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='15' cy='9' rx='12' ry='4.6' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='199' cy='9' rx='12' ry='4.6' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='88' cy='9' rx='12' ry='4.6' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='105' cy='10' rx='12' ry='4.6' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='104' cy='10' rx='12' ry='4.6' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='174' cy='10' rx='10' ry='3.8' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='19' cy='11' rx='10' ry='3.8' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='83' cy='11' rx='14' ry='5.3' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='240' cy='16' rx='9' ry='4.5' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='150' cy='17' rx='10' ry='4.5' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='40' cy='18' rx='9' ry='4.5' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='95' cy='22' rx='8' ry='7.2' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='205' cy='24' rx='8' ry='8.0' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/><ellipse cx='120' cy='30' rx='7' ry='7.0' fill='%23ffe01a' stroke='%23111' stroke-width='1.3'/></svg>");
+  --dago-bin-day: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='214' height='208'><g stroke='%23111' stroke-width='5' stroke-linejoin='round'><polygon points='170,62 208,44 208,186 170,204' fill='%23c9bd94'/><polygon points='30,62 68,44 208,44 170,62' fill='%23ddd1a8'/><rect x='30' y='62' width='140' height='142' fill='%23efe6c8'/><rect x='98' y='24' width='34' height='28' fill='%23efe6c8'/><polygon points='92,26 115,8 138,26' fill='%23d8342c'/><line x1='30' y1='96' x2='170' y2='96' stroke-width='3'/></g><text x='100' y='184' font-family='Georgia,serif' font-weight='700' font-size='92' text-anchor='middle' fill='%2322a046' stroke='%23111' stroke-width='4' paint-order='stroke'>$</text></svg>");
+  --dago-bin-night: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='214' height='208'><g stroke='%23111' stroke-width='5' stroke-linejoin='round'><polygon points='170,62 208,44 208,186 170,204' fill='%23404b82'/><polygon points='30,62 68,44 208,44 170,62' fill='%234c5894'/><rect x='30' y='62' width='140' height='142' fill='%235d6aa6'/><rect x='98' y='24' width='34' height='28' fill='%235d6aa6'/><polygon points='92,26 115,8 138,26' fill='%23d8342c'/><line x1='30' y1='96' x2='170' y2='96' stroke-width='3'/></g><text x='100' y='184' font-family='Georgia,serif' font-weight='700' font-size='92' text-anchor='middle' fill='%23ffd400' stroke='%23111' stroke-width='4' paint-order='stroke'>$</text></svg>");
+}
+body[data-theme="dagobert"][data-sky="day"] {
+  color-scheme: light;
+  --text: #111;
+  --muted: #262626;
+  --faint: #2e2e2e;
+  --sys-text: #262626;
+  --date-text: #1a1a1a;
+  --chip-text: #111;
+  --accent: #c4161c;
+  --on-accent: #fff;
+  --hint: #b35a00;
+  --danger: #a3121a;
+  --drop: #1456b8;
+  --bar-dry: #1f6fd6;
+  --bar-track: rgba(255, 255, 255, 0.7);
+  --sep: var(--ink);
+  --chip-bg: var(--caption);
+  --chip-line: var(--ink);
+  --card-bg: #fffbe8;
+  --bg: #8fd3ff;
+  --panel-solid: #fffbe8;
+  --line: rgba(17, 17, 17, 0.55);
+  --field-bg: #fff;
+  --dots: rgba(255, 255, 255, 0.45);
+  --sky-base: #8fd3ff;
+  --sky-art: var(--dago-sun) right 14px top 10px / 46px 46px no-repeat;
+  --heap: var(--dago-heap-day) right 0 bottom 0 / 300px 39px no-repeat;
+  --bin: var(--dago-bin-day);
+  --duck: url("/theme/dagobert-tag");
+  --duck-w: 150px;
+  --duck-h: 175px;
+  --duck-sink: 6px;
+  --duck-settings: auto 190px;
+}
+body[data-theme="dagobert"][data-sky="night"] {
+  color-scheme: dark;
+  --text: #fff;
+  --muted: #e4e9ff;
+  --faint: #dce2ff;
+  --sys-text: #262626;
+  --date-text: #1a1a1a;
+  --chip-text: #111;
+  --accent: #ffd400;
+  --on-accent: #111;
+  --hint: #ffd400;
+  --danger: #ff8f84;
+  --drop: #8fc4ff;
+  --bar-dry: #ffd400;
+  --bar-track: rgba(255, 255, 255, 0.14);
+  --sep: var(--ink);
+  --chip-bg: var(--caption);
+  --chip-line: var(--ink);
+  --card-bg: #18245e;
+  --bg: #121c4d;
+  --panel-solid: #18245e;
+  --line: rgba(255, 255, 255, 0.4);
+  --field-bg: #0e1640;
+  --dots: rgba(255, 255, 255, 0.08);
+  --sky-base: #1a2a6c;
+  --sky-art: var(--dago-stars) 0 0 / 320px 200px repeat;
+  /* Taler quellen unter Dagoberts Geldhaufen über die Panelkante ins Panel. */
+  --heap: var(--dago-spill) right calc(var(--duck-right) - var(--gap)) top 0 / calc(var(--duck-w) * var(--duck-s)) calc(36px * var(--duck-s)) no-repeat;
+  --bin: var(--dago-bin-night);
+  --duck: url("/theme/dagobert-nacht");
+  /* Comic-„Zzz“ über dem schlafenden Dagobert; die Z leuchten nacheinander auf (Animation im SVG). */
+  --dago-zzz: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 86'><style>g{opacity:.15;animation:3.6s linear infinite}.a{animation-name:a}.b{animation-name:b}.c{animation-name:c}@keyframes a{0%25,4%25{opacity:.15}9%25,74%25{opacity:1}82%25,100%25{opacity:.15}}@keyframes b{0%25,27%25{opacity:.15}32%25,74%25{opacity:1}82%25,100%25{opacity:.15}}@keyframes c{0%25,50%25{opacity:.15}55%25,74%25{opacity:1}82%25,100%25{opacity:.15}}</style><g class='a'><polygon points='6.0,62.0 22.0,62.0 22.0,65.5 12.4,74.5 22.0,74.5 22.0,78.0 6.0,78.0 6.0,74.5 15.6,65.5 6.0,65.5' fill='none' stroke='%23fff3a6' stroke-width='7' stroke-linejoin='round' opacity='.55'/><polygon points='6.0,62.0 22.0,62.0 22.0,65.5 12.4,74.5 22.0,74.5 22.0,78.0 6.0,78.0 6.0,74.5 15.6,65.5 6.0,65.5' fill='%23ffd400' stroke='%23111' stroke-width='3' stroke-linejoin='round' paint-order='stroke'/></g><g class='b'><polygon points='30.0,36.0 52.0,36.0 52.0,40.8 38.8,53.2 52.0,53.2 52.0,58.0 30.0,58.0 30.0,53.2 43.2,40.8 30.0,40.8' fill='none' stroke='%23fff3a6' stroke-width='7' stroke-linejoin='round' opacity='.55'/><polygon points='30.0,36.0 52.0,36.0 52.0,40.8 38.8,53.2 52.0,53.2 52.0,58.0 30.0,58.0 30.0,53.2 43.2,40.8 30.0,40.8' fill='%23ffd400' stroke='%23111' stroke-width='3' stroke-linejoin='round' paint-order='stroke'/></g><g class='c'><polygon points='60.0,5.0 90.0,5.0 90.0,11.6 72.0,28.4 90.0,28.4 90.0,35.0 60.0,35.0 60.0,28.4 78.0,11.6 60.0,11.6' fill='none' stroke='%23fff3a6' stroke-width='7' stroke-linejoin='round' opacity='.55'/><polygon points='60.0,5.0 90.0,5.0 90.0,11.6 72.0,28.4 90.0,28.4 90.0,35.0 60.0,35.0 60.0,28.4 78.0,11.6 60.0,11.6' fill='%23ffd400' stroke='%23111' stroke-width='3' stroke-linejoin='round' paint-order='stroke'/></g></svg>");
+  --duck-w: 270px;
+  --duck-h: 130px;
+  --duck-sink: 18px;
+  --duck-settings: auto 120px;
+}
+/* Panels: weißer Bundsteg, Tuschekante, harter Schatten, Rasterpunkte */
+body[data-theme="dagobert"] .infobar,
+body[data-theme="dagobert"] .settings-shell,
+body[data-theme="dagobert"] .dialog-card {
+  border: 4px solid var(--ink);
+  border-radius: 6px;
+  background:
+    var(--sky-art),
+    radial-gradient(circle, var(--dots) 1.3px, transparent 1.8px) 0 0 / 8px 8px,
+    var(--sky-base);
+  box-shadow: 0 0 0 3px #fffbe8, 9px 9px 0 3px var(--ink);
+}
+body[data-theme="dagobert"] .infobar { backdrop-filter: none; background: var(--heap), var(--sky-art), radial-gradient(circle, var(--dots) 1.3px, transparent 1.8px) 0 0 / 8px 8px, var(--sky-base); }
+body[data-theme="dagobert"] .settings-shell,
+body[data-theme="dagobert"] .dialog-card { background: var(--duck) right 190px bottom 70px / var(--duck-settings) no-repeat, var(--bin) right 24px bottom 70px / 150px auto no-repeat, var(--sky-art), radial-gradient(circle, var(--dots) 1.3px, transparent 1.8px) 0 0 / 8px 8px, var(--sky-base); }
+body[data-theme="dagobert"] .infobar::before,
+body[data-theme="dagobert"] .infobar::after { content: ""; position: absolute; left: 0; pointer-events: none; will-change: transform; }
+/* Tag: Wolken ziehen, Taler fallen (Ebene eine Kachel höher, rutscht genau eine Kachel); nachts funkeln Sterne. */
+body[data-theme="dagobert"][data-sky="day"] .infobar::before { top: 0; bottom: 0; width: 200%; background: var(--dago-clouds) 0 0 / auto 100% repeat-x; animation: sky-drift 150s linear infinite; }
+body[data-theme="dagobert"][data-sky="day"] .infobar::after { top: -220px; bottom: 0; width: 100%; background: var(--dago-coins) 0 0 / 360px 220px repeat; animation: dago-fall 20s linear infinite; }
+body[data-theme="dagobert"][data-sky="night"] .infobar::before { inset: 0; background: var(--dago-twinkle) 0 0 / 320px 200px repeat; animation: sky-twinkle 1.8s steps(2, jump-none) infinite alternate; }
+body[data-theme="dagobert"][data-sky="night"] .infobar::after { display: none; }
+@keyframes dago-fall { to { transform: translateY(220px); } }
+body[data-theme="dagobert"] .infobar > * { position: relative; z-index: 1; }
+/* Lichthof um die Schrift, damit Wolken, Taler und Sterne dahinter nichts unleserlich machen */
+body[data-theme="dagobert"][data-sky="day"] :is(.ib-weather, .ib-transit) { text-shadow: 0 0 2px #fff, 0 0 4px #fff, 0 0 6px #8fd3ff; }
+body[data-theme="dagobert"][data-sky="night"] :is(.ib-weather, .ib-transit) { text-shadow: 0 0 2px #1a2a6c, 0 0 4px #1a2a6c, 0 0 6px #1a2a6c; }
+/* Tuschestriche als Panelgrenzen */
+body[data-theme="dagobert"] .ib-sep { margin: 0; background: var(--ink); box-shadow: 1px 0 0 var(--ink), -1px 0 0 var(--ink); }
+/* Uhr als gelber Erzählkasten */
+body[data-theme="dagobert"] .ib-clock { --text: #111; --muted: #262626; background: var(--caption); }
+body[data-theme="dagobert"] .clock-time,
+body[data-theme="dagobert"] .weather-temp,
+body[data-theme="dagobert"] .settings-header h1,
+body[data-theme="dagobert"] .dialog-card h1 { font-family: "Barlow Semi Condensed", Barlow, ui-sans-serif, sans-serif; font-weight: 700; letter-spacing: 0.01em; }
+body[data-theme="dagobert"] .clock-time { color: #111; }
+body[data-theme="dagobert"][data-sky="day"] .weather-temp { color: #fff; -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; text-shadow: 3px 3px 0 var(--ink); }
+body[data-theme="dagobert"][data-sky="night"] .weather-temp { color: var(--caption); -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; text-shadow: 3px 3px 0 var(--ink); }
+body[data-theme="dagobert"] .block-head,
+body[data-theme="dagobert"] .rain-label,
+body[data-theme="dagobert"] .weather-condition { text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; }
+body[data-theme="dagobert"] .rain-track { border: 2px solid var(--ink); border-radius: 3px; }
+body[data-theme="dagobert"] .weather-icon svg { stroke-width: 1.8; }
+body[data-theme="dagobert"] .wi-sun { stroke: #e08a00; }
+/* Liniennummern als Taler */
+body[data-theme="dagobert"] .departure-line {
+  color: #111;
+  background: var(--caption);
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: 2px 2px 0 var(--ink);
+  text-shadow: none;
+}
+body[data-theme="dagobert"][data-sky="night"] .departure-now { -webkit-text-stroke: 1px var(--ink); paint-order: stroke fill; }
+/* Knöpfe und Felder im Comic-Stil: Kontur und harter Schatten, beim Drücken rutscht der Knopf in den Schatten */
+body[data-theme="dagobert"] .menu-button,
+body[data-theme="dagobert"] .button,
+body[data-theme="dagobert"] .icon-button,
+body[data-theme="dagobert"] .menu-tab,
+body[data-theme="dagobert"] .osk-key { border: 3px solid var(--ink); border-radius: 8px; box-shadow: 3px 3px 0 var(--ink); }
+body[data-theme="dagobert"] .menu-button { background: var(--caption); color: #111; }
+body[data-theme="dagobert"] .menu-tab { color: var(--text); background: var(--field-bg); }
+body[data-theme="dagobert"] .menu-tab[aria-selected="true"] { color: var(--on-accent); background: var(--accent); }
+body[data-theme="dagobert"] .button-secondary,
+body[data-theme="dagobert"] .icon-button { background: var(--field-bg); }
+body[data-theme="dagobert"] .player-toggle { color: #111; background: var(--caption); }
+body[data-theme="dagobert"] .button-danger { background: var(--field-bg); }
+body[data-theme="dagobert"] :is(.menu-button, .button, .icon-button, .menu-tab, .osk-key):active:not(:disabled) { transform: translate(3px, 3px); box-shadow: none; }
+body[data-theme="dagobert"] .field input,
+body[data-theme="dagobert"] .field textarea,
+body[data-theme="dagobert"] .field select,
+body[data-theme="dagobert"] .stop-card,
+body[data-theme="dagobert"] .station-result,
+body[data-theme="dagobert"] .live-card,
+body[data-theme="dagobert"] .place-card,
+body[data-theme="dagobert"] .toggle { border: 2px solid var(--ink); background-color: var(--field-bg); }
+body[data-theme="dagobert"] .osk { border-top: 4px solid var(--ink); }
+body[data-theme="dagobert"][data-sky="day"] .osk-key { background: #fff; }
+body[data-theme="dagobert"] .settings-header,
+body[data-theme="dagobert"] .settings-footer { border-color: var(--ink); border-width: 3px; }
+/* Dagobert steigt wie im Comic aus dem Panel: er steht rechts oben auf der Infoleiste.
+   Eigenes Bild: data/theme/dagobert-tag.png bzw. dagobert-nacht.png (oder .webp/.svg). */
+body[data-theme="dagobert"]:not(.no-infobar)::after {
+  content: "";
+  position: fixed;
+  z-index: 6;
+  right: var(--duck-right);
+  bottom: calc(var(--gap) + var(--bar-h) - var(--duck-sink) * var(--duck-s));
+  width: calc(var(--duck-w) * var(--duck-s));
+  height: calc(var(--duck-h) * var(--duck-s));
+  background: var(--duck) right bottom / contain no-repeat;
+  pointer-events: none;
+}
+body[data-theme="dagobert"][data-sky="night"]:not(.no-infobar)::before {
+  content: "";
+  position: fixed;
+  z-index: 6;
+  right: calc(var(--duck-right) + 52px * var(--duck-s));
+  bottom: calc(var(--gap) + var(--bar-h) + (var(--duck-h) - var(--duck-sink) - 6px) * var(--duck-s));
+  width: calc(96px * var(--duck-s));
+  height: calc(86px * var(--duck-s));
+  background: var(--dago-zzz) center / contain no-repeat;
+  pointer-events: none;
+}
+body[data-theme="dagobert"][data-layout="minimal"] { --duck-s: 0.75; }
+body[data-theme="dagobert"] .now-playing {
+  border: 4px solid var(--ink);
+  border-radius: 6px;
+  background: radial-gradient(circle, var(--dots) 1.3px, transparent 1.8px) 0 0 / 8px 8px, var(--sky-base);
+  box-shadow: 0 0 0 3px #fffbe8, 7px 7px 0 3px var(--ink);
+}
+body[data-theme="dagobert"] .np-art { border: 3px solid var(--ink); border-radius: 4px; background: var(--caption); }
+body[data-theme="dagobert"] .np-art::before { color: #111; }
+body[data-theme="dagobert"] .np-title { text-transform: uppercase; letter-spacing: 0.03em; font-weight: 700; }
+body[data-theme="dagobert"] .np-track { border: 2px solid var(--ink); height: calc(9px * var(--s)); }
+/* Geldspeicher und Figur liegen hinter dem Menüinhalt; Lichthof und feste Flächen halten Text lesbar. */
+body[data-theme="dagobert"] .settings-content { text-shadow: 0 0 2px var(--sky-base), 0 0 4px var(--sky-base), 0 0 7px var(--sky-base); }
+body[data-theme="dagobert"] .help-steps code { background: var(--field-bg); border: 1px solid var(--ink); text-shadow: none; }
+body[data-theme="dagobert"] .settings-header h1::after { content: " · Geldspeicher"; }
+
 /* Layoutprofil minimal (<1150 × 650) */
 body[data-layout="minimal"] {
   --gap: 10px;
@@ -535,33 +988,33 @@ body[data-layout="minimal"] {
 }
 body[data-layout="minimal"] .infobar { border-radius: 18px; }
 body[data-layout="minimal"] .ib-sep { margin: 18px 0; }
-body[data-layout="minimal"] .block-head { font-size: 13px; }
+body[data-layout="minimal"] .block-head { font-size: 14px; }
 body[data-layout="minimal"] .ib-clock { padding: 16px 18px 14px; }
-body[data-layout="minimal"] .clock-time { font-size: 54px; }
-body[data-layout="minimal"] .clock-date { margin-top: 7px; font-size: 16px; }
-body[data-layout="minimal"] .clock-sys { font-size: 12px; }
+body[data-layout="minimal"] .clock-time { font-size: 59px; }
+body[data-layout="minimal"] .clock-date { margin-top: 7px; font-size: 18px; }
+body[data-layout="minimal"] .clock-sys { font-size: 13px; }
 body[data-layout="minimal"] .ib-weather { padding: 14px 18px 12px; }
 body[data-layout="minimal"] .weather-head { gap: 11px; }
 body[data-layout="minimal"] .weather-icon { width: 38px; height: 38px; }
-body[data-layout="minimal"] .weather-temp { font-size: 46px; }
-body[data-layout="minimal"] .weather-condition { font-size: 17px; }
-body[data-layout="minimal"] .weather-details { font-size: 13px; }
-body[data-layout="minimal"] .rain-head { font-size: 13px; }
+body[data-layout="minimal"] .weather-temp { font-size: 51px; }
+body[data-layout="minimal"] .weather-condition { font-size: 19px; }
+body[data-layout="minimal"] .weather-details { font-size: 14px; }
+body[data-layout="minimal"] .rain-head { font-size: 14px; }
 body[data-layout="minimal"] .rain-hours { margin-top: 5px; }
 body[data-layout="minimal"] .rain-track { height: 24px; }
-body[data-layout="minimal"] .rain-hour { font-size: 12px; }
+body[data-layout="minimal"] .rain-hour { font-size: 13px; }
 body[data-layout="minimal"] .ib-transit { padding: 12px 18px 10px; }
 body[data-layout="minimal"] .departure { grid-template-columns: 42px minmax(0, 1fr) auto; column-gap: 11px; height: 35px; }
-body[data-layout="minimal"] .departure-line { height: 26px; font-size: 17px; }
-body[data-layout="minimal"] .departure-target { font-size: 17px; }
-body[data-layout="minimal"] .departure-sub { font-size: 12px; }
-body[data-layout="minimal"] .departure-num { font-size: 25px; }
-body[data-layout="minimal"] .departure-unit { font-size: 13px; }
-body[data-layout="minimal"] .departure-now { font-size: 22px; }
+body[data-layout="minimal"] .departure-line { height: 26px; font-size: 19px; }
+body[data-layout="minimal"] .departure-target { font-size: 19px; }
+body[data-layout="minimal"] .departure-sub { font-size: 13px; }
+body[data-layout="minimal"] .departure-num { font-size: 28px; }
+body[data-layout="minimal"] .departure-unit { font-size: 14px; }
+body[data-layout="minimal"] .departure-now { font-size: 24px; }
 body[data-layout="minimal"] .departure-icon svg { width: 19px; height: 19px; }
-body[data-layout="minimal"] .departure-error { font-size: 14px; }
-body[data-layout="minimal"] .board-message strong { font-size: 15px; }
-body[data-layout="minimal"] .board-message span { font-size: 12px; }
+body[data-layout="minimal"] .departure-error { font-size: 15px; }
+body[data-layout="minimal"] .board-message strong { font-size: 16px; }
+body[data-layout="minimal"] .board-message span { font-size: 13px; }
 
 /* Layoutprofil information (≥1700 × 850) */
 body[data-layout="information"] { --s: 1.25; }
