@@ -34,14 +34,14 @@ Die JSON-Konfiguration wird gegen ein geschlossenes Schema validiert. Unbekannte
 | `admin.pin_hash` | lokaler PBKDF2-Hash | nur durch Setup setzen |
 | `ui.theme` | Farbsystem | `dark`, `light`, `high-contrast` |
 | `ui.layout_profile` | Informationsdichte | `auto`, `minimal`, `standard`, `information` |
-| `ui.*.enabled` | Uhr/Wetter/Radar/ÖPNV/System | boolesch |
-| `ui.radar.width` / `height` | Radargröße | 200–720 / 140–560 Pixel |
-| `ui.radar.zoom` / `opacity` | Kartenausschnitt | 4–14 / 0,25–1,0 |
+| `ui.*.enabled` | Uhr/Wetter/Radar/ÖPNV/System in der Infoleiste; ausgeschaltete Blöcke entfallen samt Trenner | boolesch |
+| `ui.radar.width` / `height` | Radargröße; seit der Infoleiste ohne Wirkung, bleibt für Kompatibilität erhalten | 200–720 / 140–560 Pixel |
+| `ui.radar.zoom` / `opacity` | Kartenausschnitt / Deckkraft der Regenkacheln über der Karte | 4–14 / 0,25–1,0 |
 | `weather.provider` | Wetterprovider | derzeit `openmeteo` |
 | `weather.refresh_seconds` | Wetterintervall | 60–3600 Sekunden |
 | `weather.forecast_hours` | Zukunftsfenster | 1–48 Stunden |
 | `weather.rain_mm_threshold` | Regenmenge-Grenze | 0–100 mm |
-| `weather.rain_probability_threshold` | Wahrscheinlichkeitsgrenze | 0–100 % |
+| `weather.rain_probability_threshold` | Wahrscheinlichkeitsgrenze; beide Schwellen markieren Regenstunden in der Stundenleiste | 0–100 % |
 | `transit.provider` | ÖPNV-Provider | derzeit `vrr` |
 | `transit.refresh_seconds` | Abfahrtsintervall | 15–3600 Sekunden |
 | `transit.default_max_rows` | Standardzeilen | 1–12 |
@@ -53,3 +53,5 @@ Die JSON-Konfiguration wird gegen ein geschlossenes Schema validiert. Unbekannte
 | `logging.max_bytes` / `backups` | App-Logrotation | 64 KiB–100 MiB / 1–20 |
 
 Eine Haltestelle enthält `title`, `station_name`, `station_id`, `line_filter`, `nightbus_only`, `hide_if_empty` und `max_rows`. Die Oberfläche verwaltet diese Felder ohne manuelle JSON-Bearbeitung. Der VRR-Provider gilt nur für seine unterstützte Region.
+
+Die Infoleiste zeigt höchstens drei Abfahrten (unter 760 px Breite zwei) über alle Haltestellen hinweg, nach Minuten sortiert. `max_rows` begrenzt weiterhin, wie viele Zeilen je Haltestelle abgefragt werden.

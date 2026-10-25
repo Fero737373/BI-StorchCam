@@ -1,21 +1,30 @@
 # BI-StorchCam
 
-BI-StorchCam ist ein leichtgewichtiger lokaler Web-Kiosk für einen Livestream mit Uhr, Wetter, Regenradar und optionalen VRR-Abfahrten. Der Livestream bleibt die Hauptfläche; Zusatzinformationen liegen kompakt an den Bildschirmrändern.
+BI-StorchCam ist ein leichtgewichtiger lokaler Web-Kiosk für einen Livestream mit Uhr, Wetter, Regenradar und optionalen VRR-Abfahrten. Der Livestream füllt den ganzen Bildschirm; alle Zusatzinformationen liegen in einer Infoleiste am unteren Rand.
 
 > **Status:** `0.2.0-beta.1`. Der Quellstand ist für einen ersten Beta-Test gehärtet.
 
 ## Screenshots
 
-Die automatisierten UI-Tests erzeugen bei Fehlern Screenshots für 1024×600, 1280×720 und 1920×1080. Produktive Referenzscreenshots werden nach dem ersten bestandenen Pi-Hardwaretest ergänzt.
+Die automatisierten UI-Tests erzeugen bei Fehlern Screenshots für 1024×600, 1280×720 und 1920×1080. Referenzbilder mit Mock-Daten (alle Profile, Themes und Fehlerzustände) entstehen auf Wunsch:
+
+```bash
+SCREENSHOT_DIR=/tmp/storchcam-shots npx playwright test -g "reference screenshots"
+```
+
+Produktive Referenzscreenshots werden nach dem ersten bestandenen Pi-Hardwaretest ergänzt.
 
 ## Funktionen
 
 - eine einzige Web-Kiosk-Architektur und ein zentraler Einstiegspunkt
-- Livestream mit ehrlichen Lade- und Fehlerzuständen
-- Layoutprofile `minimal`, `standard`, `information` und Viewport-Auswahl über `auto`
-- Open-Meteo-Wetter ab der aktuellen Uhrzeit
-- RainViewer-Radar mit Datenzeit, Quelle, Standortmarkierung und Offlinezustand
-- mehrere VRR-Haltestellen mit Linien- und Nachtbusfiltern
+- vollflächiger Livestream mit ehrlichen Lade- und Fehlerzuständen; oben rechts nur ein kleiner Status-Chip
+- Infoleiste unten aus Milchglas: Uhr mit Datum und Systemzeile, Wetter mit Stundenleiste der Regenwahrscheinlichkeit, Radar-Kartenfeld und die nächsten drei Abfahrten
+- Layoutprofile `minimal`, `standard`, `information` und Viewport-Auswahl über `auto`; ausgeschaltete Blöcke verschwinden samt Trenner
+- Themes `dark`, `light`, `high-contrast`, alle Texte mit mindestens 4,5:1 Kontrast
+- Schrift Barlow lokal eingebunden (SIL OFL 1.1), funktioniert offline
+- Open-Meteo-Wetter ab der aktuellen Uhrzeit, Regenstunden nach den konfigurierten Schwellen
+- RainViewer-Radar mit Datenzeit, Standortmarkierung und Offlinezustand
+- mehrere VRR-Haltestellen mit Linien- und Nachtbusfiltern; Abfahrten aller Haltestellen nach Minuten sortiert
 - lokaler Adminmodus per drei Sekunden langer Berührung oben links oder `Ctrl+Alt+S`
 - PBKDF2-gehashte PIN und zeitlich begrenzte Admin-Sessions
 - Hintergrund-State ohne Provideraufrufe pro Browseranfrage
