@@ -45,22 +45,24 @@
     "autoplay": true
   },
   "admin": {
-    "pin_hash": ""
+    "pin_hash": "",
+    "require_pin": true
   },
   "ui": {
     "theme": "dark",
     "layout_profile": "auto",
-    "clock": { "enabled": true },
-    "weather": { "enabled": true },
-    "radar": {
-      "enabled": true,
-      "width": 280,
-      "height": 190,
-      "zoom": 12,
-      "opacity": 0.92
+    "clock": {
+      "enabled": true
     },
-    "transit": { "enabled": false },
-    "system": { "enabled": false }
+    "weather": {
+      "enabled": true
+    },
+    "transit": {
+      "enabled": false
+    },
+    "system": {
+      "enabled": false
+    }
   },
   "weather": {
     "provider": "openmeteo",
@@ -76,13 +78,13 @@
     "target_len": 16,
     "stops": []
   },
-  "radar": {
-    "provider": "rainviewer",
-    "refresh_seconds": 300
-  },
   "logging": {
     "level": "INFO",
     "max_bytes": 2097152,
     "backups": 3
+  },
+  "youtube": {
+    "api_key": "",
+    "default_query": "Storch"
   }
 }

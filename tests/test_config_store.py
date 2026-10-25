@@ -77,3 +77,16 @@ def test_migration_removes_unsafe_hardware_and_placeholder(config: dict) -> None
 def test_platform_path_windows(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("APPDATA", str(tmp_path))
     assert platform_app_dir("nt") == tmp_path / "BI-StorchCam"
+
+
+def test_old_config_with_radar_is_migrated(tmp_path: Path) -> None:
+    target = tmp_path / "config.json"
+    old = {
+        "location": {"label": "Bielefeld", "latitude": 52.0302, "longitude": 8.5325},
+        "ui": {"theme": "dark", "radar": {"enabled": True, "width": 280, "height": 190, "zoom": 12, "opacity": 0.92}},
+        "radar": {"provider": "rainviewer", "refresh_seconds": 300},
+    }
+    target.write_text(json.dumps(old), encoding="utf-8")
+    loaded = load_config(target)
+    assert "radar" not in loaded and "radar" not in loaded["ui"]
+    assert "radar" not in json.loads(target.read_text(encoding="utf-8"))

@@ -17,7 +17,6 @@ from .admin import hash_pin
 from .config_store import ConfigError, config_path, load_config, public_config, save_config
 from .kiosk import BrowserManager
 from .logging_setup import configure_logging
-from .providers.rainviewer import get_radar_metadata
 from .providers.transit_vrr_smart import get_boards, search_station
 from .providers.weather_smart import get_weather
 from .server import StorchServer, create_server, run_server
@@ -34,7 +33,6 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--test-config", action="store_true", help="Validierte Config ohne Geheimnisse anzeigen")
     result.add_argument("--test-weather", action="store_true", help="Open-Meteo einmalig testen")
     result.add_argument("--test-transit", action="store_true", help="VRR einmalig testen")
-    result.add_argument("--test-radar", action="store_true", help="RainViewer einmalig testen")
     result.add_argument("--station-search", default="", help="VRR-Haltestelle suchen")
     return result
 
@@ -104,9 +102,6 @@ def _diagnostic_command(args: argparse.Namespace, config: dict[str, Any], path: 
         return 0
     if args.test_transit:
         _print_json(get_boards(config, force=True))
-        return 0
-    if args.test_radar:
-        _print_json(get_radar_metadata(config))
         return 0
     if args.station_search:
         _print_json(search_station(args.station_search))

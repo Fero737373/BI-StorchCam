@@ -29,14 +29,15 @@ Die JSON-Konfiguration wird gegen ein geschlossenes Schema validiert. Unbekannte
 | `screen.touch_matrix` | Transformation | leer = keine Änderung |
 | `location.label` | sichtbarer Standort | maximal 120 Zeichen |
 | `location.latitude` / `longitude` | Karten- und Wetterposition | −90…90 / −180…180 |
-| `stream.url` | Embed-URL | leer oder vollständiges HTTP(S) |
+| `stream.url` | Embed-URL; normale YouTube-Links werden in die Embed-Form umgewandelt | leer oder vollständiges HTTP(S) |
 | `stream.autoplay` / `muted` | Playerparameter | boolesch |
 | `admin.pin_hash` | lokaler PBKDF2-Hash | nur durch Setup setzen |
+| `admin.require_pin` | Menü nur mit PIN öffnen; im Docker-Container per `BI_STORCHCAM_REQUIRE_PIN` gesetzt | `true`, Docker: `false` |
+| `youtube.api_key` | optionaler Schlüssel für die YouTube Data API v3; wird nie an die Oberfläche ausgeliefert, leer = öffentliche Suchseite oder `YOUTUBE_API_KEY` | leer |
+| `youtube.default_query` | Suchwort beim Öffnen der Livestream-Auswahl | `Storch` |
 | `ui.theme` | Farbsystem | `dark`, `light`, `high-contrast` |
 | `ui.layout_profile` | Informationsdichte | `auto`, `minimal`, `standard`, `information` |
-| `ui.*.enabled` | Uhr/Wetter/Radar/ÖPNV/System in der Infoleiste; ausgeschaltete Blöcke entfallen samt Trenner | boolesch |
-| `ui.radar.width` / `height` | Radargröße; seit der Infoleiste ohne Wirkung, bleibt für Kompatibilität erhalten | 200–720 / 140–560 Pixel |
-| `ui.radar.zoom` / `opacity` | Kartenausschnitt / Deckkraft der Regenkacheln über der Karte | 4–14 / 0,25–1,0 |
+| `ui.*.enabled` | Uhr/Wetter/ÖPNV/System in der Infoleiste; ausgeschaltete Blöcke entfallen samt Trenner | boolesch |
 | `weather.provider` | Wetterprovider | derzeit `openmeteo` |
 | `weather.refresh_seconds` | Wetterintervall | 60–3600 Sekunden |
 | `weather.forecast_hours` | Zukunftsfenster | 1–48 Stunden |
@@ -47,11 +48,11 @@ Die JSON-Konfiguration wird gegen ein geschlossenes Schema validiert. Unbekannte
 | `transit.default_max_rows` | Standardzeilen | 1–12 |
 | `transit.target_len` | Ziellängenkürzung | 8–80 Zeichen |
 | `transit.stops` | bis zu 20 Haltestellen | Liste, siehe unten |
-| `radar.provider` | Radarprovider | derzeit `rainviewer` |
-| `radar.refresh_seconds` | Metadatenintervall | 120–3600 Sekunden |
 | `logging.level` | App-Loglevel | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `logging.max_bytes` / `backups` | App-Logrotation | 64 KiB–100 MiB / 1–20 |
 
 Eine Haltestelle enthält `title`, `station_name`, `station_id`, `line_filter`, `nightbus_only`, `hide_if_empty` und `max_rows`. Die Oberfläche verwaltet diese Felder ohne manuelle JSON-Bearbeitung. Der VRR-Provider gilt nur für seine unterstützte Region.
 
 Die Infoleiste zeigt höchstens drei Abfahrten (unter 760 px Breite zwei) über alle Haltestellen hinweg, nach Minuten sortiert. `max_rows` begrenzt weiterhin, wie viele Zeilen je Haltestelle abgefragt werden.
+
+Das frühere Regenradar wurde entfernt. Alte Konfigurationen mit `ui.radar` oder `radar` werden beim Start automatisch bereinigt.

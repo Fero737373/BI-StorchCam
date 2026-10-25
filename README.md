@@ -1,6 +1,6 @@
 # BI-StorchCam
 
-BI-StorchCam ist ein leichtgewichtiger lokaler Web-Kiosk für einen Livestream mit Uhr, Wetter, Regenradar und optionalen VRR-Abfahrten. Der Livestream füllt den ganzen Bildschirm; alle Zusatzinformationen liegen in einer Infoleiste am unteren Rand.
+BI-StorchCam ist ein leichtgewichtiger lokaler Web-Kiosk für einen Livestream mit Uhr, Wetter und optionalen VRR-Abfahrten. Der Livestream füllt den ganzen Bildschirm; alle Zusatzinformationen liegen in einer Infoleiste am unteren Rand.
 
 > **Status:** `0.2.0-beta.1`. Der Quellstand ist für einen ersten Beta-Test gehärtet.
 
@@ -17,16 +17,17 @@ Produktive Referenzscreenshots werden nach dem ersten bestandenen Pi-Hardwaretes
 ## Funktionen
 
 - eine einzige Web-Kiosk-Architektur und ein zentraler Einstiegspunkt
-- vollflächiger Livestream mit ehrlichen Lade- und Fehlerzuständen; oben rechts nur ein kleiner Status-Chip
-- Infoleiste unten aus Milchglas: Uhr mit Datum und Systemzeile, Wetter mit Stundenleiste der Regenwahrscheinlichkeit, Radar-Kartenfeld und die nächsten drei Abfahrten
+- vollflächiger Livestream ohne Einblendungen; nur bei Fehlern erscheint ein Hinweis
+- Infoleiste unten aus Milchglas: Uhr mit Datum und Systemzeile, Wetter mit Stundenleiste der Regenwahrscheinlichkeit und die nächsten drei Abfahrten
 - Layoutprofile `minimal`, `standard`, `information` und Viewport-Auswahl über `auto`; ausgeschaltete Blöcke verschwinden samt Trenner
 - Themes `dark`, `light`, `high-contrast`, alle Texte mit mindestens 4,5:1 Kontrast
 - Schrift Barlow lokal eingebunden (SIL OFL 1.1), funktioniert offline
 - Open-Meteo-Wetter ab der aktuellen Uhrzeit, Regenstunden nach den konfigurierten Schwellen
-- RainViewer-Radar mit Datenzeit, Standortmarkierung und Offlinezustand
 - mehrere VRR-Haltestellen mit Linien- und Nachtbusfiltern; Abfahrten aller Haltestellen nach Minuten sortiert
-- lokaler Adminmodus per drei Sekunden langer Berührung oben links oder `Ctrl+Alt+S`
-- PBKDF2-gehashte PIN und zeitlich begrenzte Admin-Sessions
+- Menü-Knopf oben links (oder `Ctrl+Alt+S`) mit Touch-Oberfläche und Bildschirmtastatur
+- Livestream-Auswahl aus allem, was gerade auf YouTube live ist, ohne API-Schlüssel
+- weltweite Ortssuche; Uhr und Wetter folgen der Zeitzone des Orts
+- im Docker-Betrieb ohne PIN, sonst PBKDF2-gehashte PIN und zeitlich begrenzte Admin-Sessions
 - Hintergrund-State ohne Provideraufrufe pro Browseranfrage
 - überwachte Chromium-, Chrome- oder Edge-Prozesse mit begrenztem Backoff
 - atomische Konfiguration mit letzter Sicherung
@@ -47,7 +48,7 @@ BI-StorchCam läuft als Docker-Container (getestet auf Raspberry Pi OS / Debian 
 
 ## Externe Dienste
 
-Für Live-Daten benötigt BI-StorchCam Netzwerkzugriff zu Open-Meteo, RainViewer, OpenStreetMap-Kacheln und dem VRR-Haltestellenmonitor. Der Stream benötigt Zugriff auf die konfigurierte Streamdomain. Die App enthält keine Cloud-Benutzerverwaltung und sendet keine lokale PIN.
+Für Live-Daten benötigt BI-StorchCam Netzwerkzugriff zu Open-Meteo (Wetter, Ortssuche, Zeitzone), Nominatim/OpenStreetMap (Adresssuche), dem VRR-Haltestellenmonitor und für die Livestream-Suche zu YouTube (öffentliche Suchseite bzw. YouTube Data API, Vorschaubilder von i.ytimg.com). Der Stream benötigt Zugriff auf die konfigurierte Streamdomain. Die App enthält keine Cloud-Benutzerverwaltung und sendet keine lokale PIN.
 
 ## Docker
 
@@ -55,17 +56,12 @@ Für Live-Daten benötigt BI-StorchCam Netzwerkzugriff zu Open-Meteo, RainViewer
 git clone https://github.com/Fero737373/BI-StorchCam.git
 cd BI-StorchCam
 mkdir -p data
-BI_STORCHCAM_ADMIN_PIN=1234 \
-BI_STORCHCAM_STREAM_URL="https://…/embed" \
 docker compose up -d --build
 ```
 
-Die PIN (4–12 Ziffern) wird nur beim allerersten Start benötigt und als PBKDF2-Hash in `./data/config.json` gespeichert. Alternativ interaktiv einrichten:
+Mehr ist nicht nötig: kein API-Schlüssel, keine PIN. Der Container startet Server und Chromium-Kiosk; die Anzeige erscheint im Vollbild direkt auf dem angeschlossenen Bildschirm. Zusätzlich ist sie auf dem Gerät selbst unter `http://localhost:8080` erreichbar (bewusst nicht aus dem Netzwerk, weil das Menü keine PIN hat).
 
-```bash
-docker compose run --rm bi-storchcam --setup
-docker compose up -d
-```
+Nach Codeänderungen immer mit `--build` starten, sonst läuft das alte Image weiter.
 
 Voraussetzungen für die Anzeige auf dem Bildschirm:
 
@@ -73,23 +69,32 @@ Voraussetzungen für die Anzeige auf dem Bildschirm:
 - Der Container bindet `/run/user` (Wayland, Audio) und `/dev/dri` (GPU) ein und läuft mit `seccomp=unconfined`, damit die Chromium-Sandbox aktiv bleiben kann.
 - Startet Docker beim Booten vor der Desktop-Sitzung, wartet der Container bis zu fünf Minuten auf den Wayland-Socket.
 
-Mit `restart: unless-stopped` startet die Cam nach jedem Neustart automatisch. `docker compose stop` schließt den Kiosk wieder. `BI_STORCHCAM_KIOSK=0` startet nur den Server (Aufruf dann z. B. über `http://<pi>:8000/`). `BI_STORCHCAM_STREAM_URL` überschreibt bei jedem Start die Stream-URL; ohne die Variable gilt der Wert aus `./data/config.json` bzw. dem Adminmodus.
+Optionale Umgebungsvariablen (z. B. in einer `.env` neben `docker-compose.yml`):
 
-Diagnoseoptionen laufen ebenfalls im Container:
+| Variable | Wirkung |
+| --- | --- |
+| `BI_STORCHCAM_STREAM_URL` | setzt bei jedem Start die Stream-URL |
+| `YOUTUBE_API_KEY` | nutzt für die Live-Suche die offizielle YouTube-API statt der öffentlichen Suchseite |
+| `BI_STORCHCAM_KIOSK=0` | nur Server, kein Browser auf dem Bildschirm |
+| `BI_STORCHCAM_REQUIRE_PIN=1` + `BI_STORCHCAM_ADMIN_PIN` | Menü wieder mit PIN schützen |
 
-```bash
-docker compose run --rm bi-storchcam --test-config
-docker compose run --rm bi-storchcam --test-weather
-docker compose run --rm bi-storchcam --station-search "Jahnplatz"
-```
+Diagnoseoptionen laufen ebenfalls im Container, z. B. `docker compose run --rm bi-storchcam --test-weather`.
 
 Ohne Docker: `python -m pip install -e .` und `python -m bi_storchcam --no-browser`.
 
-## Adminzugriff
+## Menü
 
-Halte die unsichtbare obere linke Ecke mindestens drei Sekunden gedrückt oder drücke `Ctrl+Alt+S`. Beim ersten lokalen Aufruf wird eine PIN mit 4 bis 12 Ziffern festgelegt. Gespeichert wird nur ein PBKDF2-SHA256-Hash mit individuellem Salt. Schreibzugriffe erfordern anschließend ein zeitlich begrenztes In-Memory-Token.
+Der Knopf oben links öffnet das Menü. Alles ist per Touch bedienbar, Texteingaben laufen über die eingebaute Bildschirmtastatur.
 
-Der Server bindet standardmäßig ausschließlich an `127.0.0.1`. Vor einer externen Bind-Adresse muss bereits eine Admin-PIN eingerichtet sein.
+- **Livestream:** zeigt Streams, die gerade auf YouTube live sind (Start mit „Storch“, Suchwort frei wählbar). Antippen spielt den Stream sofort ab. Ohne Schlüssel liest die App die öffentliche YouTube-Suche mit dem Filter „Live“; ändert YouTube diese Seite, kann die Suche ausfallen, bis die App angepasst ist. Manche Kanäle verbieten das Einbetten; dann zeigt der Player einen Hinweis.
+- **Ort:** weltweite Suche nach Adresse, Straße oder Ort (Nominatim/OpenStreetMap, Rückfall auf Open-Meteo). Antippen übernimmt Name, Koordinaten und Zeitzone; Uhr und Wetter folgen.
+- **Anzeige:** Layoutprofil, Theme, sichtbare Blöcke.
+- **ÖPNV:** Haltestellen, derzeit nur im VRR (Nordrhein-Westfalen).
+- **System:** optionaler YouTube-API-Schlüssel und Start-Suchwort.
+
+## Adminzugriff außerhalb von Docker
+
+Ohne Docker bleibt das Menü PIN-geschützt (`admin.require_pin`). Beim ersten Öffnen wird eine PIN mit 4 bis 12 Ziffern festgelegt; gespeichert wird nur ein PBKDF2-SHA256-Hash. Der Server bindet dann standardmäßig ausschließlich an `127.0.0.1`.
 
 ## Konfiguration und Logs
 
@@ -120,11 +125,10 @@ BI-StorchCam verarbeitet Standort, Stream-URL und Haltestellen lokal. Externe An
 ## Datenquellen und Attribution
 
 - Wetter: [Open-Meteo](https://open-meteo.com/)
-- Regenradar: [RainViewer](https://www.rainviewer.com/)
-- Basiskarte: [OpenStreetMap-Mitwirkende](https://www.openstreetmap.org/copyright)
+- Adresssuche: [Nominatim](https://nominatim.org/), Daten © [OpenStreetMap-Mitwirkende](https://www.openstreetmap.org/copyright)
 - ÖPNV: VRR-Haltestellenmonitor
 
-Die Kartenattribution wird zusätzlich im Radarbereich angezeigt. Marken und Logos werden nicht unnötig eingebunden.
+Marken und Logos werden nicht unnötig eingebunden.
 
 ## Lizenz
 

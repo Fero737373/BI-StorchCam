@@ -7,12 +7,13 @@ import ipaddress
 import json
 import logging
 import os
+import re
 import shutil
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .defaults import CONFIG_SCHEMA_VERSION, DEFAULT_CONFIG
@@ -107,13 +108,31 @@ def _validate_host(host: str) -> str:
     return host
 
 
+def youtube_embed_url(value: str) -> str:
+    """Wandelt normale YouTube-Links (watch, youtu.be, live, shorts) in die einbettbare Form um."""
+    parsed = urlparse(value)
+    host = parsed.netloc.lower().removeprefix("www.").removeprefix("m.")
+    video = ""
+    if host == "youtu.be":
+        video = parsed.path.strip("/").split("/")[0]
+    elif host in {"youtube.com", "music.youtube.com"}:
+        parts = parsed.path.strip("/").split("/")
+        if parts[0] == "watch":
+            video = parse_qs(parsed.query).get("v", [""])[0]
+        elif parts[0] in {"live", "shorts"} and len(parts) > 1:
+            video = parts[1]
+    if re.fullmatch(r"[A-Za-z0-9_-]{11}", video):
+        return f"https://www.youtube.com/embed/{video}"
+    return value
+
+
 def _validate_stream_url(value: str) -> str:
     if not value:
         return value
     parsed = urlparse(value)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ConfigError("stream.url muss eine vollständige HTTP- oder HTTPS-URL sein")
-    return value
+    return youtube_embed_url(value)
 
 
 def _validate_stop(raw: Any, index: int, default_max: int) -> dict[str, Any]:
@@ -171,7 +190,8 @@ def migrate_config(raw: dict[str, Any]) -> tuple[dict[str, Any], bool]:
 
     ui = migrated.setdefault("ui", {})
     ui.pop("menu_enabled", None)
-    for name in ("clock", "weather", "radar", "transit", "system"):
+    ui.pop("radar", None)  # Radar wurde entfernt; der Abschnitt „radar“ fällt oben automatisch weg.
+    for name in ("clock", "weather", "transit", "system"):
         section = ui.get(name)
         if isinstance(section, dict):
             for obsolete in ("position", "size", "mode", "diagnostic_only", "refresh_seconds"):
@@ -288,13 +308,24 @@ def validate_config(raw: dict[str, Any]) -> dict[str, Any]:
     })
 
     admin = cfg["admin"]
-    _only(admin, {"pin_hash"}, "admin")
+    _only(admin, {"pin_hash", "require_pin"}, "admin")
     admin["pin_hash"] = _string(admin["pin_hash"], "admin.pin_hash", 512)
-    if server["host"] not in {"127.0.0.1", "::1", "localhost"} and not admin["pin_hash"]:
+    admin["require_pin"] = _bool(admin["require_pin"], "admin.require_pin")
+    if server["host"] not in {"127.0.0.1", "::1", "localhost"} and admin["require_pin"] and not admin["pin_hash"]:
         raise ConfigError("Eine externe Bind-Adresse erfordert zuerst eine konfigurierte Admin-PIN")
 
+    youtube = cfg["youtube"]
+    _only(youtube, {"api_key", "default_query"}, "youtube")
+    api_key = _string(youtube["api_key"], "youtube.api_key", 200)
+    if api_key and not re.fullmatch(r"[A-Za-z0-9_-]+", api_key):
+        raise ConfigError("youtube.api_key enthält ungültige Zeichen")
+    youtube.update({
+        "api_key": api_key,
+        "default_query": _string(youtube["default_query"], "youtube.default_query", 100),
+    })
+
     ui = cfg["ui"]
-    _only(ui, {"theme", "layout_profile", "clock", "weather", "radar", "transit", "system"}, "ui")
+    _only(ui, {"theme", "layout_profile", "clock", "weather", "transit", "system"}, "ui")
     theme = _string(ui["theme"], "ui.theme", 30)
     layout = _string(ui["layout_profile"], "ui.layout_profile", 30)
     if theme not in {"dark", "light", "high-contrast"}:
@@ -306,14 +337,6 @@ def validate_config(raw: dict[str, Any]) -> dict[str, Any]:
     for name in ("clock", "weather", "transit", "system"):
         _only(ui[name], {"enabled"}, f"ui.{name}")
         ui[name]["enabled"] = _bool(ui[name]["enabled"], f"ui.{name}.enabled")
-    _only(ui["radar"], {"enabled", "width", "height", "zoom", "opacity"}, "ui.radar")
-    ui["radar"].update({
-        "enabled": _bool(ui["radar"]["enabled"], "ui.radar.enabled"),
-        "width": _bounded_int(ui["radar"]["width"], "ui.radar.width", 200, 720),
-        "height": _bounded_int(ui["radar"]["height"], "ui.radar.height", 140, 560),
-        "zoom": _bounded_int(ui["radar"]["zoom"], "ui.radar.zoom", 4, 14),
-        "opacity": _bounded_float(ui["radar"]["opacity"], "ui.radar.opacity", 0.25, 1.0),
-    })
 
     weather = cfg["weather"]
     _only(weather, {"provider", "refresh_seconds", "forecast_hours", "rain_mm_threshold", "rain_probability_threshold"}, "weather")
@@ -342,12 +365,6 @@ def validate_config(raw: dict[str, Any]) -> dict[str, Any]:
         "target_len": _bounded_int(transit["target_len"], "transit.target_len", 8, 80),
         "stops": [_validate_stop(stop, index, default_max) for index, stop in enumerate(stops)],
     })
-
-    radar = cfg["radar"]
-    _only(radar, {"provider", "refresh_seconds"}, "radar")
-    if _string(radar["provider"], "radar.provider", 40) != "rainviewer":
-        raise ConfigError("Derzeit wird nur der Radarprovider rainviewer unterstützt")
-    radar.update({"provider": "rainviewer", "refresh_seconds": _bounded_int(radar["refresh_seconds"], "radar.refresh_seconds", 120, 3600)})
 
     logging_cfg = cfg["logging"]
     _only(logging_cfg, {"level", "max_bytes", "backups"}, "logging")
@@ -441,4 +458,10 @@ def cache_dir(config: dict[str, Any]) -> Path:
 def public_config(config: dict[str, Any]) -> dict[str, Any]:
     safe = copy.deepcopy(config)
     safe.setdefault("admin", {})["pin_hash"] = ""
+    safe.setdefault("youtube", {})["api_key"] = ""
     return safe
+
+
+def youtube_api_key(config: dict[str, Any]) -> str:
+    """Schlüssel aus dem Menü hat Vorrang, sonst die Umgebungsvariable YOUTUBE_API_KEY."""
+    return str(config.get("youtube", {}).get("api_key", "")) or os.environ.get("YOUTUBE_API_KEY", "").strip()

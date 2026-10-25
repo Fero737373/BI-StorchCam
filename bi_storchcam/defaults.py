@@ -50,19 +50,17 @@ DEFAULT_CONFIG = {
     },
     "admin": {
         "pin_hash": "",
+        "require_pin": True,
+    },
+    "youtube": {
+        "api_key": "",
+        "default_query": "Storch",
     },
     "ui": {
         "theme": "dark",
         "layout_profile": "auto",
         "clock": {"enabled": True},
         "weather": {"enabled": True},
-        "radar": {
-            "enabled": True,
-            "width": 280,
-            "height": 190,
-            "zoom": 12,
-            "opacity": 0.92,
-        },
         "transit": {"enabled": False},
         "system": {"enabled": False},
     },
@@ -79,10 +77,6 @@ DEFAULT_CONFIG = {
         "default_max_rows": 2,
         "target_len": 16,
         "stops": [],
-    },
-    "radar": {
-        "provider": "rainviewer",
-        "refresh_seconds": 300,
     },
     "logging": {
         "level": "INFO",

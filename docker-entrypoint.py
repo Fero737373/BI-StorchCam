@@ -42,8 +42,10 @@ def prepare_config() -> int | None:
         print(f"FEHLER: {exc}", file=sys.stderr)
         return 2
 
+    # Im Container ist das Menü standardmäßig ohne PIN offen; der Port ist nur auf dem Pi selbst erreichbar.
+    config["admin"]["require_pin"] = _enabled("BI_STORCHCAM_REQUIRE_PIN", "0")
     pin = os.environ.get("BI_STORCHCAM_ADMIN_PIN", "").strip()
-    if not config["admin"]["pin_hash"]:
+    if config["admin"]["require_pin"] and not config["admin"]["pin_hash"]:
         if not pin:
             print(
                 "FEHLER: Keine Admin-PIN eingerichtet. Entweder BI_STORCHCAM_ADMIN_PIN setzen oder einmalig\n"

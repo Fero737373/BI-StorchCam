@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 from functools import partial
 from typing import Any
 
-from .providers.rainviewer import get_radar_metadata
 from .providers.transit_vrr_smart import get_boards
 from .providers.weather_smart import get_weather
 from .system_status import get_system_status
@@ -47,7 +46,6 @@ class StateManager:
             "generated_at": None,
             "config": self._public_runtime_config(config),
             "weather": {"ok": False, "text": "Wetter wird geladen"},
-            "radar": {"ok": False, "status": "Radar wird geladen", "offline": False},
             "boards": [],
             "system": {"enabled": bool(config.get("ui", {}).get("system", {}).get("enabled", False))},
         }
@@ -90,7 +88,6 @@ class StateManager:
         updates: dict[str, Any] = {}
         tasks: list[tuple[str, Callable[[], Any]]] = [
             ("weather", lambda: get_weather(config, force=True)),
-            ("radar", lambda: get_radar_metadata(config)),
             ("boards", lambda: get_boards(config, force=True)),
         ]
         if config.get("ui", {}).get("system", {}).get("enabled", False):
@@ -125,7 +122,6 @@ class StateManager:
             now = time.monotonic()
             tasks: list[tuple[str, int, Callable[[], Any]]] = [
                 ("weather", int(config["weather"]["refresh_seconds"]), partial(get_weather, config, force=True)),
-                ("radar", int(config["radar"]["refresh_seconds"]), partial(get_radar_metadata, config)),
                 ("boards", int(config["transit"]["refresh_seconds"]), partial(get_boards, config, force=True)),
             ]
             if config.get("ui", {}).get("system", {}).get("enabled", False):

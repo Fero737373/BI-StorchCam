@@ -15,7 +15,8 @@ services:
       - seccomp=unconfined
 
     ports:
-      - "8000:8000"
+      # Nur auf dem Pi selbst: http://localhost:8080 (das Menü hat keine PIN).
+      - "127.0.0.1:8080:8000"
 
     volumes:
       - ./data:/data
@@ -38,5 +39,8 @@ services:
       # Kiosk-Browser auf dem angeschlossenen Bildschirm starten (0 = nur Server).
       - BI_STORCHCAM_KIOSK=${BI_STORCHCAM_KIOSK:-1}
       - BI_STORCHCAM_STREAM_URL=${BI_STORCHCAM_STREAM_URL:-}
-      # Nur für den allerersten Start nötig, danach liegt der PBKDF2-Hash in ./data/config.json.
+      # Optional; alternativ im Menü unter „System“ eintragen. Wert z. B. in einer .env-Datei neben dieser Datei.
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
+      # PIN-Schutz für das Menü nur bei Bedarf einschalten (1), dann wird BI_STORCHCAM_ADMIN_PIN gebraucht.
+      - BI_STORCHCAM_REQUIRE_PIN=${BI_STORCHCAM_REQUIRE_PIN:-0}
       - BI_STORCHCAM_ADMIN_PIN=${BI_STORCHCAM_ADMIN_PIN:-}

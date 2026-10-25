@@ -8,18 +8,18 @@ const baseConfig = {
   screen: { hardware_profile: "generic", output: "auto", rotation: "none", touch_device: "", touch_matrix: "" },
   location: { label: "Bielefeld Innenstadt mit einem bewusst sehr langen Standortnamen", latitude: 52.0302, longitude: 8.5325 },
   stream: { url: "http://127.0.0.1:4173/mock-stream", muted: true, autoplay: true },
-  admin: { pin_hash: "" },
-  ui: { theme: "dark", layout_profile: "auto", clock: { enabled: true }, weather: { enabled: true }, radar: { enabled: true, width: 280, height: 190, zoom: 10, opacity: 0.92 }, transit: { enabled: true }, system: { enabled: true } },
+  admin: { pin_hash: "", require_pin: true },
+  youtube: { api_key: "", default_query: "Storch" },
+  ui: { theme: "dark", layout_profile: "auto", clock: { enabled: true }, weather: { enabled: true }, transit: { enabled: true }, system: { enabled: true } },
   weather: { provider: "openmeteo", refresh_seconds: 300, forecast_hours: 8, rain_mm_threshold: 0.1, rain_probability_threshold: 45 },
   transit: { provider: "vrr", refresh_seconds: 60, default_max_rows: 2, target_len: 16, stops: [] },
-  radar: { provider: "rainviewer", refresh_seconds: 300 },
   logging: { level: "INFO", max_bytes: 2097152, backups: 3 },
 };
 
 // Gleiche Richtlinie wie server.py, damit CSP-Verstöße auch unter dem statischen Testserver auffallen.
 const CSP = "default-src 'self'; script-src 'self'; style-src 'self'; "
-  + "img-src 'self' data: https://tilecache.rainviewer.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org; "
-  + "frame-src 'self' http://127.0.0.1:4173; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
+  + "img-src 'self' data: https://i.ytimg.com; "
+  + "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com http://127.0.0.1:4173; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
 
 const PROBABILITIES = [10, 20, 60, 75, 40, 15, 5, 5];
 
@@ -50,18 +50,6 @@ function stateFor(config, overrides = {}) {
       forecast: forecast(),
       updated_at: "2026-07-21T21:55:00+02:00",
       stale: false,
-    },
-    radar: {
-      ok: true,
-      offline: false,
-      label: "Bielefeld",
-      latitude: 52.0302,
-      longitude: 8.5325,
-      zoom: 10,
-      data_time: "2026-07-21T19:50+00:00",
-      status: "Messwert · vor 10 min",
-      tile_url: "https://tilecache.rainviewer.com/v2/radar/1/256/{z}/{x}/{y}/2/1_1.png",
-      attribution: "RainViewer · OpenStreetMap-Mitwirkende",
     },
     boards: [
       { title: "Schneiderstraße", ok: true, checked_at: "2026-07-21T19:59:00+00:00", rows: [{ line: "31", target: "Schildesche", mins: "3 min", minutes: 3 }, { line: "31", target: "Universität", mins: "11 min", minutes: 11 }] },
@@ -111,13 +99,13 @@ function png(width, height, pixel) {
   ]);
 }
 
-const BASE_TILE = png(256, 256, (x, y) => ((x + y) % 64 < 3 || (x * 3 + y) % 97 < 2 ? [92, 108, 104, 255] : [52, 66, 62, 255]));
-const RAIN_TILE = png(256, 256, (x, y) => {
-  const distance = Math.hypot(x - 150, y - 110);
-  return distance < 70 ? [76, 150, 255, Math.round(170 * (1 - distance / 70))] : [0, 0, 0, 0];
-});
+const THUMBNAIL = png(320, 180, (x, y) => ((x + y) % 64 < 3 || (x * 3 + y) % 97 < 2 ? [92, 108, 104, 255] : [52, 66, 62, 255]));
+const LIVE_RESULTS = [
+  { video_id: "rurvbn9yH-k", title: "Live aus dem Storchennest in Leutershausen", channel: "Heimatverein Leutershausen", thumbnail: "https://i.ytimg.com/vi/rurvbn9yH-k/hq720.jpg", embed_url: "https://www.youtube.com/embed/rurvbn9yH-k" },
+  { video_id: "W2CicgFq5oo", title: "Live Storchennest Kirchzarten", channel: "regiowebcam", thumbnail: "https://i.ytimg.com/vi/W2CicgFq5oo/hq720.jpg", embed_url: "https://www.youtube.com/embed/W2CicgFq5oo" },
+];
 
-async function mockBackend(page, config = structuredClone(baseConfig), overrides = {}) {
+async function mockBackend(page, config = structuredClone(baseConfig), overrides = {}, { open = false } = {}) {
   let savedConfig = config;
   const cspErrors = [];
   page.on("console", (message) => {
@@ -129,10 +117,13 @@ async function mockBackend(page, config = structuredClone(baseConfig), overrides
     const response = await route.fetch();
     await route.fulfill({ response, headers: { ...response.headers(), "content-security-policy": CSP, "x-content-type-options": "nosniff" } });
   });
-  await page.route("https://tile.openstreetmap.org/**", (route) => route.fulfill({ contentType: "image/png", body: BASE_TILE }));
-  await page.route("https://tilecache.rainviewer.com/**", (route) => route.fulfill({ contentType: "image/png", body: RAIN_TILE }));
   await page.route("**/api/state", (route) => route.fulfill({ json: stateFor(savedConfig, overrides) }));
-  await page.route("**/api/admin/status", (route) => route.fulfill({ json: { ok: true, pin_configured: false, authenticated: false } }));
+  await page.route("**/api/admin/status", (route) => route.fulfill({ json: open
+    ? { ok: true, pin_required: false, pin_configured: true, authenticated: true }
+    : { ok: true, pin_required: true, pin_configured: false, authenticated: false } }));
+  await page.route("**/api/live/search?*", (route) => route.fulfill({ json: { query: "Storch", results: LIVE_RESULTS } }));
+  await page.route("**/api/location/search?*", (route) => route.fulfill({ json: { query: "Tokio", results: [{ name: "Tokio", region: "Japan", latitude: 35.6895, longitude: 139.6917, timezone: "Asia/Tokyo" }] } }));
+  await page.route("https://i.ytimg.com/**", (route) => route.fulfill({ contentType: "image/png", body: THUMBNAIL }));
   await page.route("**/api/admin/setup", (route) => route.fulfill({ json: { ok: true, token: "test-token", expires_in: 1800 } }));
   await page.route("**/api/admin/login", (route) => route.fulfill({ json: { ok: true, token: "test-token", expires_in: 1800 } }));
   await page.route("**/api/config", (route) => route.fulfill({ json: { path: "/tmp/config.json", config: savedConfig } }));
@@ -174,10 +165,11 @@ for (const viewport of [
     expect(bar.y).toBeGreaterThanOrEqual(0);
     expect(bar.x + bar.width).toBeLessThanOrEqual(viewport.width);
     expect(bar.y + bar.height).toBeLessThanOrEqual(viewport.height);
-    const chip = await page.locator("#streamStatus").boundingBox();
-    expect(overlaps(chip, bar)).toBe(false);
+    // Oben rechts gibt es keinen sichtbaren Status mehr; der Satz bleibt nur für Screenreader.
+    expect(await page.locator("#streamStatus").evaluate((node) => node.classList.contains("sr-only"))).toBe(true);
+    await expect(page.locator("#radar")).toHaveCount(0);
 
-    for (const block of ["#clockbar", "#weather", "#radar", "#transitPanel"]) {
+    for (const block of ["#clockbar", "#weather", "#transitPanel"]) {
       const box = await page.locator(block).boundingBox();
       expect(box.x).toBeGreaterThanOrEqual(bar.x);
       expect(box.x + box.width).toBeLessThanOrEqual(bar.x + bar.width + 0.5);
@@ -192,8 +184,6 @@ for (const viewport of [
     expect(rainFlags).toEqual(PROBABILITIES.slice(0, viewport.hours).map((value) => value >= 45));
     await expect(page.locator("#rainSummary")).toContainText("ab 16 Uhr · 60 %");
 
-    await expect(page.locator("#radarMap .radar-marker")).toHaveCount(1);
-    await expect(page.locator("#radarTime")).toHaveText("21:50");
 
     await page.waitForFunction(() => document.fonts.check("600 16px Barlow"));
     expect(await page.evaluate(() => document.fonts.check("600 16px Barlow"))).toBe(true);
@@ -213,10 +203,12 @@ test("admin PIN setup, station add and save without stream reload", async ({ pag
   await page.locator("#adminPinConfirm").fill("1234");
   await page.locator("#submitPin").click();
   await expect(page.locator("#settingsDialog")).toBeVisible();
+  await page.getByRole("tab", { name: "ÖPNV" }).click();
   await page.locator("#stationQuery").fill("Jahnplatz");
   await page.locator("#stationSearchBtn").click();
   await page.getByRole("button", { name: "Hinzufügen" }).click();
   await expect(page.locator(".stop-card")).toHaveCount(1);
+  await page.getByRole("tab", { name: "Anzeige" }).click();
   await page.locator("#cfgTheme").selectOption("high-contrast");
   const beforeSave = iframeNavigations;
   await page.locator("#saveConfig").click();
@@ -229,20 +221,16 @@ test("admin PIN setup, station add and save without stream reload", async ({ pag
 test("explicit profiles and offline states remain readable", async ({ page }) => {
   const config = structuredClone(baseConfig);
   config.ui.layout_profile = "minimal";
-  await mockBackend(page, config, { radar: { ok: false, offline: true, label: "Bielefeld", status: "Radar offline", error: "HTTP 503" } });
+  await mockBackend(page, config);
   await page.goto("/");
   await expect(page.locator("body")).toHaveAttribute("data-layout", "minimal");
-  await expect(page.locator("#radarStatus")).toHaveText("Radar offline");
   await expect(page.locator("#sys")).toContainText("CPU –");
   await expect(page.locator("#streamStatusText")).toContainText("Wiedergabe nicht verifizierbar");
-  await expect(page.locator("#streamStatusShort")).toHaveText("Stream-Seite geladen");
-  await expect(page.locator("#streamStatus")).toHaveAttribute("title", /Wiedergabe nicht verifizierbar/);
 });
 
-test("board error, radar offline and stale weather show honest states", async ({ page }) => {
+test("board error and stale weather show honest states", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   const { cspErrors } = await mockBackend(page, structuredClone(baseConfig), {
-    radar: { ok: false, offline: true, label: "Bielefeld", status: "Radar offline", error: "HTTP 503" },
     boards: [
       { title: "Schneiderstraße", ok: true, checked_at: "2026-07-21T19:59:00+00:00", rows: [{ line: "31", target: "Schildesche", mins: "1h 05", minutes: 65 }, { line: "N2", target: "Babenhausen", mins: "jetzt", minutes: 0 }] },
       { title: "Altdorfer Straße", ok: false, checked_at: "2026-07-21T19:58:00+00:00", rows: [], error: "VRR offline" },
@@ -254,9 +242,6 @@ test("board error, radar offline and stale weather show honest states", async ({
   await expect(page.locator(".departure.is-error")).toContainText("letzte Abfrage 21:58 · neuer Versuch läuft");
   await expect(page.locator(".departure-now")).toHaveText("jetzt");
   await expect(page.locator(".departure").nth(2)).toContainText("1h 05");
-  await expect(page.locator("#radarMap")).toContainText("Keine Radardaten");
-  await expect(page.locator("#radarTime")).toHaveText("offline");
-  await expect(page.locator("#radarBox")).toHaveClass(/is-offline/);
   await expect(page.locator("#rainSummary")).toHaveText("Stand 21:55 · offline");
   expect(cspErrors).toEqual([]);
 });
@@ -280,22 +265,21 @@ test("missing stream and unavailable weather keep the info bar working", async (
 
 test("disabled blocks and narrow screens reflow the info bar", async ({ page }) => {
   const config = structuredClone(baseConfig);
-  config.ui.radar.enabled = false;
+  config.ui.weather.enabled = false;
   config.ui.system.enabled = false;
   await page.setViewportSize({ width: 1280, height: 720 });
   await mockBackend(page, config);
   await page.goto("/");
-  await expect(page.locator("#radar")).toBeHidden();
+  await expect(page.locator("#weather")).toBeHidden();
   await expect(page.locator("#sysbar")).toBeHidden();
-  await expect(page.locator(".ib-sep:visible")).toHaveCount(2);
+  await expect(page.locator(".ib-sep:visible")).toHaveCount(1);
   const columns = await page.locator("#infobar").evaluate((bar) => getComputedStyle(bar).gridTemplateColumns.split(" ").length);
-  expect(columns).toBe(5);
+  expect(columns).toBe(3);
 
   await page.setViewportSize({ width: 740, height: 480 });
-  config.ui.radar.enabled = true;
+  config.ui.weather.enabled = true;
   config.ui.system.enabled = true;
   await page.reload();
-  await expect(page.locator("#radar")).toBeHidden();
   await expect(page.locator("#sysbar")).toBeHidden();
   await expect(page.locator(".departure")).toHaveCount(2);
 });
@@ -313,7 +297,6 @@ test.describe("reference screenshots", () => {
   test.skip(!process.env.SCREENSHOT_DIR, "Nur mit SCREENSHOT_DIR, z. B. für README-Referenzbilder");
 
   const errorState = {
-    radar: { ok: false, offline: true, label: "Bielefeld", status: "Radar offline", error: "HTTP 503" },
     boards: [
       { title: "Schneiderstraße", ok: true, checked_at: "2026-07-21T19:59:00+00:00", rows: [{ line: "31", target: "Schildesche", mins: "jetzt", minutes: 0 }, { line: "N2", target: "Babenhausen", mins: "1h 05", minutes: 65 }] },
       { title: "Altdorfer Straße", ok: false, checked_at: "2026-07-21T19:58:00+00:00", rows: [], error: "VRR offline" },
@@ -328,6 +311,8 @@ test.describe("reference screenshots", () => {
     { name: "contrast-1280x720", width: 1280, height: 720, theme: "high-contrast" },
     { name: "errors-1280x720", width: 1280, height: 720, overrides: errorState },
     { name: "nostream-1280x720", width: 1280, height: 720, noStream: true },
+    { name: "menu-live-1280x720", width: 1280, height: 720, menu: "live" },
+    { name: "menu-place-1280x720", width: 1280, height: 720, menu: "place" },
   ];
   for (const shot of shots) {
     test(shot.name, async ({ page }) => {
@@ -335,10 +320,21 @@ test.describe("reference screenshots", () => {
       if (shot.theme) config.ui.theme = shot.theme;
       if (shot.noStream) config.stream.url = "";
       await page.setViewportSize({ width: shot.width, height: shot.height });
-      const { cspErrors } = await mockBackend(page, config, shot.overrides || {});
+      const { cspErrors } = await mockBackend(page, config, shot.overrides || {}, { open: !!shot.menu });
       await page.goto("/");
       await page.waitForFunction(() => document.fonts.check("600 16px Barlow"));
       await expect(page.locator(".departure, .board-message").first()).toBeVisible();
+      if (shot.menu) {
+        await page.getByRole("button", { name: "Menü öffnen" }).click();
+        await expect(page.locator(".live-card").first()).toBeVisible();
+      }
+      if (shot.menu === "place") {
+        await page.getByRole("tab", { name: "Ort" }).click();
+        await page.locator("#placeQuery").click();
+        for (const key of ["t", "o", "k", "i", "o"]) await page.locator(`#osk [data-key="${key}"]`).click();
+        await page.locator("#placeSearchBtn").click();
+        await page.locator("#placeQuery").click();
+      }
       await page.waitForTimeout(400);
       await page.screenshot({ path: `${process.env.SCREENSHOT_DIR}/${shot.name}.png` });
       const metrics = await page.evaluate(() => {
@@ -346,7 +342,7 @@ test.describe("reference screenshots", () => {
         const font = (selector) => { const c = document.querySelector(selector) && getComputedStyle(document.querySelector(selector)); return c ? `${c.fontSize}/${c.fontWeight}` : null; };
         return {
           infobar: box("#infobar"), columns: getComputedStyle(document.querySelector("#infobar")).gridTemplateColumns,
-          chip: box("#streamStatus"), radarBox: box("#radarBox"), row: box(".departure"), badge: box(".departure-line"),
+          row: box(".departure"), badge: box(".departure-line"),
           clock: font("#clock"), date: font("#date"), sys: font("#sys"), temp: font("#weatherTemp"), condition: font("#weatherCondition"),
           details: font("#weatherDetails"), track: box(".rain-track"), target: font(".departure-target"), num: font(".departure-num"),
         };
@@ -358,4 +354,32 @@ test.describe("reference screenshots", () => {
       }
     });
   }
+});
+
+test("menu button opens the menu without PIN; live stream and place are chosen by tapping", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const { getSaved, cspErrors } = await mockBackend(page, structuredClone(baseConfig), {}, { open: true });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Menü öffnen" }).click();
+  await expect(page.locator("#settingsDialog")).toBeVisible();
+  await expect(page.locator("#pinDialog")).toBeHidden();
+  await expect(page.locator(".live-card")).toHaveCount(2);
+  await expect(page.locator("#liveQuery")).toHaveValue("Storch");
+  await page.locator(".live-card").nth(1).click();
+  await expect(page.locator("#settingsDialog")).toBeHidden();
+  expect(getSaved().stream.url).toBe("https://www.youtube.com/embed/W2CicgFq5oo");
+
+  await page.getByRole("button", { name: "Menü öffnen" }).click();
+  await page.getByRole("tab", { name: "Ort" }).click();
+  await page.locator("#placeQuery").click();
+  await expect(page.locator("#osk")).toBeVisible();
+  for (const key of ["t", "o", "k", "i", "o"]) await page.locator(`#osk [data-key="${key}"]`).click();
+  await expect(page.locator("#placeQuery")).toHaveValue("Tokio");
+  await expect(page.locator("#placeQuery")).toBeFocused();
+  await page.locator('#osk [data-key="enter"]').click();
+  await page.locator(".place-card").first().click();
+  await expect(page.locator("#placeStatus")).toContainText("Ort übernommen: Tokio");
+  const saved = getSaved();
+  expect([saved.location.label, saved.location.latitude, saved.location.longitude, saved.app.timezone]).toEqual(["Tokio", 35.6895, 139.6917, "Asia/Tokyo"]);
+  expect(cspErrors).toEqual([]);
 });

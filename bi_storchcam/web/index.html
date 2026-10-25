@@ -9,11 +9,13 @@
 </head>
 <body class="is-loading" data-theme="dark" data-layout="standard">
   <a class="skip-link" href="#stage">Zum Livestream springen</a>
-  <button id="adminHotspot" class="admin-hotspot" type="button" aria-label="Adminmodus durch langes Drücken öffnen"></button>
+  <button id="adminHotspot" class="menu-button" type="button" aria-label="Menü öffnen" title="Menü">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  </button>
 
   <main class="screen" aria-label="BI-StorchCam Infoscreen">
     <section id="stage" class="stage" aria-label="Livestream" tabindex="-1">
-      <iframe id="live" class="live" title="Konfigurierter Livestream" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+      <iframe id="live" class="live" title="Konfigurierter Livestream" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
       <div class="stream-shade" aria-hidden="true"></div>
       <div id="streamEmpty" class="stream-empty has-stream" role="alert">
         <div class="empty-card">
@@ -27,10 +29,8 @@
           <button id="streamReload" class="button button-primary empty-action" type="button">Jetzt neu laden</button>
         </div>
       </div>
-      <div id="streamStatus" class="stream-status" role="status" aria-live="polite" title="Lokales Backend wird geladen">
-        <span class="status-dot" aria-hidden="true"></span>
-        <span id="streamStatusShort" class="status-short" aria-hidden="true">Wird geladen</span>
-        <span id="streamStatusText" class="sr-only">Lokales Backend wird geladen</span>
+      <div id="streamStatus" class="sr-only" role="status" aria-live="polite">
+        <span id="streamStatusText">Lokales Backend wird geladen</span>
       </div>
     </section>
 
@@ -70,22 +70,6 @@
       </section>
 
       <span class="ib-sep" aria-hidden="true"></span>
-      <section id="radar" class="ib-block ib-radar" aria-label="Regenradar">
-        <header class="block-head">
-          <span>Radar</span>
-          <span id="radarTime" class="block-meta">wird geladen</span>
-        </header>
-        <span id="radarLabel" class="sr-only">Bielefeld</span>
-        <span id="radarStatus" class="sr-only">Datenstatus unbekannt</span>
-        <div id="radarBox" class="radar-box">
-          <div id="radarMap" class="radar-map" role="img" aria-label="Regenradar für den konfigurierten Standort">
-            <span class="radar-message">Radardaten werden geladen</span>
-          </div>
-          <span id="radarAttribution" class="radar-attribution">© OpenStreetMap · RainViewer</span>
-        </div>
-      </section>
-
-      <span class="ib-sep" aria-hidden="true"></span>
       <section id="transitPanel" class="ib-block ib-transit" aria-label="ÖPNV-Abfahrten">
         <header class="block-head transit-head"><span>Abfahrten</span></header>
         <div id="boards" class="boards" aria-live="polite"></div>
@@ -119,86 +103,104 @@
   <dialog id="settingsDialog" class="settings-dialog" aria-labelledby="settingsTitle">
     <div class="settings-shell">
       <header class="settings-header">
-        <div>
-          <span class="eyebrow">Lokale Konfiguration</span>
-          <h1 id="settingsTitle">BI-StorchCam verwalten</h1>
-          <p>Änderungen wirken nur auf diesem Gerät. Der Stream bleibt beim Speichern anderer Einstellungen aktiv.</p>
-        </div>
-        <button id="closeSettings" class="icon-button" type="button" aria-label="Einstellungen schließen">×</button>
+        <h1 id="settingsTitle">Menü</h1>
+        <nav class="menu-tabs" role="tablist" aria-label="Menübereiche">
+          <button class="menu-tab" type="button" role="tab" data-tab="live" aria-selected="true">Livestream</button>
+          <button class="menu-tab" type="button" role="tab" data-tab="place" aria-selected="false">Ort</button>
+          <button class="menu-tab" type="button" role="tab" data-tab="display" aria-selected="false">Anzeige</button>
+          <button class="menu-tab" type="button" role="tab" data-tab="transit" aria-selected="false">ÖPNV</button>
+          <button class="menu-tab" type="button" role="tab" data-tab="system" aria-selected="false">System</button>
+        </nav>
+        <button id="closeSettings" class="icon-button" type="button" aria-label="Menü schließen">×</button>
       </header>
 
-      <form id="settingsForm" class="settings-content">
-        <section class="settings-section" aria-labelledby="streamSettingsTitle">
-          <header class="section-heading">
-            <span class="section-number">01</span>
-            <div><span class="eyebrow">Livestream</span><h2 id="streamSettingsTitle">Quelle und Wiedergabe</h2></div>
-          </header>
-          <label class="field field-wide" for="cfgStream"><span>Embed-URL</span><textarea id="cfgStream" rows="3" spellcheck="false" placeholder="https://www.youtube.com/embed/…"></textarea></label>
-          <div class="toggle-grid">
-            <label class="toggle" for="streamAutoplay"><input id="streamAutoplay" type="checkbox"><span>Autoplay</span></label>
-            <label class="toggle" for="streamMuted"><input id="streamMuted" type="checkbox"><span>Stumm starten</span></label>
+      <form id="settingsForm" class="settings-content" autocomplete="off">
+        <section class="menu-panel" data-panel="live" role="tabpanel" aria-labelledby="streamSettingsTitle">
+          <h2 id="streamSettingsTitle" class="sr-only">Livestream auswählen</h2>
+          <p class="current-line">Läuft gerade: <strong id="liveCurrent">–</strong></p>
+          <div class="search-row">
+            <label class="field" for="liveQuery"><span>Live-Streams auf YouTube suchen</span><input id="liveQuery" type="search" data-enter="liveSearchBtn" placeholder="z. B. Storch, Hafen, Zoo"></label>
+            <button id="liveSearchBtn" class="button button-primary" type="button">Suchen</button>
           </div>
-          <button id="reloadStreamPanel" class="button button-secondary" type="button">Stream manuell neu laden</button>
+          <div id="liveStatus" class="status-message" role="status" aria-live="polite"></div>
+          <div id="liveResults" class="live-results"></div>
+          <details class="advanced">
+            <summary>Eigene Adresse und Wiedergabe</summary>
+            <label class="field field-wide" for="cfgStream"><span>Embed-URL (YouTube-Links werden automatisch umgewandelt)</span><textarea id="cfgStream" rows="2" spellcheck="false" placeholder="https://www.youtube.com/embed/…"></textarea></label>
+            <div class="toggle-grid">
+              <label class="toggle" for="streamAutoplay"><input id="streamAutoplay" type="checkbox"><span>Autoplay</span></label>
+              <label class="toggle" for="streamMuted"><input id="streamMuted" type="checkbox"><span>Stumm starten</span></label>
+            </div>
+            <button id="reloadStreamPanel" class="button button-secondary" type="button">Stream manuell neu laden</button>
+          </details>
         </section>
 
-        <section class="settings-section" aria-labelledby="locationSettingsTitle">
-          <header class="section-heading">
-            <span class="section-number">02</span>
-            <div><span class="eyebrow">Standort</span><h2 id="locationSettingsTitle">Ort und Koordinaten</h2></div>
-          </header>
-          <div class="form-grid three-columns">
-            <label class="field" for="cfgLabel"><span>Standortname</span><input id="cfgLabel" type="text" maxlength="120" required></label>
-            <label class="field" for="cfgLat"><span>Breitengrad</span><input id="cfgLat" type="number" min="-90" max="90" step="0.0001" required></label>
-            <label class="field" for="cfgLon"><span>Längengrad</span><input id="cfgLon" type="number" min="-180" max="180" step="0.0001" required></label>
+        <section class="menu-panel" data-panel="place" role="tabpanel" aria-labelledby="locationSettingsTitle" hidden>
+          <h2 id="locationSettingsTitle" class="sr-only">Ort wählen</h2>
+          <p class="current-line">Aktueller Ort: <strong id="placeCurrent">–</strong></p>
+          <div class="search-row">
+            <label class="field" for="placeQuery"><span>Adresse, Straße oder Ort suchen, weltweit</span><input id="placeQuery" type="search" data-enter="placeSearchBtn" placeholder="z. B. Musterstraße 1 Berlin, Wien, Tokio"></label>
+            <button id="placeSearchBtn" class="button button-primary" type="button">Suchen</button>
           </div>
+          <div id="placeStatus" class="status-message" role="status" aria-live="polite"></div>
+          <div id="placeResults" class="place-results"></div>
+          <details class="advanced">
+            <summary>Name und Koordinaten von Hand</summary>
+            <div class="form-grid three-columns">
+              <label class="field" for="cfgLabel"><span>Standortname</span><input id="cfgLabel" type="text" maxlength="120" required></label>
+              <label class="field" for="cfgLat"><span>Breitengrad</span><input id="cfgLat" type="number" min="-90" max="90" step="0.0001" required></label>
+              <label class="field" for="cfgLon"><span>Längengrad</span><input id="cfgLon" type="number" min="-180" max="180" step="0.0001" required></label>
+            </div>
+          </details>
         </section>
 
-        <section class="settings-section" aria-labelledby="layoutSettingsTitle">
-          <header class="section-heading">
-            <span class="section-number">03</span>
-            <div><span class="eyebrow">Darstellung</span><h2 id="layoutSettingsTitle">Profil und Elemente</h2></div>
-          </header>
-          <div class="form-grid three-columns">
+        <section class="menu-panel" data-panel="display" role="tabpanel" aria-labelledby="layoutSettingsTitle" hidden>
+          <h2 id="layoutSettingsTitle" class="sr-only">Anzeige</h2>
+          <div class="form-grid">
             <label class="field" for="cfgLayout"><span>Layoutprofil</span><select id="cfgLayout"><option value="auto">Automatisch</option><option value="minimal">Minimal</option><option value="standard">Standard</option><option value="information">Information</option></select></label>
             <label class="field" for="cfgTheme"><span>Theme</span><select id="cfgTheme"><option value="dark">Dunkel</option><option value="light">Hell</option><option value="high-contrast">Hoher Kontrast</option></select></label>
-            <label class="field" for="cfgRadarOpacity"><span>Radartransparenz</span><input id="cfgRadarOpacity" type="range" min="0.25" max="1" step="0.05"></label>
-            <label class="field" for="cfgRadarW"><span>Radarbreite</span><input id="cfgRadarW" type="number" min="200" max="720"></label>
-            <label class="field" for="cfgRadarH"><span>Radarhöhe</span><input id="cfgRadarH" type="number" min="140" max="560"></label>
           </div>
           <div class="toggle-grid" aria-label="Sichtbare Elemente">
             <label class="toggle" for="showClock"><input id="showClock" type="checkbox"><span>Uhr</span></label>
             <label class="toggle" for="showWeather"><input id="showWeather" type="checkbox"><span>Wetter</span></label>
-            <label class="toggle" for="showRadar"><input id="showRadar" type="checkbox"><span>Radar</span></label>
             <label class="toggle" for="showTransit"><input id="showTransit" type="checkbox"><span>ÖPNV</span></label>
             <label class="toggle" for="showSystem"><input id="showSystem" type="checkbox"><span>Systemstatus</span></label>
           </div>
         </section>
 
-        <section class="settings-section" aria-labelledby="transitSettingsTitle">
-          <header class="section-heading">
-            <span class="section-number">04</span>
-            <div><span class="eyebrow">ÖPNV · VRR-Region</span><h2 id="transitSettingsTitle">Haltestellen verwalten</h2></div>
-          </header>
-          <div class="station-search">
-            <label class="field" for="stationQuery"><span>Haltestelle suchen</span><input id="stationQuery" type="search" autocomplete="off" placeholder="z. B. Bielefeld Jahnplatz"></label>
+        <section class="menu-panel" data-panel="transit" role="tabpanel" aria-labelledby="transitSettingsTitle" hidden>
+          <h2 id="transitSettingsTitle" class="sr-only">Haltestellen verwalten</h2>
+          <p class="current-line">Abfahrten gibt es derzeit nur für Haltestellen im VRR (Nordrhein-Westfalen).</p>
+          <div class="search-row station-search">
+            <label class="field" for="stationQuery"><span>Haltestelle suchen</span><input id="stationQuery" type="search" data-enter="stationSearchBtn" placeholder="z. B. Bielefeld Jahnplatz"></label>
             <button id="stationSearchBtn" class="button button-primary" type="button">Suchen</button>
           </div>
           <div id="stationSearchStatus" class="status-message" role="status" aria-live="polite"></div>
           <div id="stationResults" class="station-results"></div>
           <div id="stopEditor" class="stop-editor" aria-label="Konfigurierte Haltestellen"></div>
         </section>
+
+        <section class="menu-panel" data-panel="system" role="tabpanel" aria-labelledby="systemSettingsTitle" hidden>
+          <h2 id="systemSettingsTitle" class="sr-only">System</h2>
+          <div class="form-grid">
+            <label class="field" for="cfgYoutubeKey"><span>YouTube-API-Schlüssel (optional)</span><input id="cfgYoutubeKey" type="password" spellcheck="false" maxlength="200" placeholder="AIza…"></label>
+            <label class="field" for="cfgYoutubeQuery"><span>Suchwort beim Öffnen der Livestream-Auswahl</span><input id="cfgYoutubeQuery" type="text" maxlength="100"></label>
+          </div>
+          <p id="youtubeKeyState" class="current-line"></p>
+        </section>
       </form>
 
       <footer class="settings-footer">
         <div id="saveState" class="status-message" role="status" aria-live="polite"></div>
         <div class="dialog-actions">
-          <button id="reloadConfig" class="button button-secondary" type="button">Verwerfen und neu laden</button>
-          <button id="saveConfig" class="button button-primary" type="button">Änderungen speichern</button>
+          <button id="reloadConfig" class="button button-secondary" type="button">Verwerfen</button>
+          <button id="saveConfig" class="button button-primary" type="button">Speichern</button>
         </div>
       </footer>
     </div>
   </dialog>
 
+  <div id="osk" class="osk hidden" aria-label="Bildschirmtastatur"></div>
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
   <script src="app.js"></script>
 </body>

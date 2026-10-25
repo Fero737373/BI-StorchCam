@@ -106,3 +106,22 @@ def test_fonts_are_served_as_woff2(config: dict, monkeypatch: pytest.MonkeyPatch
         assert status == 200 and headers["Content-Type"] == "font/woff2" and body[:4] == b"wOF2"
         status, _headers, _body = request(address, "GET", "/fonts/OFL.txt")
         assert status == 200
+
+
+def test_open_mode_needs_no_pin_and_keeps_secret_key(config: dict, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    config["admin"]["require_pin"] = False
+    config["youtube"]["api_key"] = "secretkey"
+    monkeypatch.setattr("bi_storchcam.server.search_places", lambda query: [{"name": query}])
+    with running_server(config, monkeypatch, tmp_path) as address:
+        status, _headers, admin = request(address, "GET", "/api/admin/status")
+        assert status == 200 and admin["pin_required"] is False and admin["authenticated"] is True
+        status, headers, current = request(address, "GET", "/api/config")
+        assert status == 200 and current["youtube_key_set"] is True and current["config"]["youtube"]["api_key"] == ""
+        assert "https://www.youtube.com" in headers["Content-Security-Policy"]
+        status, _headers, places = request(address, "GET", "/api/location/search?q=Tokio")
+        assert status == 200 and places["results"] == [{"name": "Tokio"}]
+        candidate = current["config"]
+        candidate["location"]["label"] = "Tokio"
+        status, _headers, saved = post_json(address, "/api/config/save", {"config": candidate})
+        assert status == 200 and saved["config"]["location"]["label"] == "Tokio"
+        assert json.loads((tmp_path / "config.json").read_text())["youtube"]["api_key"] == "secretkey"

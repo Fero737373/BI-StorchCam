@@ -11,7 +11,6 @@ from bi_storchcam.state import StateManager
 def test_central_snapshot_and_config_invalidation(monkeypatch: pytest.MonkeyPatch, config: dict, tmp_path: Path) -> None:
     config["app"]["cache_dir"] = str(tmp_path)
     monkeypatch.setattr("bi_storchcam.state.get_weather", lambda _cfg, force=False: {"ok": True, "text": "sonnig"})
-    monkeypatch.setattr("bi_storchcam.state.get_radar_metadata", lambda _cfg: {"ok": True})
     monkeypatch.setattr("bi_storchcam.state.get_boards", lambda _cfg, force=False: [])
     manager = StateManager(config)
     manager.refresh_all()
@@ -28,7 +27,6 @@ def test_provider_failure_does_not_end_worker(monkeypatch: pytest.MonkeyPatch, c
         raise OSError("provider offline")
 
     monkeypatch.setattr("bi_storchcam.state.get_weather", fail)
-    monkeypatch.setattr("bi_storchcam.state.get_radar_metadata", fail)
     monkeypatch.setattr("bi_storchcam.state.get_boards", fail)
     manager = StateManager(config)
     manager.start()

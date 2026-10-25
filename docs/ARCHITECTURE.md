@@ -3,7 +3,7 @@
 BI-StorchCam besitzt genau einen Produktpfad:
 
 1. `kiosk_app.main` lädt und validiert die lokale Konfiguration.
-2. `StateManager` aktualisiert Wetter, Radar, VRR und optionale Systemdaten nach getrennten Intervallen.
+2. `StateManager` aktualisiert Wetter, VRR und optionale Systemdaten nach getrennten Intervallen.
 3. `StorchServer` bindet den konfigurierten Port und liefert nur unveränderliche State-Snapshots an `/api/state`.
 4. Der Hauptprozess wartet auf `/api/health` mit `state_ready=true`.
 5. Erst danach startet `BrowserManager` einen Chromium-Familienprozess.

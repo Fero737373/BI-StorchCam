@@ -7,7 +7,6 @@ const elements = {
   streamEmpty: byId("streamEmpty"),
   streamStatus: byId("streamStatus"),
   streamStatusText: byId("streamStatusText"),
-  streamStatusShort: byId("streamStatusShort"),
   streamEmptyTitle: byId("streamEmptyTitle"),
   streamEmptyText: byId("streamEmptyText"),
   infobar: byId("infobar"),
@@ -27,13 +26,6 @@ const elements = {
   rainHours: byId("rainHours"),
   sysbar: byId("sysbar"),
   sys: byId("sys"),
-  radar: byId("radar"),
-  radarBox: byId("radarBox"),
-  radarMap: byId("radarMap"),
-  radarLabel: byId("radarLabel"),
-  radarTime: byId("radarTime"),
-  radarStatus: byId("radarStatus"),
-  radarAttribution: byId("radarAttribution"),
   transitPanel: byId("transitPanel"),
   boards: byId("boards"),
   hotspot: byId("adminHotspot"),
@@ -53,6 +45,17 @@ const elements = {
   stationResults: byId("stationResults"),
   stationSearchStatus: byId("stationSearchStatus"),
   toast: byId("toast"),
+  settingsShell: document.querySelector(".settings-shell"),
+  liveQuery: byId("liveQuery"),
+  liveStatus: byId("liveStatus"),
+  liveResults: byId("liveResults"),
+  liveCurrent: byId("liveCurrent"),
+  placeQuery: byId("placeQuery"),
+  placeStatus: byId("placeStatus"),
+  placeResults: byId("placeResults"),
+  placeCurrent: byId("placeCurrent"),
+  youtubeKeyState: byId("youtubeKeyState"),
+  osk: byId("osk"),
 };
 
 let token = sessionStorage.getItem("bi-storchcam-admin-token") || "";
@@ -62,13 +65,16 @@ let workingStops = [];
 let dirty = false;
 let lastTrigger = null;
 let streamSignature = "";
-let longPressTimer = null;
 let toastTimer = null;
 let runtimeTimezone = "Europe/Berlin";
+let youtubeKeySet = false;
+let pendingTimezone = "";
+let liveTitle = "";
+let liveLoadedOnce = false;
+let oskTarget = null;
+let oskShift = false;
 let runtimeConfig = null;
 let lastState = null;
-let lastRadarTime = "";
-let radarSignature = "";
 let backendDown = false;
 let streamView = { state: "loading", full: "Lokales Backend wird geladen", short: "Wird geladen", card: null };
 
@@ -138,9 +144,11 @@ function showToast(text) {
 
 function updateClock() {
   const now = new Date();
-  elements.clock.textContent = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" }).format(now);
+  // Uhr und Datum in der Zeitzone des gewählten Orts, nicht der des Geräts.
+  const timeZone = runtimeTimezone;
+  elements.clock.textContent = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit", timeZone }).format(now);
   const weekday = elements.body.dataset.layout === "minimal" ? "short" : "long";
-  elements.date.textContent = new Intl.DateTimeFormat("de-DE", { weekday, day: "numeric", month: "long" }).format(now);
+  elements.date.textContent = new Intl.DateTimeFormat("de-DE", { weekday, day: "numeric", month: "long", timeZone }).format(now);
 }
 
 function isMinimal() {
@@ -175,7 +183,6 @@ function updateInfobar() {
     // Lange Datumsangaben („Donnerstag, 30. September“) dürfen die Uhrspalte über die Mindestbreite hinaus verbreitern.
     [elements.clockbar, showClock || showSystem, "minmax(var(--col-clock), max-content)"],
     [elements.weather, !!ui.weather?.enabled, "minmax(0, 1fr)"],
-    [elements.radar, !!ui.radar?.enabled && !isNarrow(), "var(--col-radar)"],
     [elements.transitPanel, !!ui.transit?.enabled, "var(--col-transit)"],
   ];
   const tracks = [];
@@ -215,10 +222,6 @@ function applyRuntimeConfig(runtime) {
     elements.body.dataset.layout = layout;
     updateClock();
   }
-  const radar = ui.radar || {};
-  document.documentElement.style.setProperty("--radar-width", `${Number(radar.width || 280)}px`);
-  document.documentElement.style.setProperty("--radar-height", `${Number(radar.height || 190)}px`);
-  document.documentElement.style.setProperty("--radar-opacity", String(Number(radar.opacity ?? 0.92)));
   updateInfobar();
   configureStream(runtime.stream || {});
 }
@@ -240,8 +243,6 @@ function effectiveStreamUrl(stream) {
 function renderStreamView(view) {
   elements.streamStatus.dataset.state = view.state;
   elements.streamStatusText.textContent = view.full;
-  elements.streamStatusShort.textContent = view.short;
-  elements.streamStatus.title = view.full;
   elements.streamEmpty.classList.toggle("has-stream", !view.card);
   if (view.card) {
     elements.streamEmptyTitle.textContent = view.card.title;
@@ -386,88 +387,6 @@ function renderWeather(weather) {
   renderRainHours(forecast);
 }
 
-function tileCoordinates(latitude, longitude, zoom) {
-  const size = 256;
-  const scale = 2 ** zoom;
-  const x = ((longitude + 180) / 360) * scale * size;
-  const latRad = latitude * Math.PI / 180;
-  const y = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * scale * size;
-  return { x, y, scale, size };
-}
-
-function tileImage(src, left, top, rain = false) {
-  const image = document.createElement("img");
-  image.className = `radar-tile${rain ? " radar-rain" : ""}`;
-  image.alt = "";
-  image.loading = "eager";
-  image.style.left = `${left}px`;
-  image.style.top = `${top}px`;
-  // Die OSM-Kachelrichtlinie verlangt einen Referer; die Seite selbst sendet sonst keinen.
-  if (!rain) image.referrerPolicy = "origin";
-  image.src = src;
-  image.addEventListener("error", () => image.classList.add("tile-error"));
-  return image;
-}
-
-function renderRadar(radar) {
-  if (!radar) return;
-  elements.radarLabel.textContent = radar.label || "Standort";
-  elements.radarStatus.textContent = radar.status || "Datenstatus unbekannt";
-  const online = !!(radar.ok && radar.tile_url);
-  const offline = !online && (radar.offline === true || !!radar.error);
-  if (online && radar.data_time) lastRadarTime = radar.data_time;
-  elements.radarTime.textContent = online ? formatTime(radar.data_time) || "–" : offline ? "offline" : "wird geladen";
-  elements.radarBox.classList.toggle("is-offline", offline);
-  const width = elements.radarMap.clientWidth || 148;
-  const height = elements.radarMap.clientHeight || 114;
-  const zoom = Number(radar.zoom || 10);
-  // Nur neu aufbauen, wenn sich Daten oder Größe ändern; sonst flackern die Kacheln alle 5 Sekunden.
-  const signature = JSON.stringify([online, offline, radar.tile_url, zoom, radar.latitude, radar.longitude, width, height, offline ? lastRadarTime : ""]);
-  if (signature === radarSignature) return;
-  radarSignature = signature;
-  elements.radarMap.replaceChildren();
-  if (!online) {
-    const message = document.createElement("span");
-    message.className = "radar-message";
-    const title = document.createElement("strong");
-    title.textContent = offline ? "Keine Radardaten" : "Radardaten werden geladen";
-    message.append(title);
-    if (offline && lastRadarTime) {
-      const last = document.createElement("span");
-      last.textContent = `zuletzt ${formatTime(lastRadarTime)}`;
-      message.append(last);
-    }
-    elements.radarMap.append(message);
-    return;
-  }
-  const world = tileCoordinates(Number(radar.latitude), Number(radar.longitude), zoom);
-  const leftWorld = world.x - width / 2;
-  const topWorld = world.y - height / 2;
-  const firstX = Math.floor(leftWorld / world.size);
-  const lastX = Math.floor((leftWorld + width) / world.size);
-  const firstY = Math.floor(topWorld / world.size);
-  const lastY = Math.floor((topWorld + height) / world.size);
-  for (let tileY = firstY; tileY <= lastY; tileY += 1) {
-    if (tileY < 0 || tileY >= world.scale) continue;
-    for (let tileX = firstX; tileX <= lastX; tileX += 1) {
-      const wrappedX = ((tileX % world.scale) + world.scale) % world.scale;
-      const left = tileX * world.size - leftWorld;
-      const top = tileY * world.size - topWorld;
-      const baseUrl = `https://tile.openstreetmap.org/${zoom}/${wrappedX}/${tileY}.png`;
-      const rainUrl = radar.tile_url
-        .replace("{z}", String(zoom))
-        .replace("{x}", String(wrappedX))
-        .replace("{y}", String(tileY));
-      elements.radarMap.append(tileImage(baseUrl, left, top));
-      elements.radarMap.append(tileImage(rainUrl, left, top, true));
-    }
-  }
-  const marker = document.createElement("span");
-  marker.className = "radar-marker";
-  marker.title = radar.label || "Standort";
-  elements.radarMap.append(marker);
-}
-
 function parseMinutes(row) {
   if (Number.isFinite(row.minutes)) return row.minutes;
   if (row.minutes === null) return null;
@@ -555,7 +474,6 @@ function renderBoards(boards) {
 
 function renderPanels(state) {
   renderWeather(state.weather);
-  renderRadar(state.radar);
   renderBoards(state.boards);
   renderSystem(state.system);
 }
@@ -614,10 +532,15 @@ async function beginAdmin(trigger) {
   try {
     if (token) {
       await loadConfig();
-      openDialog(elements.settings, trigger);
+      openMenu(trigger);
       return;
     }
     const status = await api("/api/admin/status");
+    if (status.pin_required === false) {
+      await loadConfig();
+      openMenu(trigger);
+      return;
+    }
     setupMode = !status.pin_configured;
     elements.pinTitle.textContent = setupMode ? "Admin-PIN erstmals festlegen" : "Admin-PIN eingeben";
     elements.pinHelp.textContent = setupMode
@@ -654,7 +577,7 @@ async function authenticate(event) {
     sessionStorage.setItem("bi-storchcam-admin-token", token);
     await loadConfig();
     closeDialog(elements.pinDialog);
-    openDialog(elements.settings, elements.hotspot);
+    openMenu(elements.hotspot);
   } catch (error) {
     setStatus(elements.pinStatus, error.message, "error");
   } finally {
@@ -671,14 +594,18 @@ function fillForm(config) {
   byId("cfgLon").value = config.location.longitude;
   byId("cfgLayout").value = config.ui.layout_profile;
   byId("cfgTheme").value = config.ui.theme;
-  byId("cfgRadarOpacity").value = config.ui.radar.opacity;
-  byId("cfgRadarW").value = config.ui.radar.width;
-  byId("cfgRadarH").value = config.ui.radar.height;
   byId("showClock").checked = !!config.ui.clock.enabled;
   byId("showWeather").checked = !!config.ui.weather.enabled;
-  byId("showRadar").checked = !!config.ui.radar.enabled;
   byId("showTransit").checked = !!config.ui.transit.enabled;
   byId("showSystem").checked = !!config.ui.system.enabled;
+  byId("cfgYoutubeKey").value = "";
+  byId("cfgYoutubeQuery").value = config.youtube?.default_query ?? "Storch";
+  elements.youtubeKeyState.textContent = youtubeKeySet
+    ? "Ein Schlüssel ist hinterlegt; die Suche nutzt die offizielle YouTube-API. Zum Ersetzen neuen Schlüssel eintragen und speichern."
+    : "Kein Schlüssel nötig: Die Suche liest die öffentliche YouTube-Suche mit dem Filter „Live“. Ein eigener Schlüssel ist optional.";
+  elements.placeCurrent.textContent = `${config.location.label} (${config.app?.timezone || runtimeTimezone})`;
+  elements.liveCurrent.textContent = liveTitle || config.stream.url || "kein Stream";
+  pendingTimezone = "";
   workingStops = clone(config.transit.stops || []);
   renderStopEditor();
   dirty = false;
@@ -688,6 +615,7 @@ function fillForm(config) {
 async function loadConfig() {
   try {
     const result = await api("/api/config");
+    youtubeKeySet = !!result.youtube_key_set;
     currentConfig = result.config;
     fillForm(currentConfig);
   } catch (error) {
@@ -823,15 +751,16 @@ function collectConfig() {
   config.location.longitude = Number(byId("cfgLon").value);
   config.ui.layout_profile = byId("cfgLayout").value;
   config.ui.theme = byId("cfgTheme").value;
-  config.ui.radar.opacity = Number(byId("cfgRadarOpacity").value);
-  config.ui.radar.width = Number(byId("cfgRadarW").value);
-  config.ui.radar.height = Number(byId("cfgRadarH").value);
   config.ui.clock.enabled = byId("showClock").checked;
   config.ui.weather.enabled = byId("showWeather").checked;
-  config.ui.radar.enabled = byId("showRadar").checked;
   config.ui.transit.enabled = byId("showTransit").checked;
   config.ui.system.enabled = byId("showSystem").checked;
   config.transit.stops = clone(workingStops);
+  if (config.youtube) {
+    config.youtube.api_key = byId("cfgYoutubeKey").value.trim();
+    config.youtube.default_query = byId("cfgYoutubeQuery").value.trim();
+  }
+  if (pendingTimezone) config.app.timezone = pendingTimezone;
   if (!config.location.label) throw new Error("Standortname fehlt");
   if (!Number.isFinite(config.location.latitude) || !Number.isFinite(config.location.longitude)) throw new Error("Koordinaten sind ungültig");
   config.transit.stops.forEach((stop, index) => {
@@ -848,33 +777,261 @@ async function saveConfig() {
   try {
     const candidate = collectConfig();
     const result = await api("/api/config/save", { method: "POST", body: JSON.stringify({ config: candidate }) });
+    if (candidate.youtube?.api_key) youtubeKeySet = true;
     currentConfig = result.config;
     fillForm(currentConfig);
     applyRuntimeConfig({ ...currentConfig, timezone: currentConfig.app?.timezone });
     setStatus(elements.saveState, "Gespeichert. Providerdaten werden im Hintergrund aktualisiert.", "success");
     showToast("Konfiguration gespeichert");
+    return true;
   } catch (error) {
     setStatus(elements.saveState, `Speichern fehlgeschlagen: ${error.message}`, "error");
+    return false;
   } finally {
     button.disabled = false;
   }
+}
+
+function showTab(name) {
+  document.querySelectorAll(".menu-tab").forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.tab === name)));
+  document.querySelectorAll(".menu-panel").forEach((panel) => { panel.hidden = panel.dataset.panel !== name; });
+  hideKeyboard();
+  if (name === "live" && !liveLoadedOnce) searchLive(byId("cfgYoutubeQuery").value.trim() || "Storch");
+}
+
+function openMenu(trigger) {
+  openDialog(elements.settings, trigger);
+  showTab("live");
+}
+
+async function searchLive(query) {
+  liveLoadedOnce = true;
+  elements.liveQuery.value = query;
+  elements.liveResults.replaceChildren();
+  byId("liveSearchBtn").disabled = true;
+  setStatus(elements.liveStatus, `Suche Live-Streams zu „${query || "alles"}“ …`);
+  try {
+    const result = await api(`/api/live/search?q=${encodeURIComponent(query)}`);
+    if (!result.results.length) {
+      setStatus(elements.liveStatus, "Gerade ist dazu nichts live. Anderes Suchwort versuchen.");
+      return;
+    }
+    setStatus(elements.liveStatus, `${result.results.length} Live-Streams – zum Abspielen antippen`);
+    const current = byId("cfgStream").value.trim();
+    result.results.forEach((video) => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = `live-card${current === video.embed_url ? " is-current" : ""}`;
+      const image = document.createElement("img");
+      image.alt = "";
+      image.loading = "lazy";
+      image.src = video.thumbnail;
+      card.append(image, textElement("span", "live-badge", "LIVE"), textElement("strong", "", video.title), textElement("span", "", video.channel));
+      card.addEventListener("click", () => chooseLive(video));
+      elements.liveResults.append(card);
+    });
+  } catch (error) {
+    setStatus(elements.liveStatus, error.message, "error");
+  } finally {
+    byId("liveSearchBtn").disabled = false;
+  }
+}
+
+async function chooseLive(video) {
+  byId("cfgStream").value = video.embed_url;
+  liveTitle = video.title;
+  if (await saveConfig()) {
+    showToast(`Stream gewechselt: ${video.title}`);
+    dirty = false;
+    closeDialog(elements.settings);
+  }
+}
+
+async function searchPlaces() {
+  const query = elements.placeQuery.value.trim();
+  hideKeyboard();
+  if (query.length < 2) {
+    setStatus(elements.placeStatus, "Bitte mindestens zwei Zeichen eingeben.", "error");
+    return;
+  }
+  byId("placeSearchBtn").disabled = true;
+  setStatus(elements.placeStatus, "Orte werden gesucht …");
+  elements.placeResults.replaceChildren();
+  try {
+    const result = await api(`/api/location/search?q=${encodeURIComponent(query)}`);
+    if (!result.results.length) {
+      setStatus(elements.placeStatus, "Kein Ort gefunden. Andere Schreibweise versuchen.");
+      return;
+    }
+    setStatus(elements.placeStatus, "Ort antippen, um ihn zu übernehmen");
+    result.results.forEach((place) => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "place-card";
+      card.append(textElement("strong", "", place.name), textElement("span", "", [place.region, place.timezone].filter(Boolean).join(" · ")));
+      card.addEventListener("click", () => choosePlace(place));
+      elements.placeResults.append(card);
+    });
+  } catch (error) {
+    setStatus(elements.placeStatus, error.message, "error");
+  } finally {
+    byId("placeSearchBtn").disabled = false;
+  }
+}
+
+async function choosePlace(place) {
+  byId("cfgLabel").value = place.name;
+  byId("cfgLat").value = place.latitude;
+  byId("cfgLon").value = place.longitude;
+  pendingTimezone = place.timezone || "";
+  if (!pendingTimezone) {
+    setStatus(elements.placeStatus, "Zeitzone wird ermittelt …");
+    try {
+      pendingTimezone = (await api(`/api/location/timezone?lat=${place.latitude}&lon=${place.longitude}`)).timezone;
+    } catch (error) {
+      setStatus(elements.placeStatus, `Zeitzone unbekannt, bisherige bleibt: ${error.message}`, "error");
+    }
+  }
+  if (await saveConfig()) {
+    elements.placeResults.replaceChildren();
+    setStatus(elements.placeStatus, `Ort übernommen: ${place.name}. Uhr und Wetter werden aktualisiert.`, "success");
+  }
+}
+
+const OSK_LAYOUTS = {
+  letters: [
+    ["q", "w", "e", "r", "t", "z", "u", "i", "o", "p", "ü"],
+    ["a", "s", "d", "f", "g", "h", "j", "k", "l", "ö", "ä"],
+    ["shift", "y", "x", "c", "v", "b", "n", "m", "ß", "backspace"],
+    ["mode", "-", "space", ".", "enter"],
+  ],
+  numbers: [
+    ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
+    ["@", "/", ":", ";", "(", ")", "&", "+", "'", "\""],
+    ["_", ",", "?", "!", "#", "%", "=", "backspace"],
+    ["mode", "-", "space", ".", "enter"],
+  ],
+};
+const OSK_ICONS = {
+  shift: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4 4 12h4.5v7h7v-7H20z"/></svg>',
+  backspace: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h11v14H9l-6-7z"/><path d="m12.5 9.5 5 5m0-5-5 5"/></svg>',
+};
+const OSK_LABELS = { shift: "Großbuchstabe", backspace: "Löschen", space: "Leerzeichen" };
+let oskLayout = "letters";
+
+// „ß“.toUpperCase() ergibt „SS“; auf der Tastatur soll es einfach ß bleiben.
+function oskUpper(key) {
+  return key === "ß" ? key : key.toLocaleUpperCase("de-DE");
+}
+
+function buildKeyboard() {
+  const handle = document.createElement("button");
+  handle.type = "button";
+  handle.className = "osk-close";
+  handle.dataset.key = "hide";
+  handle.textContent = "Tastatur schließen";
+  const rows = OSK_LAYOUTS[oskLayout].map((keys) => {
+    const row = document.createElement("div");
+    row.className = "osk-row";
+    keys.forEach((key) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `osk-key osk-${key.length === 1 ? "char" : key}`;
+      button.dataset.key = key;
+      if (OSK_ICONS[key]) button.innerHTML = OSK_ICONS[key];
+      else if (key === "mode") button.textContent = oskLayout === "letters" ? "123" : "ABC";
+      else if (key === "enter") button.textContent = oskTarget?.dataset.enter ? "Suchen" : "OK";
+      else if (key === "space") button.textContent = "Leerzeichen";
+      else button.textContent = oskShift ? oskUpper(key) : key;
+      if (OSK_LABELS[key]) button.setAttribute("aria-label", OSK_LABELS[key]);
+      if (key === "shift") button.setAttribute("aria-pressed", String(oskShift));
+      row.append(button);
+    });
+    return row;
+  });
+  elements.osk.replaceChildren(handle, ...rows);
+}
+
+function setShift(value) {
+  oskShift = value;
+  buildKeyboard();
+}
+
+function showKeyboard(input) {
+  const dialog = input.closest("dialog");
+  if (!dialog) return;
+  oskTarget = input;
+  oskLayout = input.type === "number" || input.inputMode === "numeric" ? "numbers" : "letters";
+  // Wie am Handy: im leeren Textfeld beginnt man mit einem Großbuchstaben.
+  oskShift = oskLayout === "letters" && input.type !== "password" && !input.value;
+  buildKeyboard();
+  const host = dialog.querySelector(".settings-shell, .dialog-card") || dialog;
+  if (elements.osk.parentElement !== host) host.append(elements.osk);
+  elements.osk.classList.remove("hidden");
+  elements.settingsShell.classList.toggle("osk-open", host === elements.settingsShell);
+  input.scrollIntoView({ block: "center", behavior: "auto" });
+}
+
+function hideKeyboard() {
+  oskTarget = null;
+  elements.osk.classList.add("hidden");
+  elements.settingsShell.classList.remove("osk-open");
+}
+
+function typeKey(key) {
+  const input = oskTarget;
+  if (!input) return;
+  if (key === "hide") { hideKeyboard(); return; }
+  if (key === "shift") { setShift(!oskShift); return; }
+  if (key === "mode") {
+    oskLayout = oskLayout === "letters" ? "numbers" : "letters";
+    oskShift = false;
+    buildKeyboard();
+    return;
+  }
+  if (key === "enter") {
+    const target = input.dataset.enter && byId(input.dataset.enter);
+    hideKeyboard();
+    if (target) target.click();
+    return;
+  }
+  const character = key === "space" ? " " : (oskShift ? oskUpper(key) : key);
+  // number-Felder kennen keine Cursorposition; dort wird am Ende angehängt bzw. gelöscht.
+  const caret = input.type !== "number" && typeof input.selectionStart === "number";
+  if (key === "backspace") {
+    if (caret && input.selectionStart !== input.selectionEnd) input.setRangeText("", input.selectionStart, input.selectionEnd, "end");
+    else if (caret && input.selectionStart > 0) input.setRangeText("", input.selectionStart - 1, input.selectionStart, "end");
+    else if (!caret) input.value = input.value.slice(0, -1);
+  } else if (caret) {
+    input.setRangeText(character, input.selectionStart, input.selectionEnd, "end");
+  } else {
+    input.value += character;
+  }
+  if (oskShift && key !== "backspace") setShift(false);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+const RIPPLE_TARGETS = ".button, .icon-button, .menu-button, .menu-tab, .live-card, .place-card, .toggle, .osk-key, .osk-close";
+
+function ripple(event) {
+  const target = event.target.closest(RIPPLE_TARGETS);
+  if (!target || target.disabled || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const rect = target.getBoundingClientRect();
+  const size = Math.max(rect.width, rect.height) * 2;
+  const wave = document.createElement("span");
+  wave.className = "ripple";
+  wave.style.width = `${size}px`;
+  wave.style.height = `${size}px`;
+  wave.style.left = `${event.clientX - rect.left - size / 2}px`;
+  wave.style.top = `${event.clientY - rect.top - size / 2}px`;
+  wave.addEventListener("animationend", () => wave.remove());
+  target.append(wave);
 }
 
 function requestSettingsClose() {
   if (dirty && !window.confirm("Ungespeicherte Änderungen verwerfen?")) return;
   dirty = false;
   closeDialog(elements.settings);
-}
-
-function beginLongPress(event) {
-  event.preventDefault();
-  clearTimeout(longPressTimer);
-  longPressTimer = setTimeout(() => beginAdmin(elements.hotspot), 3000);
-}
-
-function cancelLongPress() {
-  clearTimeout(longPressTimer);
-  longPressTimer = null;
 }
 
 elements.live.addEventListener("load", () => {
@@ -895,13 +1052,31 @@ byId("streamReload").addEventListener("click", () => {
 });
 byId("reloadStreamPanel").addEventListener("click", () => configureStream(collectConfig().stream, true));
 
-elements.hotspot.addEventListener("pointerdown", beginLongPress);
-elements.hotspot.addEventListener("pointerup", cancelLongPress);
-elements.hotspot.addEventListener("pointercancel", cancelLongPress);
-elements.hotspot.addEventListener("pointerleave", cancelLongPress);
-elements.hotspot.addEventListener("keydown", (event) => {
-  if (event.key === "Enter" || event.key === " ") beginAdmin(elements.hotspot);
+elements.hotspot.addEventListener("click", () => beginAdmin(elements.hotspot));
+document.querySelectorAll(".menu-tab").forEach((tab) => tab.addEventListener("click", () => showTab(tab.dataset.tab)));
+byId("liveSearchBtn").addEventListener("click", () => { hideKeyboard(); searchLive(elements.liveQuery.value.trim()); });
+byId("placeSearchBtn").addEventListener("click", searchPlaces);
+elements.liveQuery.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") { event.preventDefault(); byId("liveSearchBtn").click(); }
 });
+elements.placeQuery.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") { event.preventDefault(); searchPlaces(); }
+});
+// Fokuswechsel verhindern, damit das Eingabefeld Fokus und Cursor behält; getippt wird beim Loslassen (click).
+elements.osk.addEventListener("pointerdown", (event) => event.preventDefault());
+elements.osk.addEventListener("mousedown", (event) => event.preventDefault());
+elements.osk.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-key]");
+  if (button) typeKey(button.dataset.key);
+});
+document.addEventListener("pointerdown", ripple);
+document.addEventListener("focusin", (event) => {
+  const input = event.target;
+  if (input instanceof HTMLInputElement && ["text", "search", "password", "number"].includes(input.type) && input.closest("dialog")) showKeyboard(input);
+  else if (input instanceof HTMLTextAreaElement && input.closest("dialog")) showKeyboard(input);
+});
+elements.settings.addEventListener("close", hideKeyboard);
+elements.pinDialog.addEventListener("close", hideKeyboard);
 document.addEventListener("keydown", (event) => {
   if (event.ctrlKey && event.altKey && event.key.toLowerCase() === "s") {
     event.preventDefault();

@@ -17,8 +17,10 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from .admin import SessionStore, hash_pin, verify_pin
-from .config_store import ConfigError, config_path, public_config, save_config, validate_config
+from .config_store import ConfigError, config_path, public_config, save_config, validate_config, youtube_api_key
+from .providers.geocoding import search_places, timezone_for
 from .providers.transit_vrr_smart import search_station
+from .providers.youtube import YouTubeError, search_live
 from .state import StateManager
 from .version import __version__
 
@@ -89,8 +91,9 @@ class StorchHandler(BaseHTTPRequestHandler):
         policy = (
             "default-src 'self'; "
             "script-src 'self'; style-src 'self'; "
-            "img-src 'self' data: https://tilecache.rainviewer.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org; "
-            f"frame-src 'self'{frame_origin}; "
+            "img-src 'self' data: https://i.ytimg.com; "
+            # YouTube fest erlaubt, damit ein im Menü gewählter Stream ohne Neuladen der Seite eingebettet werden darf.
+            f"frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com{frame_origin}; "
             "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
         )
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -137,8 +140,11 @@ class StorchHandler(BaseHTTPRequestHandler):
         header = self.headers.get("Authorization", "")
         return header[7:].strip() if header.startswith("Bearer ") else ""
 
+    def _pin_required(self) -> bool:
+        return bool(self._config().get("admin", {}).get("require_pin", True))
+
     def _authenticated(self) -> bool:
-        return self.context.sessions.valid(self._token())
+        return not self._pin_required() or self.context.sessions.valid(self._token())
 
     def _loopback_client(self) -> bool:
         try:
@@ -147,7 +153,7 @@ class StorchHandler(BaseHTTPRequestHandler):
             return False
 
     def _requires_auth(self) -> bool:
-        return bool(self._config().get("admin", {}).get("pin_hash"))
+        return not self._pin_required() or bool(self._config().get("admin", {}).get("pin_hash"))
 
     def _guard_admin(self) -> None:
         if not self._authenticated():
@@ -177,6 +183,7 @@ class StorchHandler(BaseHTTPRequestHandler):
             if path == "/api/admin/status":
                 self._json({
                     "ok": True,
+                    "pin_required": self._pin_required(),
                     "pin_configured": self._requires_auth(),
                     "authenticated": self._authenticated(),
                 }, head_only=head_only)
@@ -186,15 +193,50 @@ class StorchHandler(BaseHTTPRequestHandler):
                     self._guard_admin()
                 elif not self._loopback_client():
                     raise RequestError(HTTPStatus.FORBIDDEN, "Erstsetup ist nur lokal erlaubt")
-                self._json({"path": str(config_path()), "config": public_config(self._config())}, head_only=head_only)
+                self._json({
+                    "path": str(config_path()),
+                    "config": public_config(self._config()),
+                    "youtube_key_set": bool(youtube_api_key(self._config())),
+                }, head_only=head_only)
                 return
             if path == "/api/station/search":
                 self._guard_admin()
                 query = parse_qs(parsed.query).get("q", [""])[0]
                 self._json({"query": query, "results": search_station(query)}, head_only=head_only)
                 return
-            if path == "/api/radar":
-                self._json(self.context.state.snapshot().get("radar", {}), head_only=head_only)
+            if path == "/api/live/search":
+                self._guard_admin()
+                query = parse_qs(parsed.query).get("q", [""])[0]
+                try:
+                    results = search_live(query, youtube_api_key(self._config()))
+                except YouTubeError as exc:
+                    raise RequestError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
+                self._json({"query": query, "results": results}, head_only=head_only)
+                return
+            if path == "/api/location/search":
+                self._guard_admin()
+                query = parse_qs(parsed.query).get("q", [""])[0]
+                try:
+                    results = search_places(query)
+                except Exception as exc:
+                    LOGGER.warning("Ortssuche fehlgeschlagen: %s", exc)
+                    raise RequestError(HTTPStatus.BAD_GATEWAY, "Ortssuche ist gerade nicht erreichbar") from exc
+                self._json({"query": query, "results": results}, head_only=head_only)
+                return
+            if path == "/api/location/timezone":
+                self._guard_admin()
+                params = parse_qs(parsed.query)
+                try:
+                    latitude = float(params.get("lat", [""])[0])
+                    longitude = float(params.get("lon", [""])[0])
+                except ValueError as exc:
+                    raise RequestError(HTTPStatus.BAD_REQUEST, "lat und lon müssen Zahlen sein") from exc
+                try:
+                    timezone = timezone_for(latitude, longitude)
+                except Exception as exc:
+                    LOGGER.warning("Zeitzonenabfrage fehlgeschlagen: %s", exc)
+                    raise RequestError(HTTPStatus.BAD_GATEWAY, "Zeitzone konnte nicht ermittelt werden") from exc
+                self._json({"timezone": timezone}, head_only=head_only)
                 return
             self._serve_static(path, head_only=head_only)
         except RequestError as exc:
@@ -244,7 +286,13 @@ class StorchHandler(BaseHTTPRequestHandler):
                 candidate = body.get("config")
                 if not isinstance(candidate, dict):
                     raise RequestError(HTTPStatus.BAD_REQUEST, "config fehlt")
-                candidate.setdefault("admin", {})["pin_hash"] = self._config().get("admin", {}).get("pin_hash", "")
+                current = self._config()
+                candidate.setdefault("admin", {})["pin_hash"] = current.get("admin", {}).get("pin_hash", "")
+                candidate["admin"]["require_pin"] = current.get("admin", {}).get("require_pin", True)
+                # Der Schlüssel wird nie an die Oberfläche geschickt; leer heißt „unverändert lassen“.
+                youtube = candidate.setdefault("youtube", {})
+                if not str(youtube.get("api_key", "")).strip():
+                    youtube["api_key"] = current.get("youtube", {}).get("api_key", "")
                 try:
                     validated = validate_config(candidate)
                     save_config(validated)
