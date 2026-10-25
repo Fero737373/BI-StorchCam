@@ -39,6 +39,7 @@ class StateManager:
             "location": config.get("location", {}),
             "timezone": config.get("app", {}).get("timezone", "Europe/Berlin"),
             "transit_provider": config.get("transit", {}).get("provider", "vrr"),
+            "transit_stop_count": len(config.get("transit", {}).get("stops", [])),
         })
 
     def _empty_snapshot(self, config: dict[str, Any]) -> dict[str, Any]:

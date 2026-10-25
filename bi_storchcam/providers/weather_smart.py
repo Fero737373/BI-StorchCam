@@ -88,19 +88,17 @@ def future_forecast(
     return selected
 
 
+def is_rainy(item: dict[str, Any], cfg: dict[str, Any]) -> bool:
+    mm_threshold = float(cfg.get("rain_mm_threshold", 0.1))
+    probability_threshold = int(cfg.get("rain_probability_threshold", 45))
+    return bool(item["rain_mm"] >= mm_threshold or item["probability"] >= probability_threshold)
+
+
 def _summary(label: str, current: dict[str, Any], forecast: list[dict[str, Any]], cfg: dict[str, Any]) -> str:
     temperature = round(float(current.get("temperature_2m", 0)))
     condition = CODES.get(int(current.get("weather_code", 0) or 0), "aktuell")
     prefix = f"{_clean_label(label)} · {condition} · {temperature} °C"
-    mm_threshold = float(cfg.get("rain_mm_threshold", 0.1))
-    probability_threshold = int(cfg.get("rain_probability_threshold", 45))
-    rainy = next(
-        (
-            item for item in forecast
-            if item["rain_mm"] >= mm_threshold or item["probability"] >= probability_threshold
-        ),
-        None,
-    )
+    rainy = next((item for item in forecast if is_rainy(item, cfg)), None)
     if rainy:
         return f"{prefix} · Regen ab {rainy['time'].strftime('%H:%M')} ({rainy['probability']} %)"
     return f"{prefix} · kein Regen in den nächsten {len(forecast)} h"
@@ -143,13 +141,14 @@ def get_weather(config: dict[str, Any], *, force: bool = False, now: datetime | 
             "label": _clean_label(location.get("label")),
             "text": _summary(str(location.get("label", "Bielefeld")), current_data, forecast, weather),
             "condition": CODES.get(int(current_data.get("weather_code", 0) or 0), "aktuell"),
+            "code": int(current_data.get("weather_code", 0) or 0),
             "temp": round(float(current_data.get("temperature_2m", 0))),
             "feels": round(float(current_data.get("apparent_temperature", 0))),
             "wind": round(float(current_data.get("wind_speed_10m", 0))),
             "hum": round(float(current_data.get("relative_humidity_2m", 0))),
             "rain": round(float(current_data.get("precipitation", 0)), 1),
             "forecast": [
-                {**item, "time": item["time"].isoformat()} for item in forecast
+                {**item, "time": item["time"].isoformat(), "rainy": is_rainy(item, weather)} for item in forecast
             ],
             "updated_at": datetime.now(ZoneInfo(timezone_name)).isoformat(timespec="seconds"),
             "stale": False,

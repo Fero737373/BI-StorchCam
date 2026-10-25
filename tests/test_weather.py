@@ -48,3 +48,25 @@ def test_weather_offline_uses_last_valid_snapshot(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(weather_smart, "_fetch_json", lambda _url: (_ for _ in ()).throw(OSError("offline")))
     fallback = weather_smart.get_weather(config, force=True, now=now)
     assert fallback["ok"] and fallback["stale"] and fallback["error"] == "offline"
+
+
+def test_weather_exposes_code_and_rainy_hours(monkeypatch: pytest.MonkeyPatch, config: dict) -> None:
+    weather_smart.clear_cache()
+    config["weather"]["rain_mm_threshold"] = 1.0
+    config["weather"]["rain_probability_threshold"] = 60
+    response = {
+        "current": {"temperature_2m": 12, "apparent_temperature": 10, "relative_humidity_2m": 78, "precipitation": 0, "weather_code": 2, "wind_speed_10m": 14},
+        "hourly": {
+            "time": ["2026-07-21T10:00", "2026-07-21T11:00", "2026-07-21T12:00", "2026-07-21T13:00"],
+            "precipitation": [0, 1.2, 0.2, 0],
+            "precipitation_probability": [10, 20, 65, 59],
+            "weather_code": [2, 61, 80, 3],
+        },
+    }
+    monkeypatch.setattr(weather_smart, "_fetch_json", lambda _url: response)
+    now = datetime(2026, 7, 21, 9, 30, tzinfo=ZoneInfo("Europe/Berlin"))
+    result = weather_smart.get_weather(config, force=True, now=now)
+    assert result["code"] == 2
+    assert [item["rainy"] for item in result["forecast"]] == [False, True, True, False]
+    assert {"time", "rain_mm", "probability", "code", "rainy"} <= set(result["forecast"][0])
+    assert "Regen ab 11:00 (20 %)" in result["text"]

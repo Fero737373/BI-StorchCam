@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import pytest
 
 from bi_storchcam.providers import transit_vrr_smart as transit
@@ -61,3 +63,30 @@ def test_multiple_stops_and_error_do_not_mutate_config(monkeypatch: pytest.Monke
     boards = transit.get_boards(config, force=True)
     assert len(boards) == 2 and boards[1]["ok"] is False
     assert "last_error" not in config["transit"]["stops"][1]
+
+
+def test_rows_expose_raw_minutes_and_boards_checked_at(monkeypatch: pytest.MonkeyPatch, config: dict) -> None:
+    transit.clear_cache()
+    config["transit"]["stops"] = [{**stop(), "line_filter": []}, {**stop("two"), "title": "Zwei"}]
+    data = {
+        "departureData": [
+            {"lineNumber": "31", "direction": "Schildesche", "countdown": "0"},
+            {"lineNumber": "4", "direction": "Universität", "countdown": 65},
+            {"lineNumber": "N2", "direction": "Babenhausen", "countdown": None},
+        ]
+    }
+    calls = 0
+
+    def fake(_url: str, _data=None, timeout=12):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("VRR offline")
+        return data
+
+    monkeypatch.setattr(transit, "_fetch_json", fake)
+    boards = transit.get_boards(config, force=True)
+    assert [(row["mins"], row["minutes"]) for row in boards[0]["rows"]] == [("jetzt", 0), ("1h 05", 65), ("–", None)]
+    for board in boards:
+        assert datetime.fromisoformat(board["checked_at"]).tzinfo is not None
+    assert boards[1]["ok"] is False

@@ -36,3 +36,10 @@ def test_provider_failure_does_not_end_worker(monkeypatch: pytest.MonkeyPatch, c
     time.sleep(0.05)
     assert manager._thread is not None and manager._thread.is_alive()
     manager.stop()
+
+
+def test_runtime_config_exposes_only_stop_count(config: dict) -> None:
+    config["transit"]["stops"] = [{"title": "A", "station_name": "Bielefeld A", "station_id": "1"}]
+    runtime = StateManager._public_runtime_config(config)
+    assert runtime["transit_stop_count"] == 1
+    assert "stops" not in runtime and "transit" not in runtime

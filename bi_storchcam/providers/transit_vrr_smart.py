@@ -9,6 +9,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from typing import Any
 
 from ..version import __version__
@@ -71,10 +72,16 @@ def _matches_line(line: str, filters: list[str], nightbus_only: bool) -> bool:
     return not wanted or candidate in wanted or ("N" in wanted and candidate.startswith("N"))
 
 
-def _format_minutes(value: Any) -> str:
+def _minutes(value: Any) -> int | None:
     try:
-        minutes = int(float(value))
+        return int(float(value))
     except (TypeError, ValueError):
+        return None
+
+
+def _format_minutes(value: Any) -> str:
+    minutes = _minutes(value)
+    if minutes is None:
         return "–"
     if minutes <= 0:
         return "jetzt"
@@ -108,7 +115,7 @@ def _board(stop: dict[str, Any], default_max: int, target_len: int) -> dict[str,
     filters = [str(item) for item in stop.get("line_filter", [])]
     nightbus = bool(stop.get("nightbus_only", False))
     limit = int(stop.get("max_rows") or default_max)
-    rows: list[dict[str, str]] = []
+    rows: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
     for departure in data.get("departureData", []):
         if not isinstance(departure, dict):
@@ -124,7 +131,8 @@ def _board(stop: dict[str, Any], default_max: int, target_len: int) -> dict[str,
         seen.add(key)
         if len(target) > target_len:
             target = target[: target_len - 1].rstrip() + "…"
-        rows.append({"line": line, "target": target, "mins": _format_minutes(departure.get("countdown"))})
+        countdown = departure.get("countdown")
+        rows.append({"line": line, "target": target, "mins": _format_minutes(countdown), "minutes": _minutes(countdown)})
         if len(rows) >= limit:
             break
     title = str(stop.get("title") or station_name).replace("Bielefeld", "").strip(" ,") or "Haltestelle"
@@ -150,6 +158,7 @@ def get_boards(config: dict[str, Any], *, force: bool = False) -> list[dict[str,
 
     boards: list[dict[str, Any]] = []
     for stop in transit.get("stops", []):
+        checked_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
         try:
             board = _board(stop, int(transit.get("default_max_rows", 2)), int(transit.get("target_len", 16)))
         except Exception as exc:
@@ -163,6 +172,7 @@ def get_boards(config: dict[str, Any], *, force: bool = False) -> list[dict[str,
                 "ok": False,
                 "error": str(exc)[:160],
             }
+        board["checked_at"] = checked_at
         if board["rows"] or not board["hide_if_empty"] or not board["ok"]:
             boards.append(board)
     with _cache_lock:
