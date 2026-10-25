@@ -28,7 +28,7 @@ build-backend = "setuptools.build_meta"
 version = {attr = "bi_storchcam.version.__version__"}
 
 [tool.setuptools.package-data]
-bi_storchcam = ["web/*.html", "web/*.css", "web/*.js"]
+bi_storchcam = ["web/*.html", "web/*.css", "web/*.js", "web/fonts/*.woff2", "web/fonts/*.txt"]
 
 [tool.setuptools.packages.find]
 include = ["bi_storchcam*"]

@@ -98,3 +98,11 @@ def test_state_endpoint_does_not_call_provider(config: dict, monkeypatch: pytest
     monkeypatch.setattr("bi_storchcam.providers.weather_smart.get_weather", forbidden)
     with running_server(config, monkeypatch, tmp_path) as address:
         assert request(address, "GET", "/api/state")[0] == 200
+
+
+def test_fonts_are_served_as_woff2(config: dict, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    with running_server(config, monkeypatch, tmp_path) as address:
+        status, headers, body = request(address, "GET", "/fonts/barlow-latin-600-normal.woff2")
+        assert status == 200 and headers["Content-Type"] == "font/woff2" and body[:4] == b"wOF2"
+        status, _headers, _body = request(address, "GET", "/fonts/OFL.txt")
+        assert status == 200

@@ -23,6 +23,8 @@ from .state import StateManager
 from .version import __version__
 
 LOGGER = logging.getLogger(__name__)
+# Python 3.10/3.11 kennen woff2 nicht; ohne Typ würde nosniff die Schrift blockieren.
+mimetypes.add_type("font/woff2", ".woff2")
 
 
 def web_directory() -> Path:
