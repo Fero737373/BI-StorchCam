@@ -193,6 +193,8 @@ function tileImage(src, left, top, rain = false) {
   image.loading = "eager";
   image.style.left = `${left}px`;
   image.style.top = `${top}px`;
+  // Die OSM-Kachelrichtlinie verlangt einen Referer; die Seite selbst sendet sonst keinen.
+  if (!rain) image.referrerPolicy = "origin";
   image.src = src;
   image.addEventListener("error", () => image.classList.add("tile-error"));
   return image;

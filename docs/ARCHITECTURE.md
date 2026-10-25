@@ -7,7 +7,7 @@ BI-StorchCam besitzt genau einen Produktpfad:
 3. `StorchServer` bindet den konfigurierten Port und liefert nur unveränderliche State-Snapshots an `/api/state`.
 4. Der Hauptprozess wartet auf `/api/health` mit `state_ready=true`.
 5. Erst danach startet `BrowserManager` einen Chromium-Familienprozess.
-6. systemd überwacht den Python-Prozess; `BrowserManager` überwacht ausschließlich den Browserprozess.
+6. Docker (`restart: unless-stopped`, Healthcheck auf `/api/health`) überwacht den Python-Prozess. `BrowserManager` überwacht den Chromium-Prozess im Container, der über den Wayland-Socket des Hosts auf dem Bildschirm erscheint.
 
 Die API lädt keine externen Provider pro Request. Configänderungen invalidieren den Zeitplan des State-Managers. Schreibzugriffe erfordern ein kurzlebiges In-Memory-Token. Die PIN liegt nur als PBKDF2-Hash in der lokalen Config.
 

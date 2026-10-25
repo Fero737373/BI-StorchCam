@@ -2,7 +2,7 @@
 
 BI-StorchCam ist ein leichtgewichtiger lokaler Web-Kiosk für einen Livestream mit Uhr, Wetter, Regenradar und optionalen VRR-Abfahrten. Der Livestream bleibt die Hauptfläche; Zusatzinformationen liegen kompakt an den Bildschirmrändern.
 
-> **Status:** `0.2.0-beta.1`. Der Quellstand ist für einen ersten Beta-Test gehärtet. Ein mindestens achtstündiger Raspberry-Pi-Hardwaretest steht noch aus und wird nicht als bestanden behauptet.
+> **Status:** `0.2.0-beta.1`. Der Quellstand ist für einen ersten Beta-Test gehärtet.
 
 ## Screenshots
 
@@ -22,18 +22,11 @@ Die automatisierten UI-Tests erzeugen bei Fehlern Screenshots für 1024×600, 12
 - überwachte Chromium-, Chrome- oder Edge-Prozesse mit begrenztem Backoff
 - atomische Konfiguration mit letzter Sicherung
 - rotierende App- und Browserlogs
-- systemd-User-Service für unbeaufsichtigten Betrieb
+- Docker-Container mit Healthcheck und automatischem Neustart
 
-## Unterstützte Plattformen
+## Betrieb
 
-| Plattform | Stand |
-| --- | --- |
-| Raspberry Pi OS 64-Bit | Zielplattform; finaler Hardware-Soak-Test offen |
-| Linux x64 | Python- und PyInstaller-CI vorgesehen |
-| Windows x64 | Python- und PyInstaller-CI vorgesehen |
-| Linux ARM64 | lokaler Build auf ARM64 vorgesehen; kein Cross-Build-Versprechen |
-
-Python 3.10 bis 3.13 werden in der CI-Matrix geprüft. Der Kioskmanager unterstützt Chromium, Google Chrome und Microsoft Edge. Firefox wird bewusst nicht mit inkompatiblen Chromium-Flags gestartet.
+BI-StorchCam läuft als Docker-Container (getestet auf Raspberry Pi OS / Debian 13, ARM64, labwc/Wayland). Der Container startet Server und Chromium-Kiosk; Chromium erscheint direkt auf dem angeschlossenen Bildschirm.
 
 ## Bekannte Einschränkungen
 
@@ -47,59 +40,41 @@ Python 3.10 bis 3.13 werden in der CI-Matrix geprüft. Der Kioskmanager unterst�
 
 Für Live-Daten benötigt BI-StorchCam Netzwerkzugriff zu Open-Meteo, RainViewer, OpenStreetMap-Kacheln und dem VRR-Haltestellenmonitor. Der Stream benötigt Zugriff auf die konfigurierte Streamdomain. Die App enthält keine Cloud-Benutzerverwaltung und sendet keine lokale PIN.
 
-## Raspberry-Pi-Installation
+## Docker
 
 ```bash
 git clone https://github.com/Fero737373/BI-StorchCam.git
 cd BI-StorchCam
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e .
-python launcher.py --setup
-python launcher.py --no-browser
+mkdir -p data
+BI_STORCHCAM_ADMIN_PIN=1234 \
+BI_STORCHCAM_STREAM_URL="https://…/embed" \
+docker compose up -d --build
 ```
 
-Nach erfolgreichem Server-Test:
+Die PIN (4–12 Ziffern) wird nur beim allerersten Start benötigt und als PBKDF2-Hash in `./data/config.json` gespeichert. Alternativ interaktiv einrichten:
 
 ```bash
-bash scripts/install_systemd_user.sh
-systemctl --user status bi-storchcam.service
+docker compose run --rm bi-storchcam --setup
+docker compose up -d
 ```
 
-Für User-Services kann auf einem unbeaufsichtigten Gerät zusätzlich `loginctl enable-linger "$USER"` mit passenden Administratorrechten nötig sein. Das optionale Desktop-Autostart-Script `scripts/install_linux_autostart.sh` ist nur ein weniger robuster Fallback.
+Voraussetzungen für die Anzeige auf dem Bildschirm:
 
-## Linux-Installation
+- Desktop-Autologin für den Benutzer mit UID 1000 (Wayland-Socket `/run/user/1000/wayland-0`)
+- Der Container bindet `/run/user` (Wayland, Audio) und `/dev/dri` (GPU) ein und läuft mit `seccomp=unconfined`, damit die Chromium-Sandbox aktiv bleiben kann.
+- Startet Docker beim Booten vor der Desktop-Sitzung, wartet der Container bis zu fünf Minuten auf den Wayland-Socket.
+
+Mit `restart: unless-stopped` startet die Cam nach jedem Neustart automatisch. `docker compose stop` schließt den Kiosk wieder. `BI_STORCHCAM_KIOSK=0` startet nur den Server (Aufruf dann z. B. über `http://<pi>:8000/`). `BI_STORCHCAM_STREAM_URL` überschreibt bei jedem Start die Stream-URL; ohne die Variable gilt der Wert aus `./data/config.json` bzw. dem Adminmodus.
+
+Diagnoseoptionen laufen ebenfalls im Container:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
-python -m bi_storchcam --setup
-python -m bi_storchcam
+docker compose run --rm bi-storchcam --test-config
+docker compose run --rm bi-storchcam --test-weather
+docker compose run --rm bi-storchcam --station-search "Jahnplatz"
 ```
 
-## Windows-Installation
-
-```powershell
-py -3 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e .
-python launcher.py --setup
-python launcher.py
-```
-
-## Einheitliche Startbefehle
-
-Alle drei Befehle starten dieselbe Anwendung:
-
-```bash
-python launcher.py
-python -m bi_storchcam
-bi-storchcam
-```
-
-Mit `--no-browser` läuft nur der lokale Server. `--test-config`, `--test-weather`, `--test-radar`, `--test-transit` und `--station-search "Name"` sind Diagnoseoptionen.
+Ohne Docker: `python -m pip install -e .` und `python -m bi_storchcam --no-browser`.
 
 ## Adminzugriff
 
@@ -107,42 +82,13 @@ Halte die unsichtbare obere linke Ecke mindestens drei Sekunden gedrückt oder d
 
 Der Server bindet standardmäßig ausschließlich an `127.0.0.1`. Vor einer externen Bind-Adresse muss bereits eine Admin-PIN eingerichtet sein.
 
-## Konfiguration
+## Konfiguration und Logs
 
-- Linux/Raspberry Pi: `~/.config/BI-StorchCam/config.json`
-- Windows: `%APPDATA%\BI-StorchCam\config.json`
-- macOS: `~/Library/Application Support/BI-StorchCam/config.json`
-- Override: Umgebungsvariable `BI_STORCHCAM_CONFIG`
+- Konfiguration: `./data/config.json` (im Container `/data/config.json`, Override per `BI_STORCHCAM_CONFIG`)
+- Letzte Sicherung: `./data/config.json.bak`
+- App-Log: `./data/.cache/BI-StorchCam/storchcam.log` bzw. `docker compose logs -f`
 
-Die letzte vorherige Datei liegt als `config.json.bak` daneben. Eine ungültige Originaldatei wird nicht still überschrieben. Alle Felder sind in [docs/CONFIGURATION.md](docs/CONFIGURATION.md) beschrieben.
-
-## Diagnose und Logs
-
-```bash
-bash scripts/diagnose.sh
-```
-
-Das Script schreibt einen redigierten Einzelbericht nach `~/.cache/BI-StorchCam/diagnose-*.txt`. Adminhash und PIN werden nicht ausgegeben.
-
-- App: `~/.cache/BI-StorchCam/storchcam.log`
-- Browser: `~/.cache/BI-StorchCam/chromium.log`
-- Service: `journalctl --user -u bi-storchcam.service`
-
-## Build
-
-Die gemeinsame `BI-StorchCam.spec` enthält HTML, CSS und JavaScript und löst Ressourcen im Python- sowie PyInstaller-Betrieb auf.
-
-```bash
-bash build_linux.sh
-```
-
-Unter Windows:
-
-```bat
-build_windows.bat
-```
-
-Windows-Binaries müssen auf Windows, Linux-x64-Binaries auf Linux x64 und ARM64-Binaries lokal auf ARM64 gebaut werden. Es werden keine ungeprüften Binärdateien im Repository veröffentlicht.
+Eine ungültige Originaldatei wird nicht still überschrieben. Alle Felder sind in [docs/CONFIGURATION.md](docs/CONFIGURATION.md) beschrieben.
 
 ## Tests
 
@@ -156,16 +102,7 @@ npx playwright install chromium
 npm run test:ui
 ```
 
-Playwright verwendet gemockte API-Antworten und ruft keine echten externen Provider auf. Details zum achtstündigen Test stehen in [docs/SOAK_TEST.md](docs/SOAK_TEST.md).
-
-## Deinstallation
-
-```bash
-bash scripts/remove_systemd_user.sh
-bash scripts/remove_linux_autostart.sh
-```
-
-Konfiguration und Logs bleiben bewusst erhalten. Sie können anschließend gezielt aus den oben genannten Pfaden entfernt werden.
+Playwright verwendet gemockte API-Antworten und ruft keine echten externen Provider auf.
 
 ## Datenschutz und Netzwerk
 

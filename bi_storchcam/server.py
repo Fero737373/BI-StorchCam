@@ -7,7 +7,6 @@ import ipaddress
 import json
 import logging
 import mimetypes
-import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -27,11 +26,6 @@ LOGGER = logging.getLogger(__name__)
 
 
 def web_directory() -> Path:
-    bundle_root = getattr(sys, "_MEIPASS", None)
-    if bundle_root:
-        bundled = Path(bundle_root) / "bi_storchcam" / "web"
-        if bundled.exists():
-            return bundled
     return Path(__file__).resolve().parent / "web"
 
 

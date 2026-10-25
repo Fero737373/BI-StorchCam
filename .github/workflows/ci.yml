@@ -33,7 +33,6 @@ jobs:
       - name: Entry-point smoke tests
         shell: bash
         run: |
-          python launcher.py --test-config
           python -m bi_storchcam --test-config
           bi-storchcam --test-config
 
@@ -62,25 +61,11 @@ jobs:
             playwright-report/
           if-no-files-found: ignore
 
-  build:
-    name: PyInstaller smoke · ${{ matrix.os }}
+  docker:
+    name: Docker image
     needs: python
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-      - run: python -m pip install -r requirements.txt
-      - run: python -m PyInstaller --clean --noconfirm BI-StorchCam.spec
-      - name: Linux bundle smoke
-        if: runner.os == 'Linux'
-        run: ./dist/BI-StorchCam --test-config
-      - name: Windows bundle smoke
-        if: runner.os == 'Windows'
-        run: .\dist\BI-StorchCam.exe --test-config
+      - run: docker build -t bi-storchcam .
+      - run: docker run --rm -e BI_STORCHCAM_ADMIN_PIN=1234 bi-storchcam --test-config

@@ -1,0 +1,42 @@
+services:
+  bi-storchcam:
+    build: .
+    image: bi-storchcam:latest
+    container_name: bi-storchcam
+    restart: unless-stopped
+    user: "1000:1000"
+    # Videogruppen des Hosts für GPU-Zugriff (video=44, render=992).
+    group_add:
+      - "44"
+      - "992"
+    shm_size: "512m"
+    # Dockers Standard-Seccomp-Profil verhindert die Chromium-Sandbox; so bleibt sie aktiv statt --no-sandbox.
+    security_opt:
+      - seccomp=unconfined
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - ./data:/data
+      # Wayland-/Audio-Sockets der Desktop-Sitzung; rslave, damit die Sitzung auch nach dem Containerstart erscheint.
+      - type: bind
+        source: /run/user
+        target: /run/user
+        bind:
+          propagation: rslave
+
+    devices:
+      - /dev/dri:/dev/dri
+
+    environment:
+      - TZ=Europe/Berlin
+      - XDG_RUNTIME_DIR=/run/user/1000
+      - WAYLAND_DISPLAY=wayland-0
+      - XDG_SESSION_TYPE=wayland
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+      # Kiosk-Browser auf dem angeschlossenen Bildschirm starten (0 = nur Server).
+      - BI_STORCHCAM_KIOSK=${BI_STORCHCAM_KIOSK:-1}
+      - BI_STORCHCAM_STREAM_URL=${BI_STORCHCAM_STREAM_URL:-}
+      # Nur für den allerersten Start nötig, danach liegt der PBKDF2-Hash in ./data/config.json.
+      - BI_STORCHCAM_ADMIN_PIN=${BI_STORCHCAM_ADMIN_PIN:-}
