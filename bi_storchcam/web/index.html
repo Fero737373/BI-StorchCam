@@ -15,59 +15,81 @@
     <section id="stage" class="stage" aria-label="Livestream" tabindex="-1">
       <iframe id="live" class="live" title="Konfigurierter Livestream" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen></iframe>
       <div class="stream-shade" aria-hidden="true"></div>
-      <div id="streamEmpty" class="stream-empty" role="alert">
-        <strong>Kein Livestream konfiguriert</strong>
-        <span>Öffne den lokalen Adminmodus und hinterlege eine unterstützte Embed-URL.</span>
-        <button id="streamReload" class="button button-primary" type="button">Erneut versuchen</button>
+      <div id="streamEmpty" class="stream-empty has-stream" role="alert">
+        <div class="empty-card">
+          <svg class="empty-icon" viewBox="0 0 24 24" width="44" height="44" aria-hidden="true" focusable="false">
+            <path d="M3 3l18 18"/>
+            <path d="M8.5 6H14a2 2 0 0 1 2 2v2.5l5-3v9l-1.6-.96"/>
+            <path d="M16 16v.1A1.9 1.9 0 0 1 14.1 18H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h.5"/>
+          </svg>
+          <strong id="streamEmptyTitle">Kein Livestream konfiguriert</strong>
+          <span id="streamEmptyText">Öffne den lokalen Adminmodus und hinterlege eine unterstützte Embed-URL.</span>
+          <button id="streamReload" class="button button-primary empty-action" type="button">Jetzt neu laden</button>
+        </div>
       </div>
-      <div id="streamStatus" class="stream-status" role="status" aria-live="polite">
+      <div id="streamStatus" class="stream-status" role="status" aria-live="polite" title="Lokales Backend wird geladen">
         <span class="status-dot" aria-hidden="true"></span>
-        <span id="streamStatusText">Lokales Backend wird geladen</span>
+        <span id="streamStatusShort" class="status-short" aria-hidden="true">Wird geladen</span>
+        <span id="streamStatusText" class="sr-only">Lokales Backend wird geladen</span>
       </div>
     </section>
 
-    <section class="hud" aria-label="Zusatzinformationen">
-      <header class="hud-top" aria-label="Zeit und Wetter">
-        <section id="clockbar" class="clock-card" aria-label="Aktuelle Uhrzeit">
-          <span class="eyebrow">Bielefeld</span>
-          <strong id="clock">--:--</strong>
-          <span id="date">--</span>
-        </section>
-        <section id="weather" class="weather-card" aria-label="Wetterstatus">
-          <span class="weather-mark" aria-hidden="true"></span>
-          <span id="weatherText">Wetter wird geladen</span>
-        </section>
-        <section id="sysbar" class="system-card" aria-label="Systemstatus">
-          <span id="sys">Systemstatus nicht verfügbar</span>
-        </section>
-      </header>
-
-      <aside id="radar" class="radar-card" aria-label="Regenradar">
-        <header class="card-header">
-          <div>
-            <span class="eyebrow">Regenradar</span>
-            <h2 id="radarLabel">Bielefeld</h2>
-          </div>
-          <span id="radarTime" class="meta">wird geladen</span>
-        </header>
-        <div id="radarMap" class="radar-map" role="img" aria-label="Regenradar für den konfigurierten Standort">
-          <span class="loading-copy">Radardaten werden geladen</span>
+    <section id="infobar" class="infobar" aria-label="Zusatzinformationen">
+      <section id="clockbar" class="ib-block ib-clock" aria-label="Uhrzeit und Systemstatus">
+        <div id="clockMain" class="clock-main">
+          <strong id="clock" class="clock-time">--:--</strong>
+          <span id="date" class="clock-date">--</span>
         </div>
-        <footer class="radar-footer">
-          <span id="radarStatus">Datenstatus unbekannt</span>
-          <span id="radarAttribution">RainViewer · OpenStreetMap-Mitwirkende</span>
-        </footer>
-      </aside>
+        <div id="sysbar" class="clock-sys" aria-label="Systemstatus">
+          <span id="sys">Systemstatus nicht verfügbar</span>
+        </div>
+      </section>
 
-      <aside id="transitPanel" class="transit-card" aria-label="ÖPNV-Abfahrten">
-        <header class="card-header">
-          <div>
-            <span class="eyebrow">ÖPNV · VRR</span>
-            <h2>Abfahrten</h2>
+      <span class="ib-sep" aria-hidden="true"></span>
+      <section id="weather" class="ib-block ib-weather" aria-label="Wetter">
+        <span id="weatherText" class="sr-only">Wetter wird geladen</span>
+        <div class="weather-head" aria-hidden="true">
+          <span id="weatherIcon" class="weather-icon"></span>
+          <span id="weatherTemp" class="weather-temp">–°</span>
+          <div class="weather-desc">
+            <strong id="weatherCondition" class="weather-condition">Wetter wird geladen</strong>
+            <span id="weatherDetails" class="weather-details"></span>
           </div>
+        </div>
+        <div class="rain-strip" aria-hidden="true">
+          <div class="rain-head">
+            <span id="rainLabel" class="rain-label">Regenwahrscheinlichkeit</span>
+            <span id="rainSummary" class="rain-summary"></span>
+          </div>
+          <div id="rainHours" class="rain-hours"></div>
+        </div>
+        <div class="weather-error" aria-hidden="true">
+          <strong>Wetter nicht verfügbar</strong>
+          <span id="weatherError"></span>
+        </div>
+      </section>
+
+      <span class="ib-sep" aria-hidden="true"></span>
+      <section id="radar" class="ib-block ib-radar" aria-label="Regenradar">
+        <header class="block-head">
+          <span>Radar</span>
+          <span id="radarTime" class="block-meta">wird geladen</span>
         </header>
+        <span id="radarLabel" class="sr-only">Bielefeld</span>
+        <span id="radarStatus" class="sr-only">Datenstatus unbekannt</span>
+        <div id="radarBox" class="radar-box">
+          <div id="radarMap" class="radar-map" role="img" aria-label="Regenradar für den konfigurierten Standort">
+            <span class="radar-message">Radardaten werden geladen</span>
+          </div>
+          <span id="radarAttribution" class="radar-attribution">© OpenStreetMap · RainViewer</span>
+        </div>
+      </section>
+
+      <span class="ib-sep" aria-hidden="true"></span>
+      <section id="transitPanel" class="ib-block ib-transit" aria-label="ÖPNV-Abfahrten">
+        <header class="block-head transit-head"><span>Abfahrten</span></header>
         <div id="boards" class="boards" aria-live="polite"></div>
-      </aside>
+      </section>
     </section>
   </main>
 

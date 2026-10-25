@@ -7,14 +7,28 @@ const elements = {
   streamEmpty: byId("streamEmpty"),
   streamStatus: byId("streamStatus"),
   streamStatusText: byId("streamStatusText"),
+  streamStatusShort: byId("streamStatusShort"),
+  streamEmptyTitle: byId("streamEmptyTitle"),
+  streamEmptyText: byId("streamEmptyText"),
+  infobar: byId("infobar"),
   clockbar: byId("clockbar"),
+  clockMain: byId("clockMain"),
   clock: byId("clock"),
   date: byId("date"),
   weather: byId("weather"),
   weatherText: byId("weatherText"),
+  weatherIcon: byId("weatherIcon"),
+  weatherTemp: byId("weatherTemp"),
+  weatherCondition: byId("weatherCondition"),
+  weatherDetails: byId("weatherDetails"),
+  weatherError: byId("weatherError"),
+  rainLabel: byId("rainLabel"),
+  rainSummary: byId("rainSummary"),
+  rainHours: byId("rainHours"),
   sysbar: byId("sysbar"),
   sys: byId("sys"),
   radar: byId("radar"),
+  radarBox: byId("radarBox"),
   radarMap: byId("radarMap"),
   radarLabel: byId("radarLabel"),
   radarTime: byId("radarTime"),
@@ -51,6 +65,31 @@ let streamSignature = "";
 let longPressTimer = null;
 let toastTimer = null;
 let runtimeTimezone = "Europe/Berlin";
+let runtimeConfig = null;
+let lastState = null;
+let lastRadarTime = "";
+let radarSignature = "";
+let backendDown = false;
+let streamView = { state: "loading", full: "Lokales Backend wird geladen", short: "Wird geladen", card: null };
+
+const NARROW_WIDTH = 760;
+const RAIN_NOW_CODES = new Set([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99]);
+const SVG_NS = "http://www.w3.org/2000/svg";
+// Wettersymbole im 24er-Raster; Farben kommen über Klassen aus dem CSS (CSP erlaubt keine Inline-Styles).
+const CLOUD = "M7 18.5h10.5a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.4 11.1 3.7 3.7 0 0 0 7 18.5z";
+const SUN_RAYS = "M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4";
+const SMALL_SUN = '<g class="wi-sun"><circle cx="7" cy="7" r="2.4"/><path d="M7 1.8v1.3M1.8 7h1.3M3.3 3.3l.9.9M10.7 3.3l-.9.9M3.3 10.7l.9-.9"/></g>';
+const WEATHER_ICONS = {
+  sun: `<g class="wi-sun"><circle cx="12" cy="12" r="4"/><path d="${SUN_RAYS}"/></g>`,
+  partly: `${SMALL_SUN}<path class="wi-cloud" transform="translate(1.5 2)" d="${CLOUD}"/>`,
+  cloudy: `<path class="wi-cloud" d="${CLOUD}"/>`,
+  fog: `<path class="wi-cloud" transform="translate(0 -4)" d="${CLOUD}"/><path class="wi-fog" d="M4.5 18.5h15M6.5 21.5h11"/>`,
+  rain: `<path class="wi-cloud" transform="translate(0 -4)" d="${CLOUD}"/><path class="wi-drop" d="M8.5 17.5l-1 3M12.5 17.5l-1 3M16.5 17.5l-1 3"/>`,
+  showers: `${SMALL_SUN}<path class="wi-cloud" transform="translate(1.5 1.5)" d="${CLOUD}"/><path class="wi-drop" d="M11 21l-.7 2.2M15.5 21l-.7 2.2"/>`,
+  snow: `<path class="wi-cloud" transform="translate(0 -4)" d="${CLOUD}"/><path class="wi-snow" d="M8.5 18.5h.01M12 20.5h.01M15.5 18.5h.01M10 22h.01M14 22h.01"/>`,
+  thunder: `<path class="wi-cloud" transform="translate(0 -4)" d="${CLOUD}"/><path class="wi-bolt" d="M12.8 15.5l-2.6 3.8h3.4l-2.4 3.7"/>`,
+};
+const ERROR_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9.5"/><path d="M12 7v6.2M12 16.8h.01"/></svg>';
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -100,7 +139,62 @@ function showToast(text) {
 function updateClock() {
   const now = new Date();
   elements.clock.textContent = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" }).format(now);
-  elements.date.textContent = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" }).format(now);
+  const weekday = elements.body.dataset.layout === "minimal" ? "short" : "long";
+  elements.date.textContent = new Intl.DateTimeFormat("de-DE", { weekday, day: "numeric", month: "long" }).format(now);
+}
+
+function isMinimal() {
+  return elements.body.dataset.layout === "minimal";
+}
+
+function isNarrow() {
+  return window.innerWidth < NARROW_WIDTH;
+}
+
+function formatTime(iso) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: runtimeTimezone }).format(date);
+}
+
+function hourOf(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "–";
+  const parts = new Intl.DateTimeFormat("de-DE", { hour: "numeric", hourCycle: "h23", timeZone: runtimeTimezone }).formatToParts(date);
+  return String(Number(parts.find((part) => part.type === "hour")?.value ?? NaN));
+}
+
+function updateInfobar() {
+  const ui = runtimeConfig?.ui || {};
+  const showClock = !!ui.clock?.enabled;
+  const showSystem = !!ui.system?.enabled;
+  elements.clockMain.classList.toggle("hidden", !showClock);
+  elements.sysbar.classList.toggle("hidden", !showSystem);
+  const blocks = [
+    // Lange Datumsangaben („Donnerstag, 30. September“) dürfen die Uhrspalte über die Mindestbreite hinaus verbreitern.
+    [elements.clockbar, showClock || showSystem, "minmax(var(--col-clock), max-content)"],
+    [elements.weather, !!ui.weather?.enabled, "minmax(0, 1fr)"],
+    [elements.radar, !!ui.radar?.enabled && !isNarrow(), "var(--col-radar)"],
+    [elements.transitPanel, !!ui.transit?.enabled, "var(--col-transit)"],
+  ];
+  const tracks = [];
+  blocks.forEach(([block, visible, track]) => {
+    block.classList.toggle("hidden", !visible);
+    const separator = block.previousElementSibling?.classList.contains("ib-sep") ? block.previousElementSibling : null;
+    separator?.classList.add("hidden");
+    if (!visible) return;
+    if (tracks.length && separator) {
+      separator.classList.remove("hidden");
+      tracks.push("1px");
+    }
+    tracks.push(track);
+  });
+  // Ohne Wetterspalte gibt es keine flexible Spalte; dann wächst die letzte sichtbare.
+  if (!ui.weather?.enabled && tracks.length) tracks[tracks.length - 1] = `minmax(${tracks.at(-1)}, 1fr)`;
+  elements.infobar.classList.toggle("hidden", !tracks.length);
+  elements.body.classList.toggle("no-infobar", !tracks.length);
+  elements.infobar.style.gridTemplateColumns = tracks.join(" ");
 }
 
 function resolveLayout(requested) {
@@ -113,18 +207,19 @@ function resolveLayout(requested) {
 function applyRuntimeConfig(runtime) {
   if (!runtime || !runtime.ui) return;
   const ui = runtime.ui;
+  runtimeConfig = runtime;
   runtimeTimezone = runtime.timezone || runtime.app?.timezone || "Europe/Berlin";
   elements.body.dataset.theme = ui.theme || "dark";
-  elements.body.dataset.layout = resolveLayout(ui.layout_profile || "auto");
+  const layout = resolveLayout(ui.layout_profile || "auto");
+  if (elements.body.dataset.layout !== layout) {
+    elements.body.dataset.layout = layout;
+    updateClock();
+  }
   const radar = ui.radar || {};
   document.documentElement.style.setProperty("--radar-width", `${Number(radar.width || 280)}px`);
   document.documentElement.style.setProperty("--radar-height", `${Number(radar.height || 190)}px`);
   document.documentElement.style.setProperty("--radar-opacity", String(Number(radar.opacity ?? 0.92)));
-  elements.clockbar.classList.toggle("hidden", !ui.clock?.enabled);
-  elements.weather.classList.toggle("hidden", !ui.weather?.enabled);
-  elements.radar.classList.toggle("hidden", !radar.enabled);
-  elements.transitPanel.classList.toggle("hidden", !ui.transit?.enabled);
-  elements.sysbar.classList.toggle("hidden", !ui.system?.enabled);
+  updateInfobar();
   configureStream(runtime.stream || {});
 }
 
@@ -142,6 +237,23 @@ function effectiveStreamUrl(stream) {
   }
 }
 
+function renderStreamView(view) {
+  elements.streamStatus.dataset.state = view.state;
+  elements.streamStatusText.textContent = view.full;
+  elements.streamStatusShort.textContent = view.short;
+  elements.streamStatus.title = view.full;
+  elements.streamEmpty.classList.toggle("has-stream", !view.card);
+  if (view.card) {
+    elements.streamEmptyTitle.textContent = view.card.title;
+    elements.streamEmptyText.textContent = view.card.text;
+  }
+}
+
+function setStreamView(view) {
+  streamView = view;
+  if (!backendDown) renderStreamView(view);
+}
+
 function configureStream(stream, force = false) {
   const signature = JSON.stringify({ url: stream.url || "", autoplay: !!stream.autoplay, muted: !!stream.muted });
   if (!force && signature === streamSignature) return;
@@ -149,15 +261,15 @@ function configureStream(stream, force = false) {
   const url = effectiveStreamUrl(stream);
   if (!url) {
     elements.live.removeAttribute("src");
-    elements.streamEmpty.classList.remove("has-stream");
-    elements.streamEmpty.querySelector("strong").textContent = "Kein Livestream konfiguriert";
-    elements.streamStatus.dataset.state = "error";
-    elements.streamStatusText.textContent = "Keine Stream-URL konfiguriert";
+    setStreamView({
+      state: "error",
+      full: "Keine Stream-URL konfiguriert",
+      short: "Kein Stream",
+      card: { title: "Kein Livestream konfiguriert", text: "Öffne den lokalen Adminmodus und hinterlege eine unterstützte Embed-URL." },
+    });
     return;
   }
-  elements.streamEmpty.classList.add("has-stream");
-  elements.streamStatus.dataset.state = "loading";
-  elements.streamStatusText.textContent = "Stream-Seite wird geladen";
+  setStreamView({ state: "loading", full: "Stream-Seite wird geladen", short: "Stream wird geladen", card: null });
   elements.live.src = "about:blank";
   requestAnimationFrame(() => { elements.live.src = url; });
 }
@@ -168,13 +280,110 @@ function formatMaybe(value, suffix = "") {
 
 function renderSystem(system) {
   if (!system || system.enabled === false) return;
-  elements.sys.textContent = `CPU ${formatMaybe(system.cpu, "%")} · RAM ${formatMaybe(system.ram, "%")} · ${system.temp == null ? "Temperatur nicht verfügbar" : `${system.temp} °C`}`;
+  const parts = [`CPU ${formatMaybe(system.cpu, " %")}`];
+  if (!isMinimal()) parts.push(`RAM ${formatMaybe(system.ram, " %")}`);
+  parts.push(`${formatMaybe(system.temp)} °C`);
+  elements.sys.textContent = parts.join(" · ");
+}
+
+function weatherKind(code) {
+  if (code === 0 || code === 1) return "sun";
+  if (code === 2) return "partly";
+  if (code === 45 || code === 48) return "fog";
+  if (code >= 51 && code <= 67) return "rain";
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "snow";
+  if (code >= 80 && code <= 82) return "showers";
+  if (code >= 95 && code <= 99) return "thunder";
+  return "cloudy";
+}
+
+function weatherIcon(code) {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("focusable", "false");
+  svg.innerHTML = WEATHER_ICONS[weatherKind(Number(code))];
+  return svg;
+}
+
+function capitalize(text) {
+  const value = String(text || "");
+  return value ? value[0].toLocaleUpperCase("de-DE") + value.slice(1) : "";
+}
+
+function rainSummary(weather, forecast) {
+  const minimal = isMinimal();
+  if (weather.stale) {
+    const time = formatTime(weather.updated_at);
+    return { text: time ? `Stand ${time} · offline` : "offline", alert: true };
+  }
+  const code = Number(weather.code);
+  if (Number(weather.rain) > 0 || RAIN_NOW_CODES.has(code)) {
+    const dry = forecast.find((item) => !item.rainy);
+    if (dry && !minimal) return { text: `Regen jetzt · trocken ab etwa ${hourOf(dry.time)} Uhr`, alert: true };
+    return { text: "Regen jetzt", alert: true };
+  }
+  const rainy = forecast.find((item) => item.rainy);
+  if (rainy) {
+    const text = `ab ${hourOf(rainy.time)} Uhr · ${rainy.probability} %`;
+    return { text: minimal ? text : `Regen ${text}`, alert: true };
+  }
+  if (!forecast.length) return { text: "", alert: false };
+  const hours = forecast.length === 1 ? "Stunde" : `${forecast.length} Stunden`;
+  return { text: minimal ? `kein Regen · ${forecast.length} h` : `Kein Regen in den nächsten ${hours}`, alert: false };
+}
+
+function renderRainHours(forecast) {
+  const columns = forecast.slice(0, isMinimal() ? 6 : 8).map((item) => {
+    const column = document.createElement("div");
+    column.className = `rain-col${item.rainy ? " is-rain" : ""}`;
+    const track = document.createElement("span");
+    track.className = "rain-track";
+    const bar = document.createElement("span");
+    bar.className = "rain-bar";
+    bar.style.height = `${Math.min(100, Math.max(0, Number(item.probability) || 0))}%`;
+    track.append(bar);
+    const hour = document.createElement("span");
+    hour.className = "rain-hour";
+    hour.textContent = hourOf(item.time);
+    column.append(track, hour);
+    return column;
+  });
+  elements.rainHours.replaceChildren(...columns);
 }
 
 function renderWeather(weather) {
   if (!weather) return;
   elements.weatherText.textContent = weather.text || "Wetter nicht verfügbar";
   elements.weather.classList.toggle("provider-error", !weather.ok);
+  const failed = weather.ok === false && !!weather.error;
+  elements.weather.classList.toggle("is-error", failed);
+  if (failed) {
+    elements.weatherError.textContent = weather.error;
+    return;
+  }
+  if (!weather.ok) {
+    elements.weatherIcon.replaceChildren();
+    elements.weatherTemp.textContent = "–°";
+    elements.weatherCondition.textContent = weather.text || "Wetter wird geladen";
+    elements.weatherDetails.textContent = "";
+    elements.rainSummary.textContent = "";
+    elements.rainHours.replaceChildren();
+    return;
+  }
+  elements.weatherIcon.replaceChildren(weatherIcon(weather.code));
+  elements.weatherTemp.textContent = `${formatMaybe(weather.temp)}°`;
+  elements.weatherCondition.textContent = capitalize(weather.condition) || "Aktuell";
+  const details = [];
+  if (weather.feels != null) details.push(`gefühlt ${weather.feels}°`);
+  if (weather.wind != null) details.push(`Wind ${weather.wind} km/h`);
+  if (weather.hum != null && !isMinimal()) details.push(`${weather.hum} %`);
+  elements.weatherDetails.textContent = details.join(" · ");
+  const forecast = Array.isArray(weather.forecast) ? weather.forecast : [];
+  elements.rainLabel.textContent = isMinimal() ? "Regen" : "Regenwahrscheinlichkeit";
+  const summary = rainSummary(weather, forecast);
+  elements.rainSummary.textContent = summary.text;
+  elements.rainSummary.classList.toggle("is-alert", summary.alert);
+  renderRainHours(forecast);
 }
 
 function tileCoordinates(latitude, longitude, zoom) {
@@ -204,19 +413,33 @@ function renderRadar(radar) {
   if (!radar) return;
   elements.radarLabel.textContent = radar.label || "Standort";
   elements.radarStatus.textContent = radar.status || "Datenstatus unbekannt";
-  elements.radarTime.textContent = radar.data_time ? new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: runtimeTimezone }).format(new Date(radar.data_time)) : "offline";
-  elements.radarAttribution.textContent = radar.attribution || "RainViewer · OpenStreetMap-Mitwirkende";
+  const online = !!(radar.ok && radar.tile_url);
+  const offline = !online && (radar.offline === true || !!radar.error);
+  if (online && radar.data_time) lastRadarTime = radar.data_time;
+  elements.radarTime.textContent = online ? formatTime(radar.data_time) || "–" : offline ? "offline" : "wird geladen";
+  elements.radarBox.classList.toggle("is-offline", offline);
+  const width = elements.radarMap.clientWidth || 148;
+  const height = elements.radarMap.clientHeight || 114;
+  const zoom = Number(radar.zoom || 10);
+  // Nur neu aufbauen, wenn sich Daten oder Größe ändern; sonst flackern die Kacheln alle 5 Sekunden.
+  const signature = JSON.stringify([online, offline, radar.tile_url, zoom, radar.latitude, radar.longitude, width, height, offline ? lastRadarTime : ""]);
+  if (signature === radarSignature) return;
+  radarSignature = signature;
   elements.radarMap.replaceChildren();
-  if (!radar.ok || !radar.tile_url) {
+  if (!online) {
     const message = document.createElement("span");
-    message.className = "loading-copy";
-    message.textContent = radar.error ? `Radar offline: ${radar.error}` : "Radar offline";
+    message.className = "radar-message";
+    const title = document.createElement("strong");
+    title.textContent = offline ? "Keine Radardaten" : "Radardaten werden geladen";
+    message.append(title);
+    if (offline && lastRadarTime) {
+      const last = document.createElement("span");
+      last.textContent = `zuletzt ${formatTime(lastRadarTime)}`;
+      message.append(last);
+    }
     elements.radarMap.append(message);
     return;
   }
-  const width = elements.radarMap.clientWidth || 280;
-  const height = elements.radarMap.clientHeight || 190;
-  const zoom = Number(radar.zoom || 10);
   const world = tileCoordinates(Number(radar.latitude), Number(radar.longitude), zoom);
   const leftWorld = world.x - width / 2;
   const topWorld = world.y - height / 2;
@@ -245,56 +468,118 @@ function renderRadar(radar) {
   elements.radarMap.append(marker);
 }
 
+function parseMinutes(row) {
+  if (Number.isFinite(row.minutes)) return row.minutes;
+  if (row.minutes === null) return null;
+  const text = String(row.mins || "");
+  if (text === "jetzt") return 0;
+  const hours = text.match(/^(\d+)h (\d+)$/);
+  if (hours) return Number(hours[1]) * 60 + Number(hours[2]);
+  const minutes = text.match(/^(\d+) min$/);
+  return minutes ? Number(minutes[1]) : null;
+}
+
+function textElement(tag, className, text) {
+  const element = document.createElement(tag);
+  element.className = className;
+  element.textContent = text;
+  return element;
+}
+
+function departureRow(row) {
+  const departure = document.createElement("div");
+  departure.className = "departure";
+  const main = document.createElement("span");
+  main.className = "departure-main";
+  main.append(textElement("span", "departure-target", row.target), textElement("span", "departure-sub", `ab ${row.board}`));
+  const time = document.createElement("span");
+  time.className = "departure-time";
+  const minutes = row.sortMinutes;
+  if (minutes !== null && minutes <= 0) {
+    time.append(textElement("span", "departure-now", "jetzt"));
+  } else if (minutes !== null && minutes < 60) {
+    time.append(textElement("span", "departure-num", String(minutes)), textElement("span", "departure-unit", "min"));
+  } else {
+    time.append(textElement("span", "departure-num", row.mins || "–"));
+  }
+  departure.append(textElement("span", "departure-line", row.line), main, time);
+  return departure;
+}
+
+function boardErrorRow(board) {
+  const row = document.createElement("div");
+  row.className = "departure is-error";
+  if (board.error) row.title = board.error;
+  const icon = document.createElement("span");
+  icon.className = "departure-icon";
+  icon.innerHTML = ERROR_ICON;
+  const main = document.createElement("span");
+  main.className = "departure-main";
+  main.append(
+    textElement("span", "departure-error", `${board.title}: VRR antwortet nicht`),
+    textElement("span", "departure-sub", `letzte Abfrage ${formatTime(board.checked_at) || "–"} · neuer Versuch läuft`),
+  );
+  row.append(icon, main);
+  return row;
+}
+
+function boardMessage(title, text = "") {
+  const message = document.createElement("p");
+  message.className = "board-message";
+  message.append(textElement("strong", "", title));
+  if (text) message.append(textElement("span", "", text));
+  return message;
+}
+
 function renderBoards(boards) {
   elements.boards.replaceChildren();
-  if (!Array.isArray(boards) || boards.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "board-message";
-    empty.textContent = "Keine Haltestellen oder Abfahrten verfügbar.";
-    elements.boards.append(empty);
+  const list = Array.isArray(boards) ? boards : [];
+  if (runtimeConfig?.transit_stop_count === 0) {
+    elements.boards.append(boardMessage("Keine Haltestellen eingerichtet", "Im Adminmodus hinzufügen"));
     return;
   }
-  boards.forEach((board) => {
-    const section = document.createElement("section");
-    section.className = "board";
-    const header = document.createElement("div");
-    header.className = "board-title";
-    header.innerHTML = `<span>${escapeHtml(board.title)}</span><span>${escapeHtml(board.ok === false ? "Fehler" : "Live")}</span>`;
-    section.append(header);
-    if (board.ok === false) {
-      const error = document.createElement("p");
-      error.className = "board-message error";
-      error.textContent = board.error || "VRR-Daten derzeit nicht verfügbar.";
-      section.append(error);
-    } else if (!board.rows?.length) {
-      const empty = document.createElement("p");
-      empty.className = "board-message";
-      empty.textContent = "Keine passenden Abfahrten.";
-      section.append(empty);
-    } else {
-      board.rows.forEach((row) => {
-        const departure = document.createElement("div");
-        departure.className = "departure";
-        departure.innerHTML = `<span class="departure-line">${escapeHtml(row.line)}</span><span class="departure-target">${escapeHtml(row.target)}</span><span class="departure-mins">${escapeHtml(row.mins)}</span>`;
-        section.append(departure);
-      });
-    }
-    elements.boards.append(section);
-  });
+  // Fehler zuerst, damit ein ausgefallener Abruf nicht hinter Abfahrten verschwindet.
+  const errors = list.filter((board) => board.ok === false).map(boardErrorRow);
+  const rows = list
+    .filter((board) => board.ok !== false)
+    .flatMap((board) => (board.rows || []).map((row) => ({ ...row, board: board.title, sortMinutes: parseMinutes(row) })))
+    .sort((a, b) => (a.sortMinutes ?? Infinity) - (b.sortMinutes ?? Infinity))
+    .map(departureRow);
+  const items = [...errors, ...rows].slice(0, isNarrow() ? 2 : 3);
+  if (!items.length) {
+    elements.boards.append(boardMessage("Keine passenden Abfahrten"));
+    return;
+  }
+  elements.boards.append(...items);
+}
+
+function renderPanels(state) {
+  renderWeather(state.weather);
+  renderRadar(state.radar);
+  renderBoards(state.boards);
+  renderSystem(state.system);
 }
 
 async function refreshState() {
   try {
     const state = await api("/api/state");
+    lastState = state;
+    if (backendDown) {
+      backendDown = false;
+      renderStreamView(streamView);
+    }
     applyRuntimeConfig(state.config);
-    renderWeather(state.weather);
-    renderRadar(state.radar);
-    renderBoards(state.boards);
-    renderSystem(state.system);
+    renderPanels(state);
     elements.body.classList.remove("is-loading");
   } catch (error) {
-    elements.streamStatus.dataset.state = "error";
-    elements.streamStatusText.textContent = "Lokales Backend nicht erreichbar";
+    backendDown = true;
+    const showCard = !!streamView.card || !elements.live.getAttribute("src");
+    renderStreamView({
+      state: "error",
+      full: "Lokales Backend nicht erreichbar",
+      short: "Backend offline",
+      card: showCard ? { title: "Lokales Backend nicht erreichbar", text: "Die Anzeige fragt alle 5 Sekunden automatisch erneut an." } : null,
+    });
     elements.weatherText.textContent = "Wetterdaten nicht erreichbar";
   }
 }
@@ -594,14 +879,20 @@ function cancelLongPress() {
 
 elements.live.addEventListener("load", () => {
   if (!elements.live.getAttribute("src") || elements.live.src === "about:blank") return;
-  elements.streamStatus.dataset.state = "loaded";
-  elements.streamStatusText.textContent = "Stream-Seite geladen · Wiedergabe nicht verifizierbar";
+  setStreamView({ state: "loaded", full: "Stream-Seite geladen · Wiedergabe nicht verifizierbar", short: "Stream-Seite geladen", card: null });
 });
 elements.live.addEventListener("error", () => {
-  elements.streamStatus.dataset.state = "error";
-  elements.streamStatusText.textContent = "Stream-Einbettung möglicherweise blockiert";
+  setStreamView({
+    state: "error",
+    full: "Stream-Einbettung möglicherweise blockiert",
+    short: "Stream-Fehler",
+    card: { title: "Stream nicht erreichbar", text: "Die Stream-Seite meldet einen Fehler. Die Einbettung ist möglicherweise blockiert." },
+  });
 });
-byId("streamReload").addEventListener("click", () => currentConfig ? configureStream(currentConfig.stream, true) : refreshState());
+byId("streamReload").addEventListener("click", () => {
+  if (runtimeConfig?.stream) configureStream(runtimeConfig.stream, true);
+  refreshState();
+});
 byId("reloadStreamPanel").addEventListener("click", () => configureStream(collectConfig().stream, true));
 
 elements.hotspot.addEventListener("pointerdown", beginLongPress);
@@ -651,8 +942,11 @@ byId("stationQuery").addEventListener("keydown", (event) => {
   if (event.key === "Enter") { event.preventDefault(); searchStations(); }
 });
 window.addEventListener("resize", () => {
-  const requested = currentConfig?.ui?.layout_profile || "auto";
+  const requested = currentConfig?.ui?.layout_profile || runtimeConfig?.ui?.layout_profile || "auto";
   elements.body.dataset.layout = resolveLayout(requested);
+  updateInfobar();
+  updateClock();
+  if (lastState) renderPanels(lastState);
 });
 window.addEventListener("beforeunload", (event) => {
   if (dirty) { event.preventDefault(); event.returnValue = ""; }
