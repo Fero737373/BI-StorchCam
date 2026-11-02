@@ -59,8 +59,6 @@ DEFAULT_CONFIG = {
         # Gemerkte Kameras; die Reihenfolge bestimmt den Ersatz bei Ausfall.
         "favorites": [],
         "auto_fallback": True,
-        # Notizen je Kamera-Adresse, erscheinen in der Kamera-Karte.
-        "notes": {},
     },
     "admin": {
         "pin_hash": "",
@@ -74,6 +72,8 @@ DEFAULT_CONFIG = {
         "source": "off",
         "spotify": {"client_id": ""},
         "radio": {"favorites": []},
+        # Klangregler für alles, was der Pi selbst abspielt (Radio, YouTube Music).
+        "equalizer": {"preset": "flat", "gains": [0, 0, 0, 0, 0, 0]},
     },
     "ui": {
         "theme": "dark",

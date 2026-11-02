@@ -49,8 +49,7 @@
     "max_fps": 30,
     "audio": "off",
     "favorites": [],
-    "auto_fallback": true,
-    "notes": {}
+    "auto_fallback": true
   },
   "admin": {
     "pin_hash": "",
@@ -63,6 +62,17 @@
     },
     "radio": {
       "favorites": []
+    },
+    "equalizer": {
+      "preset": "flat",
+      "gains": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     }
   },
   "ui": {

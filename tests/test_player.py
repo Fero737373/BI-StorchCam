@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from bi_storchcam import bluetooth, player, spotify_connect
+from bi_storchcam.library import SpotifyLibrary, YouTubeMusicLibrary
 from bi_storchcam.providers import music
 from tests.test_server import post_json, request, running_server
 
@@ -125,17 +126,21 @@ def test_spotify_search_and_play_on_pi(monkeypatch: pytest.MonkeyPatch) -> None:
         },
         ("GET", "/me/player/devices"): {"devices": [{"name": "Handy", "id": "h"}, {"name": spotify_connect.DEVICE_NAME, "id": "pi 1"}]},
     })
-    results = music.spotify_search("song")
+    results = SpotifyLibrary(music._spotify_api).search("song")
     assert [(item["kind"], item["id"], item["subtitle"]) for item in results] == [
         ("song", "spotify:track:abc", "Band"), ("album", "spotify:album:def", "Band"), ("playlist", "spotify:playlist:ghi", "Ich"),
     ]
     assert results[0]["cover"] == "small"
     music.spotify_play("song", "spotify:track:abc")
-    music.spotify_play("album", "spotify:album:def")
+    music.spotify_play("album", "spotify:album:def", start=3)
+    music.spotify_play("playlist", "spotify:playlist:ghi", shuffle=True)
     plays = [call for call in calls if call[0] == "PUT"]
     assert plays == [
         ("PUT", "/me/player/play?device_id=pi%201", {"uris": ["spotify:track:abc"]}),
-        ("PUT", "/me/player/play?device_id=pi%201", {"context_uri": "spotify:album:def"}),
+        ("PUT", "/me/player/shuffle?state=false&device_id=pi%201", None),
+        ("PUT", "/me/player/play?device_id=pi%201", {"context_uri": "spotify:album:def", "offset": {"position": 3}}),
+        ("PUT", "/me/player/shuffle?state=true&device_id=pi%201", None),
+        ("PUT", "/me/player/play?device_id=pi%201", {"context_uri": "spotify:playlist:ghi"}),
     ]
     with pytest.raises(music.MusicError):
         music.spotify_play("song", "https://evil.example/")
@@ -152,9 +157,16 @@ def test_spotify_controls(monkeypatch: pytest.MonkeyPatch) -> None:
     music.spotify_control("toggle")
     music.spotify_control("next")
     music.spotify_control("volume", 140)
-    assert calls[1:] == [("PUT", "/me/player/pause", None), ("POST", "/me/player/next", None), ("PUT", "/me/player/volume?volume_percent=100", None)]
-    with pytest.raises(music.MusicError):
-        music.spotify_control("explode")
+    music.spotify_control("seek", 61.5)
+    music.spotify_control("repeat", "one")
+    music.spotify_control("shuffle", True)
+    assert calls[1:] == [
+        ("PUT", "/me/player/pause", None), ("POST", "/me/player/next", None), ("PUT", "/me/player/volume?volume_percent=100", None),
+        ("PUT", "/me/player/seek?position_ms=61500", None), ("PUT", "/me/player/repeat?state=track", None), ("PUT", "/me/player/shuffle?state=true", None),
+    ]
+    for action in ("explode", "move"):
+        with pytest.raises(music.MusicError):
+            music.spotify_control(action)
 
 
 def test_player_search_maps_results(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -169,9 +181,11 @@ def test_player_search_maps_results(monkeypatch: pytest.MonkeyPatch) -> None:
             ]
 
     monkeypatch.setattr(player.ytmusic, "api", lambda: FakeApi())
-    results = player.search("lied")
-    assert [(item["kind"], item["id"], item["subtitle"]) for item in results] == [("song", "v1", "A"), ("album", "MPRE1", "A"), ("playlist", "PL1", "Ich")]
-    assert player.search("  ") == []
+    results = YouTubeMusicLibrary().search("lied")
+    assert [(item["kind"], item["id"], item["title"], item["subtitle"]) for item in results] == [
+        ("song", "v1", "Lied", "A"), ("artist", "UC1", "A", ""), ("album", "MPRE1", "Platte", "A"), ("playlist", "PL1", "Mix", "Ich"),
+    ]
+    assert YouTubeMusicLibrary().search("  ") == []
 
 
 def test_player_controls_need_something_playing() -> None:
@@ -181,7 +195,7 @@ def test_player_controls_need_something_playing() -> None:
     with pytest.raises(player.PlayerError):
         player.play("artist", "UC1")
     player.control("volume", "35")
-    assert player._volume["value"] == 35
+    assert player.default_player().volume == 35
 
 
 def test_librespot_output_is_parsed() -> None:
@@ -223,7 +237,7 @@ def test_player_endpoints(monkeypatch: pytest.MonkeyPatch, config: dict, tmp_pat
     played: list[tuple[str, str]] = []
     controlled: list[tuple[str, Any]] = []
     monkeypatch.setattr(bluetooth, "_run", FakeBluez(adapter=False))
-    monkeypatch.setattr(music, "spotify_play", lambda kind, uri: played.append((kind, uri)))
+    monkeypatch.setattr(music, "spotify_play", lambda kind, uri, start=0, shuffle=False: played.append((kind, uri)))
     monkeypatch.setattr(music, "spotify_control", lambda action, value=None: controlled.append((action, value)))
     with running_server(config, monkeypatch, tmp_path) as address:
         status, _headers, result = request(address, "GET", "/api/bluetooth")
@@ -249,12 +263,12 @@ def test_own_playlists(monkeypatch: pytest.MonkeyPatch) -> None:
             ]
 
     monkeypatch.setattr(player.ytmusic, "api", lambda: FakeApi())
-    assert [(item["id"], item["subtitle"]) for item in player.my_playlists()] == [("LM", ""), ("PL1", "53 Songs")]
+    assert [(item["id"], item["subtitle"]) for item in YouTubeMusicLibrary().playlists()] == [("LM", ""), ("PL1", "53 Songs")]
     fake_spotify(monkeypatch, {("GET", "/me/playlists"): {"items": [
         {"uri": "spotify:playlist:a", "name": "Neu", "items": {"total": 12}, "images": [{"url": "c"}]},
         {"uri": "spotify:playlist:b", "name": "Alt", "tracks": {"total": 3}, "images": None},
         None,
     ]}})
-    assert [(item["id"], item["subtitle"], item["cover"]) for item in music.spotify_playlists()] == [
+    assert [(item["id"], item["subtitle"], item["cover"]) for item in SpotifyLibrary(music._spotify_api).playlists()] == [
         ("spotify:playlist:a", "12 Songs", "c"), ("spotify:playlist:b", "3 Songs", ""),
     ]

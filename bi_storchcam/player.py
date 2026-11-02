@@ -1,12 +1,13 @@
 """Playback on the Pi itself: YouTube Music (yt-dlp resolves the audio streams) and internet radio.
 
-mpv runs idle in the background and is driven over its JSON IPC socket. The queue lives
-here; yt-dlp turns each video ID into a stream URL with the YouTube Music session cookies
-(Premium quality, no ads). Resolving takes a few seconds on a Pi, so the next track is
-resolved in the background while the current one plays. Audio goes to PulseAudio/PipeWire,
-which routes it to a connected Bluetooth speaker. Radio stations play their stream address
-directly; the current song comes from the stream's ICY metadata, and a dropped stream is
-reconnected a few times before giving up.
+One mpv runs idle in the background and is driven over its JSON IPC socket (``MpvClient``).
+``PiPlayer`` owns the play queue (``PlayQueue``: shuffle, repeat, reordering), the radio
+station, volume and equalizer. ``StreamResolver`` turns video IDs into stream addresses with
+the YouTube Music session cookies and caches them; the next track is resolved while the
+current one plays. ``RadioCovers`` looks up album art for the song a station is playing.
+
+Audio goes to PulseAudio/PipeWire, which routes it to a connected Bluetooth speaker. The
+module-level functions at the end keep the older function interface for the server.
 """
 
 from __future__ import annotations
@@ -20,27 +21,29 @@ import subprocess
 import tempfile
 import threading
 import time
+import urllib.parse
+from collections import OrderedDict, deque
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from .config_store import config_path
+from .equalizer import LEVEL_LABEL, Equalizer
+from .equalizer import level as meter_level
+from .music_queue import PlayQueue, Track
 from .providers import ytmusic
+from .providers.http_json import USER_AGENT, fetch_json
 
 LOGGER = logging.getLogger(__name__)
-RESULT_TYPES = {"song", "video", "album", "playlist"}
-QUEUE_LIMIT = 50
+PAGE_KINDS = {"album", "playlist", "artist"}
+SINGLE_KINDS = {"song", "video"}
+QUEUE_LIMIT = 200
 # Ab so vielen Sekunden springt „Zurück“ an den Anfang des Songs statt zum vorigen.
 RESTART_SECONDS = 5
-
-_lock = threading.RLock()
-_queue: dict[str, Any] = {"tracks": [], "index": -1, "loading": False, "error": "", "kind": "ytmusic", "station": None}
-_radio = {"retries": 0}
 RADIO_RETRIES = 5
 RADIO_RETRY_SECONDS = 4
-_urls: dict[str, tuple[str, float]] = {}
-_mpv: dict[str, Any] = {"client": None}
-_volume = {"value": 100}
+RADIO_HISTORY = 8
 
 
 class PlayerError(RuntimeError):
@@ -50,7 +53,7 @@ class PlayerError(RuntimeError):
 class MpvClient:
     """mpv im Leerlauf mit JSON-IPC; Antworten werden über request_id zugeordnet."""
 
-    def __init__(self, on_event: Any) -> None:
+    def __init__(self, on_event: Callable[[dict[str, Any]], None], volume: int = 100) -> None:
         executable = shutil.which("mpv")
         if not executable:
             raise PlayerError("mpv ist nicht installiert")
@@ -58,7 +61,7 @@ class MpvClient:
         path = os.path.join(self._folder, "ipc")
         self.process = subprocess.Popen(
             [executable, "--idle=yes", "--no-video", "--no-terminal", "--ao=pulse", "--audio-display=no",
-             "--volume-max=100", f"--volume={_volume['value']}", "--ytdl=no", f"--input-ipc-server={path}"],
+             "--volume-max=100", f"--volume={volume}", "--ytdl=no", f"--input-ipc-server={path}"],
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
         )
         deadline = time.monotonic() + 5
@@ -139,38 +142,6 @@ class MpvClient:
         shutil.rmtree(self._folder, ignore_errors=True)
 
 
-def _client() -> MpvClient:
-    with _lock:
-        client = _mpv["client"]
-        if client is None or not client.alive():
-            if client:
-                client.close()
-            client = MpvClient(_on_mpv_event)
-            _mpv["client"] = client
-        return client
-
-
-def _on_mpv_event(message: dict[str, Any]) -> None:
-    event = message.get("event")
-    if event == "file-loaded" and _queue["kind"] == "radio":
-        _radio["retries"] = 0
-    # Nur ein natürliches Ende zählt; „stop“ kommt auch beim Laden des nächsten Songs.
-    if event != "end-file" or message.get("reason") not in {"eof", "error"}:
-        return
-    if _queue["kind"] == "radio":
-        # Ein Radiostream endet nie von selbst: die Verbindung ist weg, also neu verbinden.
-        if _radio["retries"] < RADIO_RETRIES and _queue["tracks"]:
-            _radio["retries"] += 1
-            LOGGER.info("Radiostream abgerissen, Versuch %s von %s", _radio["retries"], RADIO_RETRIES)
-            threading.Timer(RADIO_RETRY_SECONDS, _load_radio).start()
-        else:
-            with _lock:
-                _queue["error"] = "Sender nicht erreichbar"
-        return
-    LOGGER.info("Song zu Ende (%s), nächster folgt", message.get("reason"))
-    threading.Thread(target=_advance, args=(1,), name="player-next", daemon=True).start()
-
-
 def cookie_file() -> Path:
     """Netscape-Cookiedatei für yt-dlp aus der YouTube-Music-Anmeldung, nur bei Änderung neu geschrieben."""
     target = config_path().parent / "ytmusic_cookies.txt"
@@ -193,201 +164,373 @@ def cookie_file() -> Path:
     return target
 
 
-def _stream_url(video_id: str) -> str:
-    cached = _urls.get(video_id)
-    if cached and cached[1] - 600 > time.time():
-        return cached[0]
-    import yt_dlp  # type: ignore[import-untyped]  # erst hier: groß und nur zum Abspielen nötig
+class StreamResolver:
+    """Video-ID → Audioadresse über yt-dlp, mit Cache bis kurz vor Ablauf der Adresse."""
 
-    options = {"format": "bestaudio/best", "quiet": True, "no_warnings": True, "noplaylist": True, "cookiefile": str(cookie_file())}
-    try:
-        with yt_dlp.YoutubeDL(options) as downloader:
-            info = downloader.extract_info(f"https://music.youtube.com/watch?v={video_id}", download=False)
-    except Exception as exc:  # yt-dlp wirft je nach Fehler sehr unterschiedliche Typen
-        raise PlayerError(f"Song lässt sich nicht abspielen: {str(exc)[:160]}") from exc
-    url = str(info["url"])
-    expires = float(parse_qs(urlparse(url).query).get("expire", [time.time() + 3600])[0])
-    _urls[video_id] = (url, expires)
-    return url
+    def __init__(self) -> None:
+        self._urls: dict[str, tuple[str, float]] = {}
 
+    def url(self, video_id: str) -> str:
+        cached = self._urls.get(video_id)
+        if cached and cached[1] - 600 > time.time():
+            return cached[0]
+        import yt_dlp  # type: ignore[import-untyped]  # erst hier: groß und nur zum Abspielen nötig
 
-def _prefetch(index: int) -> None:
-    with _lock:
-        tracks = _queue["tracks"]
-        video_id = tracks[index]["videoId"] if 0 <= index < len(tracks) else ""
-    if video_id:
+        options = {"format": "bestaudio/best", "quiet": True, "no_warnings": True, "noplaylist": True, "cookiefile": str(cookie_file())}
         try:
-            _stream_url(video_id)
+            with yt_dlp.YoutubeDL(options) as downloader:
+                info = downloader.extract_info(f"https://music.youtube.com/watch?v={video_id}", download=False)
+        except Exception as exc:  # yt-dlp wirft je nach Fehler sehr unterschiedliche Typen
+            raise PlayerError(f"Song lässt sich nicht abspielen: {str(exc)[:160]}") from exc
+        url = str(info["url"])
+        expires = float(parse_qs(urlparse(url).query).get("expire", [time.time() + 3600])[0])
+        self._urls[video_id] = (url, expires)
+        return url
+
+    def prefetch(self, video_id: str) -> None:
+        if not video_id:
+            return
+        try:
+            self.url(video_id)
         except PlayerError as exc:
             LOGGER.info("Nächsten Song nicht vorbereitet: %s", exc)
 
 
-def _load_radio() -> None:
-    with _lock:
-        tracks = _queue["tracks"]
-        if _queue["kind"] != "radio" or not tracks:
+class RadioCovers:
+    """Albumbild zum Radiotitel über die freie iTunes-Suche; Ergebnisse bleiben im Speicher."""
+
+    SEARCH_URL = "https://itunes.apple.com/search"
+    LIMIT = 300
+
+    def __init__(self, fetch: Callable[..., Any] = fetch_json) -> None:
+        self._fetch = fetch
+        self._cache: OrderedDict[str, str] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def cover(self, title: str) -> str:
+        """Bekanntes Bild sofort, sonst leer und Suche im Hintergrund."""
+        key = title.strip().casefold()
+        if " – " not in title or not key:
+            return ""
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                return self._cache[key]
+            self._cache[key] = ""
+            while len(self._cache) > self.LIMIT:
+                self._cache.popitem(last=False)
+        threading.Thread(target=self._lookup, args=(key, title), name="radio-cover", daemon=True).start()
+        return ""
+
+    def _lookup(self, key: str, title: str) -> None:
+        query = urllib.parse.urlencode({"term": title.replace(" – ", " "), "media": "music", "entity": "song", "limit": "1"})
+        try:
+            data = self._fetch(f"{self.SEARCH_URL}?{query}", headers={"User-Agent": USER_AGENT}, timeout=6)
+            artwork = str((data.get("results") or [{}])[0].get("artworkUrl100") or "")
+        except (OSError, ValueError, AttributeError, IndexError):
             return
-        url = tracks[0]["url"]
-        _queue.update({"loading": True, "error": ""})
-    try:
-        client = _client()
-        client.command("loadfile", url, "replace")
-        client.command("set_property", "pause", False)
-    except PlayerError as exc:
-        with _lock:
-            _queue["error"] = str(exc)
-        LOGGER.warning("Radio lässt sich nicht abspielen: %s", exc)
-    finally:
-        with _lock:
-            _queue["loading"] = False
+        if artwork.startswith("https://"):
+            with self._lock:
+                self._cache[key] = artwork.replace("100x100bb", "300x300bb")
 
 
-def play_radio(station: dict[str, Any]) -> None:
-    url = str(station.get("url", ""))
-    if urlparse(url).scheme not in {"http", "https"}:
-        raise PlayerError("Ungültige Senderadresse")
-    track = {"videoId": "", "title": str(station.get("name") or "Radio"), "artist": "", "cover": "", "duration": 0, "url": url}
-    with _lock:
-        _queue.update({"tracks": [track], "index": 0, "loading": True, "error": "", "kind": "radio", "station": dict(station)})
-    _radio["retries"] = 0
-    threading.Thread(target=_load_radio, name="player-radio", daemon=True).start()
+class PiPlayer:
+    """Ein mpv für alles, was der Pi selbst spielt: Warteschlange oder Radiosender."""
 
+    def __init__(
+        self,
+        client_factory: Callable[..., MpvClient] = MpvClient,
+        resolver: StreamResolver | None = None,
+        covers: RadioCovers | None = None,
+    ) -> None:
+        self._lock = threading.RLock()
+        self._client_factory = client_factory
+        self._client: MpvClient | None = None
+        self.resolver = resolver or StreamResolver()
+        self.covers = covers or RadioCovers()
+        self.queue = PlayQueue()
+        self.mode = "idle"  # idle, ytmusic oder radio
+        self.station: dict[str, Any] | None = None
+        self.volume = 100
+        self.equalizer = Equalizer()
+        self.loading = False
+        self.error = ""
+        self._radio_retries = 0
+        self.radio_titles: deque[dict[str, Any]] = deque(maxlen=RADIO_HISTORY)
 
-def active() -> bool:
-    """Ob der Pi gerade etwas in der Warteschlange hat (ohne mpv zu fragen)."""
-    with _lock:
-        return bool(_queue["tracks"])
+    # ---------- mpv ----------
+    def _mpv(self) -> MpvClient:
+        with self._lock:
+            if self._client is None or not self._client.alive():
+                if self._client:
+                    self._client.close()
+                self._client = self._client_factory(self._on_event, self.volume)
+                self._apply_equalizer(self._client)
+            return self._client
 
+    def _running(self) -> MpvClient | None:
+        with self._lock:
+            return self._client if self._client and self._client.alive() else None
 
-def current_station() -> dict[str, Any] | None:
-    with _lock:
-        return dict(_queue["station"]) if _queue["kind"] == "radio" and _queue["tracks"] and _queue["station"] else None
+    def _apply_equalizer(self, client: MpvClient) -> None:
+        try:
+            client.command("set_property", "af", self.equalizer.filter_chain())
+        except PlayerError as exc:
+            LOGGER.warning("Klangregler nicht gesetzt: %s", exc)
 
-
-def _load(index: int) -> None:
-    with _lock:
-        tracks = _queue["tracks"]
-        if not 0 <= index < len(tracks):
+    def _on_event(self, message: dict[str, Any]) -> None:
+        event = message.get("event")
+        if event == "file-loaded" and self.mode == "radio":
+            self._radio_retries = 0
+        # Nur ein natürliches Ende zählt; „stop“ kommt auch beim Laden des nächsten Songs.
+        if event != "end-file" or message.get("reason") not in {"eof", "error"}:
             return
-        _queue.update({"index": index, "loading": True, "error": ""})
-        video_id = tracks[index]["videoId"]
-    try:
-        url = _stream_url(video_id)
-        client = _client()
-        client.command("loadfile", url, "replace")
-        client.command("set_property", "pause", False)
-    except PlayerError as exc:
-        with _lock:
-            _queue["error"] = str(exc)
-        LOGGER.warning("Wiedergabe fehlgeschlagen: %s", exc)
-    finally:
-        with _lock:
-            _queue["loading"] = False
-    threading.Thread(target=_prefetch, args=(index + 1,), name="player-prefetch", daemon=True).start()
-
-
-def _advance(step: int) -> None:
-    with _lock:
-        target = _queue["index"] + step
-        if not 0 <= target < len(_queue["tracks"]):
+        if self.mode == "radio":
+            self._reconnect_radio()
             return
-    _load(target)
+        LOGGER.info("Song zu Ende (%s), nächster folgt", message.get("reason"))
+        threading.Thread(target=self.advance, args=(1,), kwargs={"natural": True}, name="player-next", daemon=True).start()
 
+    # ---------- YouTube Music ----------
+    def play_tracks(self, tracks: list[Track], start: int = 0, shuffle: bool = False) -> None:
+        playable = [track for track in tracks if track.id][:QUEUE_LIMIT]
+        if not playable:
+            raise PlayerError("Keine abspielbaren Songs gefunden")
+        with self._lock:
+            self.queue.replace(playable, start, shuffle)
+            self.mode, self.station, self.error = "ytmusic", None, ""
+            self.loading = True
+        threading.Thread(target=self._load_current, name="player-load", daemon=True).start()
 
-def _thumbnail(item: dict[str, Any]) -> str:
-    thumbnails = item.get("thumbnails") or item.get("thumbnail") or []
-    url = str(thumbnails[-1].get("url", "")) if isinstance(thumbnails, list) and thumbnails else ""
-    return ytmusic.sized_cover(url)
+    def _load_current(self) -> None:
+        with self._lock:
+            track = self.queue.current
+            self.loading, self.error = True, ""
+        if track is None:
+            return
+        try:
+            url = self.resolver.url(track.id)
+            client = self._mpv()
+            client.command("loadfile", url, "replace")
+            client.command("set_property", "pause", False)
+        except PlayerError as exc:
+            with self._lock:
+                self.error = str(exc)
+            LOGGER.warning("Wiedergabe fehlgeschlagen: %s", exc)
+        finally:
+            with self._lock:
+                self.loading = False
+        following = self.queue.next_index(natural=False)
+        if following is not None:
+            threading.Thread(target=self.resolver.prefetch, args=(self.queue.tracks[following].id,), name="player-prefetch", daemon=True).start()
 
+    def advance(self, step: int, natural: bool = False) -> None:
+        with self._lock:
+            target = self.queue.next_index(natural=natural) if step > 0 else self.queue.previous_index()
+            if target is None:
+                return
+            self.queue.jump(target)
+        self._load_current()
 
-def _seconds(item: dict[str, Any]) -> int:
-    if item.get("duration_seconds"):
-        return int(item["duration_seconds"])
-    text = str(item.get("length") or item.get("duration") or "")
-    try:
-        parts = [int(part) for part in text.split(":")]
-    except ValueError:
-        return 0
-    total = 0
-    for part in parts:
-        total = total * 60 + part
-    return total
+    # ---------- Radio ----------
+    def play_radio(self, station: dict[str, Any]) -> None:
+        if urlparse(str(station.get("url", ""))).scheme not in {"http", "https"}:
+            raise PlayerError("Ungültige Senderadresse")
+        with self._lock:
+            self.queue.clear()
+            self.mode, self.station, self.error = "radio", dict(station), ""
+            self.loading = True
+            self._radio_retries = 0
+            self.radio_titles.clear()
+        threading.Thread(target=self._load_radio, name="player-radio", daemon=True).start()
 
+    def _load_radio(self) -> None:
+        with self._lock:
+            if self.mode != "radio" or not self.station:
+                return
+            url = str(self.station["url"])
+            self.loading, self.error = True, ""
+        try:
+            client = self._mpv()
+            client.command("loadfile", url, "replace")
+            client.command("set_property", "pause", False)
+        except PlayerError as exc:
+            with self._lock:
+                self.error = str(exc)
+            LOGGER.warning("Radio lässt sich nicht abspielen: %s", exc)
+        finally:
+            with self._lock:
+                self.loading = False
 
-def _track(item: dict[str, Any], cover: str = "") -> dict[str, Any]:
-    artists = ", ".join(str(a.get("name", "")) for a in item.get("artists") or [] if isinstance(a, dict))
-    return {
-        "videoId": str(item.get("videoId", "")),
-        "title": str(item.get("title", "")),
-        "artist": artists,
-        "cover": _thumbnail(item) or cover,
-        "duration": _seconds(item),
-    }
+    def _reconnect_radio(self) -> None:
+        # Ein Radiostream endet nie von selbst: die Verbindung ist weg, also neu verbinden.
+        if self._radio_retries < RADIO_RETRIES and self.station:
+            self._radio_retries += 1
+            LOGGER.info("Radiostream abgerissen, Versuch %s von %s", self._radio_retries, RADIO_RETRIES)
+            threading.Timer(RADIO_RETRY_SECONDS, self._load_radio).start()
+        else:
+            with self._lock:
+                self.error = "Sender nicht erreichbar"
 
+    def current_station(self) -> dict[str, Any] | None:
+        with self._lock:
+            return dict(self.station) if self.mode == "radio" and self.station else None
 
-def search(query: str) -> list[dict[str, Any]]:
-    query = query.strip()
-    if not query:
-        return []
-    try:
-        results = ytmusic.api().search(query, limit=20)
-    except Exception as exc:  # ytmusicapi wirft je nach Fehler sehr unterschiedliche Typen
-        raise PlayerError(f"Suche fehlgeschlagen: {str(exc)[:160]}") from exc
-    found = []
-    for item in results:
-        kind = item.get("resultType")
-        if kind not in RESULT_TYPES:
-            continue
-        identifier = item.get("videoId") if kind in {"song", "video"} else item.get("browseId") if kind == "album" else item.get("playlistId") or item.get("browseId")
-        if not identifier:
-            continue
-        artists = ", ".join(str(a.get("name", "")) for a in item.get("artists") or [] if isinstance(a, dict))
-        found.append({
-            "kind": kind,
-            "id": str(identifier),
-            "title": str(item.get("title") or ""),
-            "subtitle": artists or str(item.get("author") or ""),
-            "cover": _thumbnail(item),
-        })
-    return found
+    # ---------- Steuerung ----------
+    def active(self) -> bool:
+        with self._lock:
+            return self.mode != "idle"
 
+    def control(self, action: str, value: Any = None) -> None:
+        if action == "volume":
+            self.set_volume(value)
+            return
+        if action == "shuffle":
+            with self._lock:
+                self.queue.set_shuffle(bool(value))
+            return
+        if action == "repeat":
+            try:
+                with self._lock:
+                    self.queue.set_repeat(str(value))
+            except ValueError as exc:
+                raise PlayerError(str(exc)) from exc
+            return
+        client = self._running()
+        if client is None or self.mode == "idle":
+            raise PlayerError("Auf dem Pi läuft gerade nichts")
+        if action == "toggle":
+            client.command("cycle", "pause")
+        elif action == "stop":
+            client.command("stop")
+            with self._lock:
+                self.queue.clear()
+                self.mode, self.station = "idle", None
+        elif action == "seek":
+            client.command("seek", max(0.0, float(value or 0)), "absolute")
+        elif self.mode == "radio" and action in {"next", "previous", "jump", "remove", "move"}:
+            raise PlayerError("Beim Radio wechseln Vor und Zurück den Lieblingssender")
+        elif action == "next":
+            threading.Thread(target=self.advance, args=(1,), name="player-next", daemon=True).start()
+        elif action == "previous":
+            if float(client.get("time-pos") or 0) > RESTART_SECONDS or self.queue.previous_index() is None:
+                client.command("seek", 0, "absolute")
+            else:
+                threading.Thread(target=self.advance, args=(-1,), name="player-previous", daemon=True).start()
+        elif action in {"jump", "remove", "move"}:
+            self._edit_queue(action, value)
+        else:
+            raise PlayerError("Unbekannte Aktion")
 
-def my_playlists() -> list[dict[str, Any]]:
-    """Playlists aus der eigenen YouTube-Music-Bibliothek (inklusive „Liked Music“)."""
-    try:
-        items = ytmusic.api().get_library_playlists(limit=50)
-    except Exception as exc:  # ytmusicapi wirft je nach Fehler sehr unterschiedliche Typen
-        raise PlayerError(f"Playlists nicht abrufbar: {str(exc)[:160]}") from exc
-    found = []
-    for item in items or []:
-        if not isinstance(item, dict) or not item.get("playlistId"):
-            continue
-        count = item.get("count")
-        found.append({
-            "kind": "playlist",
-            "id": str(item["playlistId"]),
-            "title": str(item.get("title") or ""),
-            "subtitle": f"{count} Songs" if count not in (None, "") else "",
-            "cover": _thumbnail(item),
-        })
-    return found
+    def _edit_queue(self, action: str, value: Any) -> None:
+        try:
+            with self._lock:
+                if action == "jump":
+                    self.queue.jump(int(value))
+                elif action == "remove":
+                    self.queue.remove(int(value))
+                else:
+                    self.queue.move(int(value["from"]), int(value["to"]))
+        except (IndexError, KeyError, TypeError, ValueError) as exc:
+            raise PlayerError(str(exc) or "Ungültige Position") from exc
+        if action == "jump":
+            threading.Thread(target=self._load_current, name="player-jump", daemon=True).start()
 
+    def set_volume(self, value: Any) -> None:
+        try:
+            volume = max(0, min(100, int(value)))
+        except (TypeError, ValueError) as exc:
+            raise PlayerError("Ungültige Lautstärke") from exc
+        self.volume = volume
+        client = self._running()
+        if client:
+            client.command("set_property", "volume", volume)
 
-def _tracks_for(kind: str, identifier: str) -> list[dict[str, Any]]:
-    api = ytmusic.api()
-    if kind in {"song", "video"}:
-        # Wie in der App: nach dem Song läuft das passende „Radio“ weiter.
-        watch = api.get_watch_playlist(videoId=identifier, limit=QUEUE_LIMIT)
-        tracks = [_track(item) for item in watch.get("tracks") or [] if isinstance(item, dict)]
-        if not tracks or tracks[0]["videoId"] != identifier:
-            tracks.insert(0, {"videoId": identifier, "title": "", "artist": "", "cover": "", "duration": 0})
-        return tracks
-    if kind == "album":
-        album = api.get_album(identifier)
-        cover = _thumbnail(album)
-        return [_track(item, cover) for item in album.get("tracks") or []]
-    playlist = api.get_playlist(identifier.removeprefix("VL"), limit=QUEUE_LIMIT)
-    return [_track(item) for item in playlist.get("tracks") or []]
+    def set_equalizer(self, equalizer: Equalizer) -> None:
+        self.equalizer = equalizer
+        client = self._running()
+        if client:
+            self._apply_equalizer(client)
+
+    def level(self) -> float:
+        """Momentaner Pegel 0…1 für die bewegte Anzeige; 0 ohne Wiedergabe."""
+        client = self._running()
+        if client is None or self.mode == "idle":
+            return 0.0
+        return meter_level(client.get(f"af-metadata/{LEVEL_LABEL}"))
+
+    def mark_liked(self, track_id: str, liked: bool) -> None:
+        with self._lock:
+            for track in self.queue.tracks:
+                if track.id == track_id:
+                    track.liked = liked
+
+    # ---------- Anzeige ----------
+    def now_playing(self) -> dict[str, Any] | None:
+        """Was mpv gerade spielt (oder pausiert); None, wenn der Pi nichts abspielt."""
+        with self._lock:
+            mode, loading, error = self.mode, self.loading, self.error
+            track = self.queue.current
+        client = self._running()
+        if mode == "radio":
+            return self._radio_now(client, loading, error)
+        if mode != "ytmusic" or track is None:
+            return None
+        if client and not loading and client.get("idle-active"):
+            return None  # Warteschlange zu Ende gespielt
+        paused = bool(client.get("pause")) if client else True
+        position = client.get("time-pos") if client and not loading else 0
+        duration = client.get("duration") if client and not loading else track.duration
+        with self._lock:
+            queue = self.queue.window()
+            shuffle, repeat, index = self.queue.shuffle, self.queue.repeat, self.queue.index
+        return {
+            "source": "ytmusic", "device": "pi", "track_id": track.id, "liked": track.liked,
+            "title": track.title or "Wird geladen …", "artist": track.artist, "album": "", "cover": track.cover,
+            "progress_ms": int(float(position or 0) * 1000), "duration_ms": int(float(duration or track.duration or 0) * 1000),
+            "paused": paused or loading, "loading": loading, "error": error, "volume": self.volume,
+            "shuffle": shuffle, "repeat": repeat, "queue": queue, "queue_index": index, "seekable": True,
+            "equalizer": list(self.equalizer.gains), "fetched_at": int(time.time() * 1000),
+        }
+
+    @staticmethod
+    def _icy_title(client: MpvClient | None, station_name: str) -> str:
+        """Aktueller Titel aus den ICY-Metadaten des Streams („Künstler – Titel“), sonst leer."""
+        if client is None:
+            return ""
+        metadata = client.get("metadata")
+        title = str(metadata.get("icy-title") or "").strip() if isinstance(metadata, dict) else ""
+        if not title:
+            media = str(client.get("media-title") or "").strip()
+            title = "" if media.startswith(("http://", "https://")) or media == station_name else media
+        return " – ".join(part.strip() for part in title.split(" - ", 1)) if " - " in title else title
+
+    def _radio_now(self, client: MpvClient | None, loading: bool, error: str) -> dict[str, Any]:
+        station = self.station or {}
+        name = str(station.get("name") or "Radio")
+        song = "" if loading else self._icy_title(client, name)
+        if song and (not self.radio_titles or self.radio_titles[0]["title"] != song):
+            self.radio_titles.appendleft({"title": song, "at": int(time.time() * 1000)})
+        cover = self.covers.cover(song) if song else ""
+        for item in self.radio_titles:
+            item["cover"] = item.get("cover") or self.covers.cover(item["title"])
+        return {
+            "source": "radio", "device": "pi", "title": name, "artist": song if not loading else "Verbinde …",
+            "album": "", "cover": cover,
+            "station": {key: station.get(key) for key in ("uuid", "name", "url", "country", "codec", "bitrate", "tags")},
+            "live": True, "progress_ms": 0, "duration_ms": 0, "seekable": False,
+            "paused": (bool(client.get("pause")) if client else True) or loading, "loading": loading, "error": error,
+            "volume": self.volume, "recent_titles": list(self.radio_titles), "equalizer": list(self.equalizer.gains),
+            "fetched_at": int(time.time() * 1000),
+        }
+
+    def shutdown(self) -> None:
+        with self._lock:
+            client, self._client = self._client, None
+            self.queue.clear()
+            self.mode, self.station = "idle", None
+        if client:
+            client.close()
 
 
 def full_output_volume(wait_for_bluetooth: float = 0) -> None:
@@ -411,135 +554,59 @@ def full_output_volume(wait_for_bluetooth: float = 0) -> None:
         LOGGER.warning("Lautstärke des Lautsprechers nicht gesetzt: %s", exc)
 
 
-def play(kind: str, identifier: str) -> None:
-    if kind not in RESULT_TYPES or not identifier:
+# ---------- Funktionen für den Server (Fassade über den einen Player des Prozesses) ----------
+_player = PiPlayer()
+
+
+def default_player() -> PiPlayer:
+    return _player
+
+
+def play(kind: str, identifier: str, start: int = 0, shuffle: bool = False, single: Track | None = None) -> None:
+    """YouTube Music: ein Song spielt allein; Album, Playlist oder Künstler als Warteschlange."""
+    from .library import LibraryError, YouTubeMusicLibrary
+
+    if not identifier:
+        raise PlayerError("Unbekannter Eintrag")
+    if kind in SINGLE_KINDS:
+        _player.play_tracks([single or Track(id=identifier)])
+        return
+    if kind not in PAGE_KINDS:
         raise PlayerError("Unbekannter Eintrag")
     try:
-        tracks = [track for track in _tracks_for(kind, identifier) if track["videoId"]][:QUEUE_LIMIT]
-    except PlayerError:
-        raise
-    except Exception as exc:  # ytmusicapi wirft je nach Fehler sehr unterschiedliche Typen
-        raise PlayerError(f"Titel nicht gefunden: {str(exc)[:160]}") from exc
-    if not tracks:
-        raise PlayerError("Keine abspielbaren Songs gefunden")
-    with _lock:
-        _queue.update({"tracks": tracks, "index": 0, "loading": True, "error": "", "kind": "ytmusic", "station": None})
-    threading.Thread(target=_load, args=(0,), name="player-load", daemon=True).start()
+        tracks = YouTubeMusicLibrary().tracks(kind, identifier)
+    except LibraryError as exc:
+        raise PlayerError(str(exc)) from exc
+    _player.play_tracks(tracks, start, shuffle)
 
 
-def _active_client() -> MpvClient:
-    with _lock:
-        client = _mpv["client"]
-    if client is None or not client.alive() or not _queue["tracks"]:
-        raise PlayerError("Auf dem Pi läuft gerade nichts")
-    return client
+def play_radio(station: dict[str, Any]) -> None:
+    _player.play_radio(station)
+
+
+def current_station() -> dict[str, Any] | None:
+    return _player.current_station()
+
+
+def active() -> bool:
+    return _player.active()
 
 
 def control(action: str, value: Any = None) -> None:
-    if action == "volume":
-        try:
-            volume = max(0, min(100, int(value)))
-        except (TypeError, ValueError) as exc:
-            raise PlayerError("Ungültige Lautstärke") from exc
-        _volume["value"] = volume
-        with _lock:
-            client = _mpv["client"]
-        if client and client.alive():
-            client.command("set_property", "volume", volume)
-        return
-    client = _active_client()
-    if action == "toggle":
-        client.command("cycle", "pause")
-    elif action in {"next", "previous"} and _queue["kind"] == "radio":
-        raise PlayerError("Beim Radio wechseln Vor und Zurück den Lieblingssender")
-    elif action == "next":
-        threading.Thread(target=_advance, args=(1,), name="player-next", daemon=True).start()
-    elif action == "previous":
-        if float(client.get("time-pos") or 0) > RESTART_SECONDS or _queue["index"] <= 0:
-            client.command("seek", 0, "absolute")
-        else:
-            threading.Thread(target=_advance, args=(-1,), name="player-previous", daemon=True).start()
-    elif action == "stop":
-        client.command("stop")
-        with _lock:
-            _queue.update({"tracks": [], "index": -1, "station": None})
-    else:
-        raise PlayerError("Unbekannte Aktion")
+    _player.control(action, value)
 
 
 def now_playing() -> dict[str, Any] | None:
-    """Was mpv gerade spielt (oder pausiert), als Musikanzeige; None, wenn der Pi nichts abspielt."""
-    with _lock:
-        tracks, index, loading, error = _queue["tracks"], _queue["index"], _queue["loading"], _queue["error"]
-        client = _mpv["client"]
-    if not 0 <= index < len(tracks):
-        return None
-    track = tracks[index]
-    running = bool(client and client.alive())
-    if _queue["kind"] == "radio":
-        return _radio_now(track, client if running else None, loading, error)
-    if running and not loading and client.get("idle-active"):
-        return None  # Warteschlange zu Ende gespielt
-    paused = bool(client.get("pause")) if running else True
-    position = client.get("time-pos") if running and not loading else 0
-    duration = client.get("duration") if running and not loading else track["duration"]
-    return {
-        "source": "ytmusic",
-        "device": "pi",
-        "title": track["title"] or "Wird geladen …",
-        "artist": track["artist"],
-        "album": "",
-        "cover": track["cover"],
-        "progress_ms": int(float(position or 0) * 1000),
-        "duration_ms": int(float(duration or track["duration"] or 0) * 1000),
-        "paused": paused or loading,
-        "loading": loading,
-        "error": error,
-        "volume": _volume["value"],
-        "fetched_at": int(time.time() * 1000),
-    }
+    return _player.now_playing()
 
 
-def _icy_title(client: MpvClient | None, station_name: str) -> str:
-    """Aktueller Titel aus den ICY-Metadaten des Streams („Künstler - Titel“), sonst leer."""
-    if client is None:
-        return ""
-    metadata = client.get("metadata")
-    title = ""
-    if isinstance(metadata, dict):
-        title = str(metadata.get("icy-title") or "").strip()
-    if not title:
-        media = str(client.get("media-title") or "").strip()
-        title = "" if media.startswith(("http://", "https://")) or media == station_name else media
-    return " – ".join(part.strip() for part in title.split(" - ", 1)) if " - " in title else title
+def set_equalizer(gains: list[float]) -> None:
+    _player.set_equalizer(Equalizer(tuple(float(gain) for gain in gains)))
 
 
-def _radio_now(track: dict[str, Any], client: MpvClient | None, loading: bool, error: str) -> dict[str, Any]:
-    station = _queue["station"] or {}
-    paused = bool(client.get("pause")) if client else True
-    return {
-        "source": "radio",
-        "device": "pi",
-        "title": track["title"],
-        "artist": _icy_title(client, track["title"]) if not loading else "Verbinde …",
-        "album": "",
-        "cover": "",
-        "station": {key: station.get(key) for key in ("uuid", "name", "url", "country", "codec", "bitrate", "tags")},
-        "live": True,
-        "progress_ms": 0,
-        "duration_ms": 0,
-        "paused": paused or loading,
-        "loading": loading,
-        "error": error,
-        "volume": _volume["value"],
-        "fetched_at": int(time.time() * 1000),
-    }
+def level() -> float:
+    return _player.level()
 
 
 def shutdown() -> None:
-    with _lock:
-        client = _mpv["client"]
-        _mpv["client"] = None
-        _queue.update({"tracks": [], "index": -1})
-    if client:
-        client.close()
+    _player.shutdown()

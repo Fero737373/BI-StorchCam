@@ -20,6 +20,9 @@ from urllib.parse import parse_qs, urlencode, urlparse
 from . import bluetooth, display, hls_proxy, listening, pairing, player, spotify_connect
 from .admin import SessionStore, hash_pin, verify_pin
 from .config_store import ConfigError, config_path, public_config, save_config, validate_config, youtube_api_key
+from .equalizer import Equalizer
+from .library import LibraryError, MusicLibrary, SpotifyLibrary, YouTubeMusicLibrary
+from .music_queue import Track
 from .providers import music, radio, stream_source, ytmusic
 from .providers.geocoding import search_places, timezone_for
 from .providers.transit_vrr_smart import search_station
@@ -73,6 +76,13 @@ class ServerContext:
     def __post_init__(self) -> None:
         ttl = int(self.config.get("server", {}).get("admin_session_minutes", 30)) * 60
         self.sessions = SessionStore(ttl)
+        self.apply_equalizer(self.config)
+
+    @staticmethod
+    def apply_equalizer(config: dict[str, Any]) -> None:
+        gains = config.get("music", {}).get("equalizer", {}).get("gains")
+        if gains:
+            player.default_player().set_equalizer(Equalizer(tuple(float(gain) for gain in gains)))
 
     def get_config(self) -> dict[str, Any]:
         with self.lock:
@@ -80,8 +90,11 @@ class ServerContext:
 
     def replace_config(self, config: dict[str, Any]) -> None:
         with self.lock:
+            changed_sound = self.config.get("music", {}).get("equalizer") != config.get("music", {}).get("equalizer")
             self.config = copy.deepcopy(config)
         self.state.update_config(config)
+        if changed_sound:
+            self.apply_equalizer(config)
 
 
 class StorchServer(ThreadingHTTPServer):
@@ -122,7 +135,7 @@ class StorchHandler(BaseHTTPRequestHandler):
             "script-src 'self'; style-src 'self'; "
             # Albumcover von Spotify (i.scdn.co) und YouTube Music (googleusercontent).
             "img-src 'self' data: https://i.ytimg.com https://i.scdn.co "
-            "https://*.googleusercontent.com https://yt3.ggpht.com; "
+            "https://*.googleusercontent.com https://yt3.ggpht.com https://*.mzstatic.com; "
             # YouTube fest erlaubt, damit ein im Menü gewählter Stream ohne Neuladen der Seite eingebettet werden darf.
             f"frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com{frame_origin}; "
             # Eigener Player: hls.js hängt den Stream als blob: an das video-Element und entpackt ihn in einem Worker.
@@ -224,6 +237,8 @@ class StorchHandler(BaseHTTPRequestHandler):
             "/api/bluetooth": self._get_bluetooth,
             "/api/stream/source": self._get_stream_source,
             "/api/music/recent": self._get_music_recent,
+            "/api/player/queue": self._get_player_queue,
+            "/api/player/level": self._get_player_level,
             "/api/pair/status": self._get_pair_status,
             "/api/system/info": self._get_system_info,
         }
@@ -378,6 +393,9 @@ class StorchHandler(BaseHTTPRequestHandler):
             "/api/radio/search": self._post_radio_search,
             "/api/radio/play": self._post_radio_play,
             "/api/player/sleep": self._post_player_sleep,
+            "/api/player/open": self._post_player_open,
+            "/api/player/like": self._post_player_like,
+            "/api/player/add": self._post_player_add,
             "/api/pair/start": self._post_pair_start,
             "/api/pair/cancel": self._post_pair_cancel,
             "/api/pair/claim": self._post_pair_claim,
@@ -525,24 +543,63 @@ class StorchHandler(BaseHTTPRequestHandler):
             raise RequestError(HTTPStatus.BAD_REQUEST, "Unbekannter Musikdienst")
         return service
 
+    def _library(self, body: dict[str, Any]) -> MusicLibrary:
+        """Strategie je Musikdienst: YouTube Music oder Spotify hinter derselben Schnittstelle."""
+        if self._service(body) == "spotify":
+            return SpotifyLibrary(music._spotify_api)
+        return YouTubeMusicLibrary()
+
+    def _browse(self, work: Callable[[], Any]) -> dict[str, Any]:
+        try:
+            return {"ok": True, "results": work()}
+        except (LibraryError, music.MusicError, player.PlayerError, ytmusic.YTMusicError) as exc:
+            raise RequestError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
+
     def _post_player_search(self, body: dict[str, Any]) -> dict[str, Any]:
         self._guard_admin()
-        query = str(body.get("query", ""))[:120]
-        try:
-            if self._service(body) == "spotify":
-                return {"ok": True, "results": music.spotify_search(query)}
-            return {"ok": True, "results": player.search(query)}
-        except (music.MusicError, player.PlayerError, ytmusic.YTMusicError) as exc:
-            raise RequestError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
+        library = self._library(body)
+        return self._browse(lambda: library.search(str(body.get("query", ""))[:120]))
 
     def _post_player_playlists(self, body: dict[str, Any]) -> dict[str, Any]:
         self._guard_admin()
-        try:
-            if self._service(body) == "spotify":
-                return {"ok": True, "results": music.spotify_playlists()}
-            return {"ok": True, "results": player.my_playlists()}
-        except (music.MusicError, player.PlayerError, ytmusic.YTMusicError) as exc:
-            raise RequestError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
+        library = self._library(body)
+        return self._browse(library.playlists)
+
+    def _post_player_open(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Seite eines Albums, einer Playlist oder eines Künstlers mit allen Titeln."""
+        self._guard_admin()
+        library = self._library(body)
+        kind, identifier = str(body.get("kind", "")), str(body.get("id", ""))[:200]
+        if kind not in {"album", "playlist", "artist"}:
+            raise RequestError(HTTPStatus.BAD_REQUEST, "Nur Alben, Playlists und Künstler lassen sich öffnen")
+        return self._browse(lambda: library.open(kind, identifier))
+
+    def _post_player_like(self, body: dict[str, Any]) -> dict[str, Any]:
+        self._guard_admin()
+        library = self._library(body)
+        track_id, liked = str(body.get("id", ""))[:200], bool(body.get("liked", True))
+        result = self._browse(lambda: library.like(track_id, liked))
+        player.default_player().mark_liked(track_id, liked)
+        music.remember_liked(track_id, liked)
+        self.context.state.refresh_soon("music")
+        return result
+
+    def _post_player_add(self, body: dict[str, Any]) -> dict[str, Any]:
+        self._guard_admin()
+        library = self._library(body)
+        return self._browse(lambda: library.add_to_playlist(str(body.get("playlist", ""))[:200], str(body.get("id", ""))[:200]))
+
+    def _get_player_queue(self, params: QueryParams) -> dict[str, Any]:
+        """Spotify-Warteschlange auf Nachfrage (YouTube Music und Radio stehen im Musik-Zustand)."""
+        if not self._loopback_client():
+            self._guard_admin()
+        return self._browse(music.spotify_queue)
+
+    def _get_player_level(self, _params: QueryParams) -> dict[str, Any]:
+        """Pegel des Pi-Players für die bewegte Equalizer-Anzeige (einige Male pro Sekunde)."""
+        if not self._loopback_client():
+            self._guard_admin()
+        return {"ok": True, "level": player.level()}
 
     def _stop_spotify_on_pi(self) -> None:
         current = self.context.state.snapshot().get("music", {})
@@ -552,6 +609,11 @@ class StorchHandler(BaseHTTPRequestHandler):
     def _post_player_play(self, body: dict[str, Any]) -> dict[str, Any]:
         self._guard_admin()
         kind, identifier = str(body.get("kind", "")), str(body.get("id", ""))[:200]
+        try:
+            start = max(0, int(body.get("start") or 0))
+        except (TypeError, ValueError) as exc:
+            raise RequestError(HTTPStatus.BAD_REQUEST, "Ungültige Startposition") from exc
+        shuffle = bool(body.get("shuffle"))
         listening.remember({
             "source": self._service(body), "kind": kind, "id": identifier,
             "title": body.get("title"), "subtitle": body.get("subtitle"), "cover": body.get("cover"),
@@ -559,12 +621,13 @@ class StorchHandler(BaseHTTPRequestHandler):
         try:
             if self._service(body) == "spotify":
                 # Nur ein Player gleichzeitig: YouTube Music auf dem Pi anhalten.
-                if player.now_playing():
+                if player.active():
                     player.control("stop")
-                music.spotify_play(kind, identifier)
+                music.spotify_play(kind, identifier, start, shuffle)
             else:
                 self._stop_spotify_on_pi()
-                player.play(kind, identifier)
+                single = Track(id=identifier, title=str(body.get("title") or "")[:200], artist=str(body.get("subtitle") or "")[:200], cover=str(body.get("cover") or "")[:500])
+                player.play(kind, identifier, start, shuffle, single)
         except (music.MusicError, player.PlayerError, ytmusic.YTMusicError) as exc:
             raise RequestError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
         player.full_output_volume()

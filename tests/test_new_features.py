@@ -13,6 +13,8 @@ import pytest
 from bi_storchcam import listening, pairing, player
 from bi_storchcam.config_store import ConfigError, migrate_config, validate_config
 from bi_storchcam.defaults import DEFAULT_CONFIG
+from bi_storchcam.equalizer import Equalizer
+from bi_storchcam.music_queue import Track
 from bi_storchcam.providers import radio, transit_vrr_smart, warnings_dwd, weather_smart
 from bi_storchcam.server import StorchHandler
 from tests.test_server import post_json, request, running_server
@@ -187,36 +189,93 @@ def test_sleep_timer_switches_off_and_can_be_cancelled(monkeypatch: pytest.Monke
 
 # ---------- Radio im Player ----------
 
-def test_radio_playback_reports_station_and_icy_title(monkeypatch: pytest.MonkeyPatch) -> None:
-    class FakeClient:
-        def __init__(self) -> None:
-            self.commands: list[tuple[Any, ...]] = []
+class FakeMpv:
+    """Steht für mpv: merkt sich Befehle und liefert feste Eigenschaften."""
 
-        def alive(self) -> bool:
-            return True
+    def __init__(self, _on_event: Any = None, _volume: int = 100, properties: dict[str, Any] | None = None) -> None:
+        self.commands: list[tuple[Any, ...]] = []
+        self.properties = {"pause": False, "metadata": {"icy-title": "Coldplay - Viva la Vida"}, "idle-active": False, "time-pos": 12.0, "duration": 200.0}
+        self.properties.update(properties or {})
 
-        def command(self, *arguments: Any, timeout: float = 5) -> Any:
-            self.commands.append(arguments)
+    def alive(self) -> bool:
+        return True
 
-        def get(self, name: str) -> Any:
-            return {"pause": False, "metadata": {"icy-title": "Coldplay - Viva la Vida"}}.get(name)
+    def command(self, *arguments: Any, timeout: float = 5) -> Any:
+        self.commands.append(arguments)
 
-    client = FakeClient()
-    monkeypatch.setattr(player, "_client", lambda: client)
-    monkeypatch.setitem(player._mpv, "client", client)
-    monkeypatch.setattr(player.threading, "Thread", lambda target, **_kw: type("T", (), {"start": lambda self: target()})())
-    try:
-        player.play_radio(STATION)
-        assert ("loadfile", STATION["url"], "replace") in client.commands
-        now = player.now_playing()
-        assert now is not None and now["source"] == "radio" and now["title"] == "WDR 2" and now["artist"] == "Coldplay – Viva la Vida"
-        assert player.current_station()["uuid"] == STATION["uuid"]
-        with pytest.raises(player.PlayerError):
-            player.control("next")
-        with pytest.raises(player.PlayerError):
-            player.play_radio({"url": "file:///etc/passwd"})
-    finally:
-        player._queue.update({"tracks": [], "index": -1, "kind": "ytmusic", "station": None})
+    def get(self, name: str) -> Any:
+        return self.properties.get(name)
+
+    def close(self) -> None:
+        return None
+
+
+class InlineThread:
+    def __init__(self, target: Any, args: tuple[Any, ...] = (), kwargs: dict[str, Any] | None = None, **_options: Any) -> None:
+        self.run = lambda: target(*args, **(kwargs or {}))
+
+    def start(self) -> None:
+        self.run()
+
+
+def make_player(monkeypatch: pytest.MonkeyPatch) -> tuple[player.PiPlayer, FakeMpv]:
+    mpv = FakeMpv()
+    covers = player.RadioCovers(fetch=lambda *_a, **_k: {"results": [{"artworkUrl100": "https://is1.mzstatic.com/a/100x100bb.jpg"}]})
+    monkeypatch.setattr(player.threading, "Thread", InlineThread)
+    resolver = type("Resolver", (), {"url": lambda self, video_id: f"https://audio/{video_id}", "prefetch": lambda self, video_id: None})()
+    return player.PiPlayer(client_factory=lambda *_a: mpv, resolver=resolver, covers=covers), mpv
+
+
+def test_radio_playback_reports_station_song_cover_and_history(monkeypatch: pytest.MonkeyPatch) -> None:
+    pi, mpv = make_player(monkeypatch)
+    pi.play_radio(STATION)
+    assert ("loadfile", STATION["url"], "replace") in mpv.commands
+    assert ("set_property", "af", "@lv:lavfi=[astats=metadata=1:reset=1]") in mpv.commands
+    first = pi.now_playing()
+    assert first is not None and first["source"] == "radio" and first["artist"] == "Coldplay – Viva la Vida"
+    second = pi.now_playing()
+    assert second is not None and second["cover"] == "https://is1.mzstatic.com/a/300x300bb.jpg"
+    assert [item["title"] for item in second["recent_titles"]] == ["Coldplay – Viva la Vida"]
+    assert pi.current_station()["uuid"] == STATION["uuid"]
+    with pytest.raises(player.PlayerError):
+        pi.control("next")
+    with pytest.raises(player.PlayerError):
+        pi.play_radio({"url": "file:///etc/passwd"})
+
+
+def test_queue_plays_from_a_position_and_follows_repeat_and_edits(monkeypatch: pytest.MonkeyPatch) -> None:
+    pi, mpv = make_player(monkeypatch)
+    songs = [Track(id=f"v{index}", title=f"Song {index}") for index in range(4)]
+    pi.play_tracks(songs, start=1)
+    assert mpv.commands[-2] == ("loadfile", "https://audio/v1", "replace")
+    pi.control("repeat", "one")
+    pi.advance(1, natural=True)
+    assert pi.queue.index == 1
+    pi.control("repeat", "all")
+    pi.control("jump", 3)
+    pi.advance(1, natural=True)
+    assert pi.queue.current.id == "v0"
+    pi.control("move", {"from": 3, "to": 1})
+    assert [track.id for track in pi.queue.tracks] == ["v0", "v3", "v1", "v2"]
+    pi.control("remove", 2)
+    now = pi.now_playing()
+    assert now is not None and [item["id"] for item in now["queue"]] == ["v0", "v3", "v2"] and now["repeat"] == "all"
+    with pytest.raises(player.PlayerError):
+        pi.control("remove", 0)  # der laufende Titel
+    pi.control("seek", 42)
+    assert ("seek", 42.0, "absolute") in mpv.commands
+
+
+def test_equalizer_is_sent_to_mpv_and_level_is_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    pi, mpv = make_player(monkeypatch)
+    pi.play_radio(STATION)
+    pi.set_equalizer(Equalizer.preset("bass"))
+    chain = mpv.commands[-1][2]
+    assert chain.startswith("@eq:lavfi=[equalizer=f=60:t=q:w=1.1:g=6,") and "volume=-6dB" in chain and chain.endswith("@lv:lavfi=[astats=metadata=1:reset=1]")
+    mpv.properties["af-metadata/lv"] = {"lavfi.astats.Overall.RMS_level": "-15.0"}
+    assert pi.level() == 0.75
+    mpv.properties["af-metadata/lv"] = {"lavfi.astats.Overall.RMS_level": "-inf"}
+    assert pi.level() == 0.0
 
 
 # ---------- Konfiguration Version 5 ----------
@@ -235,12 +294,11 @@ def test_v4_config_migrates_audio_distance_and_setup() -> None:
 def test_v5_validation_cleans_and_rejects(config: dict) -> None:
     candidate = copy.deepcopy(config)
     candidate["stream"]["favorites"] = [{"url": "https://youtu.be/W2CicgFq5oo", "title": "Nest"}, {"url": "https://www.youtube.com/embed/W2CicgFq5oo", "title": "doppelt"}]
-    candidate["stream"]["notes"] = {"https://youtu.be/W2CicgFq5oo": ["Füttern morgens", "  "]}
     candidate["music"]["radio"]["favorites"] = [STATION, STATION]
     candidate["transit"]["stops"] = [{"station_name": "Jahnplatz", "station_id": "1", "walk_minutes": 7}]
     valid = validate_config(candidate)
     assert valid["stream"]["favorites"] == [{"url": "https://www.youtube.com/embed/W2CicgFq5oo", "title": "Nest", "channel": ""}]
-    assert valid["stream"]["notes"] == {"https://www.youtube.com/embed/W2CicgFq5oo": ["Füttern morgens"]}
+    assert "notes" not in valid["stream"]
     assert len(valid["music"]["radio"]["favorites"]) == 1 and valid["transit"]["stops"][0]["walk_minutes"] == 7
     for path, value, message in [
         (("ui", "night", "start"), "25:00", "Uhrzeit"),
@@ -249,6 +307,8 @@ def test_v5_validation_cleans_and_rejects(config: dict) -> None:
         (("weather", "warnings"), "all", "weather.warnings"),
         (("server", "lan_access"), True, "PIN"),
         (("server", "public_url"), "fero.local", "public_url"),
+        (("music", "equalizer"), {"preset": "flat", "gains": [0, 0, 0]}, "Bänder"),
+        (("music", "equalizer"), {"preset": "laut", "gains": [0] * 6}, "Voreinstellung"),
     ]:
         broken = copy.deepcopy(DEFAULT_CONFIG)
         target: Any = broken

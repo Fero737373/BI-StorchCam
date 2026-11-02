@@ -17,6 +17,8 @@ from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .defaults import CONFIG_SCHEMA_VERSION, DEFAULT_CONFIG
+from .equalizer import PRESETS as EQ_PRESETS
+from .equalizer import Equalizer
 
 LOGGER = logging.getLogger(__name__)
 
@@ -32,8 +34,6 @@ STREAM_AUDIO = {"off", "duck", "on"}
 WARNING_LEVELS = {"off", "minor", "moderate", "severe"}
 DISTANCES = {1, 2, 3}
 MAX_STREAM_FAVORITES = 12
-MAX_NOTED_CAMERAS = 40
-MAX_NOTES = 10
 MAX_RADIO_FAVORITES = 30
 CLOCK_TIME = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 RADIO_ID = re.compile(r"[0-9a-fA-F-]{8,64}")
@@ -243,6 +243,8 @@ def migrate_config(raw: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     if ui.get("sky", "auto") not in SKY_MODES:
         ui["sky"] = "auto"
     stream = migrated.get("stream")
+    if isinstance(stream, dict):
+        stream.pop("notes", None)  # Kamera-Notizen wurden wieder entfernt.
     if previous < 5:
         # Neu in Version 5: Ton der Kamera, Leseabstand statt Layoutprofil, Einrichtung gilt mit Stream als erledigt.
         if isinstance(stream, dict) and "audio" not in stream:
@@ -366,23 +368,8 @@ def _validate_favorite(raw: Any, index: int) -> dict[str, str]:
     }
 
 
-def _validate_notes(raw: Any) -> dict[str, list[str]]:
-    if not isinstance(raw, dict) or len(raw) > MAX_NOTED_CAMERAS:
-        raise ConfigError(f"stream.notes muss ein Objekt mit höchstens {MAX_NOTED_CAMERAS} Kameras sein")
-    notes: dict[str, list[str]] = {}
-    for key, values in raw.items():
-        url = _validate_stream_url(_string(key, "Kamera-Adresse der Notiz", 2048))
-        items = _string_list(values, "Notizen müssen eine Textliste sein")
-        if len(items) > MAX_NOTES:
-            raise ConfigError(f"Höchstens {MAX_NOTES} Notizen je Kamera")
-        cleaned = [_string(item, "Notiz", 90) for item in items if item.strip()]
-        if url and cleaned:
-            notes[url] = cleaned
-    return notes
-
-
 def _validate_stream(stream: dict[str, Any]) -> None:
-    _only(stream, {"url", "muted", "autoplay", "quality", "max_fps", "audio", "favorites", "auto_fallback", "notes"}, "stream")
+    _only(stream, {"url", "muted", "autoplay", "quality", "max_fps", "audio", "favorites", "auto_fallback"}, "stream")
     if stream["max_fps"] not in (30, 60) or isinstance(stream["max_fps"], bool):
         raise ConfigError("stream.max_fps muss 30 oder 60 sein")
     quality = str(stream["quality"])
@@ -409,7 +396,6 @@ def _validate_stream(stream: dict[str, Any]) -> None:
         "audio": audio,
         "favorites": unique,
         "auto_fallback": _bool(stream["auto_fallback"], "stream.auto_fallback"),
-        "notes": _validate_notes(stream["notes"]),
     })
 
 
@@ -455,8 +441,25 @@ def _validate_station(raw: Any, index: int) -> dict[str, Any]:
     }
 
 
+def _validate_equalizer(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise ConfigError("music.equalizer muss ein Objekt sein")
+    _only(raw, {"preset", "gains"}, "music.equalizer")
+    preset = _string(raw.get("preset", "flat"), "music.equalizer.preset", 20)
+    if preset not in {*EQ_PRESETS, "custom"}:
+        raise ConfigError("Unbekannte Voreinstellung des Klangreglers")
+    gains = raw.get("gains")
+    try:
+        equalizer = Equalizer(tuple(gains)) if isinstance(gains, list) else None
+    except ValueError as exc:
+        raise ConfigError(f"music.equalizer.gains: {exc}") from exc
+    if equalizer is None:
+        raise ConfigError("music.equalizer.gains muss eine Zahlenliste sein")
+    return {"preset": preset, "gains": [round(float(gain), 1) for gain in equalizer.gains]}
+
+
 def _validate_music(music: dict[str, Any]) -> None:
-    _only(music, {"source", "spotify", "radio"}, "music")
+    _only(music, {"source", "spotify", "radio", "equalizer"}, "music")
     source = _string(music["source"], "music.source", 10)
     if source not in MUSIC_SOURCES:
         raise ConfigError("Ungültige music.source")
@@ -477,6 +480,7 @@ def _validate_music(music: dict[str, Any]) -> None:
         "source": source,
         "spotify": {"client_id": client_id},
         "radio": {"favorites": favorites},
+        "equalizer": _validate_equalizer(music["equalizer"]),
     })
 
 

@@ -29,13 +29,17 @@ from .http_json import USER_AGENT
 LOGGER = logging.getLogger(__name__)
 SPOTIFY_AUTHORIZE_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
-SPOTIFY_PLAYING_URL = "https://api.spotify.com/v1/me/player/currently-playing?additional_types=track,episode"
+SPOTIFY_PLAYING_URL = "https://api.spotify.com/v1/me/player?additional_types=track,episode"
 SPOTIFY_API = "https://api.spotify.com/v1"
 # Lesen, was läuft, und Abspielen/Steuern (Suche braucht keine eigene Berechtigung).
+# Gefällt mir und Playlists bearbeiten brauchen die Bibliotheks- und Playlist-Schreibrechte.
 SPOTIFY_SCOPE = (
     "user-read-currently-playing user-read-playback-state user-modify-playback-state"
-    " playlist-read-private playlist-read-collaborative"
+    " playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public"
+    " user-library-read user-library-modify"
 )
+SPOTIFY_REPEAT = {"off": "off", "all": "context", "one": "track"}
+_liked: dict[str, bool | None] = {}
 SPOTIFY_CALLBACK_PATH = "/api/music/spotify/callback"
 PENDING_SECONDS = 600
 TIMEOUT = 8
@@ -212,9 +216,15 @@ def spotify_now_playing() -> dict[str, Any] | None:
         album_data = item.get("album") or {}
         album, images = str(album_data.get("name", "")), album_data.get("images")
     device = body.get("device") or {}
+    track_uri = str(item.get("uri") or "")
     return {
         "source": "spotify",
         "controls": "spotify",
+        "track_id": track_uri,
+        "liked": spotify_liked(track_uri),
+        "shuffle": bool(body.get("shuffle_state")),
+        "repeat": {value: key for key, value in SPOTIFY_REPEAT.items()}.get(str(body.get("repeat_state") or "off"), "off"),
+        "seekable": True,
         "device": "pi" if device.get("name") == spotify_connect.DEVICE_NAME else str(device.get("name") or ""),
         "title": str(item.get("name", "")),
         "artist": artist,
@@ -243,57 +253,6 @@ def _spotify_api(method: str, path: str, payload: Any = None) -> Any:
     return body
 
 
-def _image(images: Any) -> str:
-    if not isinstance(images, list) or not images:
-        return ""
-    # Für die Trefferliste reicht das kleinste Bild ab 64 px.
-    image = images[-1] if isinstance(images[-1], dict) else {}
-    return str(image.get("url", ""))
-
-
-def spotify_search(query: str) -> list[dict[str, Any]]:
-    query = query.strip()
-    if not query:
-        return []
-    params = urllib.parse.urlencode({"q": query, "type": "track,album,playlist", "limit": "8", "market": "from_token"})
-    body = _spotify_api("GET", f"/search?{params}") or {}
-    found: list[dict[str, Any]] = []
-    for kind, key in (("song", "tracks"), ("album", "albums"), ("playlist", "playlists")):
-        for item in (body.get(key) or {}).get("items") or []:
-            if not isinstance(item, dict) or not item.get("uri"):
-                continue
-            if kind == "song":
-                subtitle = ", ".join(str(a.get("name", "")) for a in item.get("artists", []) if isinstance(a, dict))
-                images = (item.get("album") or {}).get("images")
-            elif kind == "album":
-                subtitle = ", ".join(str(a.get("name", "")) for a in item.get("artists", []) if isinstance(a, dict))
-                images = item.get("images")
-            else:
-                subtitle = str((item.get("owner") or {}).get("display_name") or "")
-                images = item.get("images")
-            found.append({"kind": kind, "id": str(item["uri"]), "title": str(item.get("name", "")), "subtitle": subtitle, "cover": _image(images)})
-    return found
-
-
-def spotify_playlists() -> list[dict[str, Any]]:
-    """Eigene und gefolgte Playlists des verbundenen Kontos."""
-    body = _spotify_api("GET", "/me/playlists?limit=50") or {}
-    found: list[dict[str, Any]] = []
-    for item in body.get("items") or []:
-        if not isinstance(item, dict) or not item.get("uri"):
-            continue
-        # Spotify nennt die Titelzahl inzwischen „items“, ältere Antworten „tracks“.
-        total = (item.get("items") or item.get("tracks") or {}).get("total")
-        found.append({
-            "kind": "playlist",
-            "id": str(item["uri"]),
-            "title": str(item.get("name", "")),
-            "subtitle": f"{total} Songs" if isinstance(total, int) else str((item.get("owner") or {}).get("display_name") or ""),
-            "cover": _image(item.get("images")),
-        })
-    return found
-
-
 def _pi_device_id() -> str:
     body = _spotify_api("GET", "/me/player/devices") or {}
     for device in body.get("devices") or []:
@@ -302,11 +261,16 @@ def _pi_device_id() -> str:
     raise MusicError("Der Pi ist noch nicht als Spotify-Lautsprecher bereit. Bitte im Menü unter Musik koppeln.")
 
 
-def spotify_play(kind: str, uri: str) -> None:
-    if not re.fullmatch(r"spotify:(track|album|playlist):[A-Za-z0-9]+", uri):
+def spotify_play(kind: str, uri: str, start: int = 0, shuffle: bool = False) -> None:
+    """Song allein; Album, Playlist oder Künstler als Kontext ab ``start``, auf Wunsch gemischt."""
+    if not re.fullmatch(r"spotify:(track|album|playlist|artist):[A-Za-z0-9]+", uri):
         raise MusicError("Unbekannter Spotify-Eintrag")
-    payload = {"uris": [uri]} if kind == "song" else {"context_uri": uri}
     device = urllib.parse.quote(_pi_device_id())
+    if kind != "song":
+        _spotify_api("PUT", f"/me/player/shuffle?state={'true' if shuffle else 'false'}&device_id={device}")
+    payload: dict[str, Any] = {"uris": [uri]} if kind == "song" else {"context_uri": uri}
+    if kind in {"album", "playlist"} and start > 0 and not shuffle:
+        payload["offset"] = {"position": int(start)}
     _spotify_api("PUT", f"/me/player/play?device_id={device}", payload)
 
 
@@ -326,8 +290,52 @@ def spotify_control(action: str, value: Any = None) -> None:
         _spotify_api("PUT", f"/me/player/volume?volume_percent={volume}")
     elif action == "stop":
         _spotify_api("PUT", "/me/player/pause")
+    elif action == "seek":
+        _spotify_api("PUT", f"/me/player/seek?position_ms={max(0, int(float(value or 0) * 1000))}")
+    elif action == "shuffle":
+        _spotify_api("PUT", f"/me/player/shuffle?state={'true' if value else 'false'}")
+    elif action == "repeat":
+        if value not in SPOTIFY_REPEAT:
+            raise MusicError("Wiederholen kennt nur off, all und one")
+        _spotify_api("PUT", f"/me/player/repeat?state={SPOTIFY_REPEAT[str(value)]}")
+    elif action in {"jump", "remove", "move"}:
+        raise MusicError("Spotify erlaubt das Umsortieren der Warteschlange nicht")
     else:
         raise MusicError("Unbekannte Aktion")
+
+
+def spotify_queue() -> list[dict[str, Any]]:
+    """Was in Spotify als Nächstes kommt (nur lesen; Spotify erlaubt kein Umsortieren)."""
+    body = _spotify_api("GET", "/me/player/queue") or {}
+    found = []
+    for position, item in enumerate(body.get("queue") or []):
+        if isinstance(item, dict):
+            album = item.get("album") or {}
+            images = album.get("images") or item.get("images") or []
+            found.append({
+                "position": position, "id": str(item.get("uri", "")), "title": str(item.get("name", "")),
+                "artist": ", ".join(str(a.get("name", "")) for a in item.get("artists", []) if isinstance(a, dict)),
+                "cover": str(images[-1].get("url", "")) if images and isinstance(images[-1], dict) else "",
+                "duration": int(item.get("duration_ms") or 0) // 1000,
+            })
+    return found[:40]
+
+
+def spotify_liked(track_uri: str) -> bool | None:
+    """Gefällt-mir-Zustand, je Song nur einmal gefragt (alte Verbindungen ohne Recht: unbekannt)."""
+    if not track_uri.startswith("spotify:track:"):
+        return None
+    if track_uri not in _liked:
+        try:
+            body = _spotify_api("GET", f"/me/tracks/contains?ids={track_uri.rsplit(':', 1)[1]}")
+            _liked[track_uri] = bool(body[0]) if isinstance(body, list) and body else None
+        except MusicError:
+            _liked[track_uri] = None
+    return _liked[track_uri]
+
+
+def remember_liked(track_uri: str, liked: bool) -> None:
+    _liked[track_uri] = liked
 
 
 def refresh_seconds(_config: dict[str, Any]) -> int:
