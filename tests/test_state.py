@@ -19,7 +19,9 @@ def test_central_snapshot_and_config_invalidation(monkeypatch: pytest.MonkeyPatc
     changed = {**config, "location": {**config["location"], "label": "Herford"}}
     manager.update_config(changed)
     assert manager.snapshot()["config"]["location"]["label"] == "Herford"
-    assert manager._last_run == {}
+    # Nur das Wetter hängt am Ort; die Abfahrten müssen nicht neu geholt werden.
+    assert "weather" not in manager._last_run and "boards" in manager._last_run
+    assert manager.snapshot()["health"]["weather"]["ok"] is True
 
 
 def test_provider_failure_does_not_end_worker(monkeypatch: pytest.MonkeyPatch, config: dict) -> None:

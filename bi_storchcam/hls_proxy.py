@@ -74,14 +74,14 @@ def _attributes(tag_line: str) -> dict[str, str]:
     return {key: value.strip('"') for key, value in ATTRIBUTE.findall(values)}
 
 
-def _variant_allowed(attributes: dict[str, str], max_height: int) -> bool:
+def _variant_allowed(attributes: dict[str, str], max_height: int, max_fps: int = MAX_FPS) -> bool:
     resolution = attributes.get("RESOLUTION", "")
     try:
         height = int(resolution.lower().split("x")[1]) if "x" in resolution.lower() else 0
         fps = float(attributes.get("FRAME-RATE") or 0)
     except ValueError:
         return True
-    return (not height or height <= max_height) and (not fps or fps <= MAX_FPS + 0.5)
+    return (not height or height <= max_height) and (not fps or fps <= max_fps + 0.5)
 
 
 def _rewrite_uri_attribute(line: str, base_url: str, *, playlist: bool) -> str:
@@ -91,18 +91,18 @@ def _rewrite_uri_attribute(line: str, base_url: str, *, playlist: bool) -> str:
     return URI_ATTRIBUTE.sub(replace, line)
 
 
-def rewrite_playlist(text: str, base_url: str, max_height: int = 1080) -> str:
+def rewrite_playlist(text: str, base_url: str, max_height: int = 1080, max_fps: int = MAX_FPS) -> str:
     """Upstream-Adressen durch signierte lokale ersetzen; zu große oder zu schnelle Varianten weglassen."""
     lines = [line.strip() for line in text.splitlines()]
     variants = [line for line in lines if line.startswith("#EXT-X-STREAM-INF")]
     # Bleibt nach dem Filtern keine Variante übrig, lieber alle behalten als gar kein Bild.
-    keep_all = bool(variants) and not any(_variant_allowed(_attributes(line), max_height) for line in variants)
+    keep_all = bool(variants) and not any(_variant_allowed(_attributes(line), max_height, max_fps) for line in variants)
     output: list[str] = []
     next_is_playlist = False
     skip_next_uri = False
     for line in lines:
         if line.startswith("#EXT-X-STREAM-INF"):
-            if not keep_all and not _variant_allowed(_attributes(line), max_height):
+            if not keep_all and not _variant_allowed(_attributes(line), max_height, max_fps):
                 skip_next_uri = True
                 continue
             next_is_playlist = True
@@ -146,7 +146,7 @@ def open_upstream(url: str, timeout: float = 15, *, byte_range: str = "") -> Any
         raise ProxyError(504, "Streamquelle nicht erreichbar") from exc
 
 
-def fetch_playlist(url: str, max_height: int) -> bytes:
+def fetch_playlist(url: str, max_height: int, max_fps: int = MAX_FPS) -> bytes:
     with open_upstream(url) as response:
         raw = response.read(MAX_PLAYLIST_BYTES + 1)
         final_url = response.geturl() or url
@@ -155,4 +155,4 @@ def fetch_playlist(url: str, max_height: int) -> bytes:
     text = raw.decode("utf-8", "replace")
     if not text.lstrip("﻿ \r\n").startswith("#EXTM3U"):
         raise ProxyError(502, "Quelle liefert keine HLS-Playlist")
-    return rewrite_playlist(text, final_url, max_height).encode("utf-8")
+    return rewrite_playlist(text, final_url, max_height, max_fps).encode("utf-8")

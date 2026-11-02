@@ -15,8 +15,9 @@ services:
       - seccomp=unconfined
 
     ports:
-      # Nur auf dem Pi selbst: http://localhost:8080 (das Menü hat keine PIN).
-      - "127.0.0.1:8080:8000"
+      # Standard nur auf dem Pi selbst (http://localhost:8080). Für „Am Handy“ in einer .env
+      # BI_STORCHCAM_BIND=0.0.0.0 setzen; Geräte im Heimnetz brauchen dann einen Kopplungscode.
+      - "${BI_STORCHCAM_BIND:-127.0.0.1}:8080:8000"
 
     volumes:
       - ./data:/data
@@ -46,3 +47,5 @@ services:
       # PIN-Schutz für das Menü nur bei Bedarf einschalten (1), dann wird BI_STORCHCAM_ADMIN_PIN gebraucht.
       - BI_STORCHCAM_REQUIRE_PIN=${BI_STORCHCAM_REQUIRE_PIN:-0}
       - BI_STORCHCAM_ADMIN_PIN=${BI_STORCHCAM_ADMIN_PIN:-}
+      # Adresse, unter der Handys den Pi erreichen (steht im QR-Code), z. B. http://fero.local:8080
+      - BI_STORCHCAM_PUBLIC_URL=${BI_STORCHCAM_PUBLIC_URL:-}

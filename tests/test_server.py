@@ -50,7 +50,7 @@ def post_json(address: tuple[str, int], path: str, value: dict, token: str = "")
 def test_health_state_and_static_security_headers(config: dict, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     with running_server(config, monkeypatch, tmp_path) as address:
         status, _headers, health = request(address, "GET", "/api/health")
-        assert status == 200 and health["ok"] and health["state_ready"] and health["version"] == "0.2.0b1"
+        assert status == 200 and health["ok"] and health["state_ready"] and health["version"] == "0.3.0b1"
         status, _headers, state = request(address, "GET", "/api/state")
         assert status == 200 and "config" in state
         status, headers, body = request(address, "GET", "/")

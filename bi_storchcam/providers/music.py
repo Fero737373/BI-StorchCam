@@ -21,7 +21,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from .. import player, spotify_connect
+from .. import listening, player, spotify_connect
 from ..config_store import config_path
 from . import ytmusic
 from .http_json import USER_AGENT
@@ -337,9 +337,10 @@ def refresh_seconds(_config: dict[str, Any]) -> int:
 def get_now_playing(config: dict[str, Any]) -> dict[str, Any]:
     spotify_connect.ensure_running()
     # Was der Pi selbst abspielt, ist immer bekannt und hat Vorrang vor allen Diensten.
+    sleep = listening.sleep_state()
     local = player.now_playing()
     if local:
-        return {"enabled": True, "ok": True, "playing": True, "controls": "pi", **local}
+        return {"enabled": True, "ok": True, "playing": True, "controls": "pi", **local, **sleep}
     music = config.get("music", {})
     source = music.get("source", "off")
     if source == "off":
@@ -359,11 +360,11 @@ def get_now_playing(config: dict[str, Any]) -> dict[str, Any]:
             errors.append(str(exc)[:160])
             continue
         if track and not track.get("paused"):
-            return {"enabled": True, "ok": True, "playing": True, **track}
+            return {"enabled": True, "ok": True, "playing": True, **track, **sleep}
         paused = paused or track
     # Pausiertes Spotify nur zeigen, wenn sonst nichts läuft (mit Knopf zum Weiterspielen).
     if paused:
-        return {"enabled": True, "ok": True, "playing": True, **paused}
+        return {"enabled": True, "ok": True, "playing": True, **paused, **sleep}
     result: dict[str, Any] = {"enabled": True, "ok": not errors, "playing": False}
     if errors:
         result["error"] = "; ".join(errors)

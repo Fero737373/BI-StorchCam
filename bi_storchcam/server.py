@@ -17,10 +17,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
-from . import bluetooth, hls_proxy, player, spotify_connect
+from . import bluetooth, display, hls_proxy, listening, pairing, player, spotify_connect
 from .admin import SessionStore, hash_pin, verify_pin
 from .config_store import ConfigError, config_path, public_config, save_config, validate_config, youtube_api_key
-from .providers import music, stream_source, ytmusic
+from .providers import music, radio, stream_source, ytmusic
 from .providers.geocoding import search_places, timezone_for
 from .providers.transit_vrr_smart import search_station
 from .providers.youtube import YouTubeError, search_live
@@ -180,7 +180,11 @@ class StorchHandler(BaseHTTPRequestHandler):
         return bool(self._config().get("admin", {}).get("require_pin", True))
 
     def _authenticated(self) -> bool:
-        return not self._pin_required() or self.context.sessions.valid(self._token())
+        if self.context.sessions.valid(self._token()):
+            return True
+        # Ohne PIN darf der Bildschirm selbst alles; Geräte im Heimnetz brauchen eine Sitzung
+        # (Kopplungscode vom Bildschirm oder PIN).
+        return not self._pin_required() and self._loopback_client()
 
     def _loopback_client(self) -> bool:
         try:
@@ -219,6 +223,9 @@ class StorchHandler(BaseHTTPRequestHandler):
             "/api/music/spotify/pair": self._get_spotify_pair,
             "/api/bluetooth": self._get_bluetooth,
             "/api/stream/source": self._get_stream_source,
+            "/api/music/recent": self._get_music_recent,
+            "/api/pair/status": self._get_pair_status,
+            "/api/system/info": self._get_system_info,
         }
 
     def _dispatch(self, *, head_only: bool) -> None:
@@ -261,6 +268,9 @@ class StorchHandler(BaseHTTPRequestHandler):
             "pin_required": self._pin_required(),
             "pin_configured": self._requires_auth(),
             "authenticated": self._authenticated(),
+            # Handy im Heimnetz: Kopplungscode vom Bildschirm, PIN nur wenn dauerhaft erlaubt.
+            "remote": not self._loopback_client(),
+            "pin_login": self._loopback_client() or bool(self._config().get("server", {}).get("lan_access")),
         }
 
     def _get_config(self, _params: QueryParams) -> dict[str, Any]:
@@ -278,16 +288,22 @@ class StorchHandler(BaseHTTPRequestHandler):
 
     def _get_stream_source(self, params: QueryParams) -> dict[str, Any]:
         """Wie der Kiosk den Stream abspielt: eigener Player (HLS oder Videodatei über den lokalen Proxy) oder eingebettet."""
-        configured = str(self._config().get("stream", {}).get("url", ""))
+        stream = self._config().get("stream", {})
+        configured = str(stream.get("url", ""))
         url = _query_value(params, "url").strip() or configured
-        if url != configured:
+        favorites = {str(item.get("url", "")) for item in stream.get("favorites", [])}
+        # Gemerkte Kameras darf der Kiosk bei einem Ausfall selbst als Ersatz abspielen.
+        if url != configured and url not in favorites:
             # Eine noch nicht gespeicherte Adresse ausprobieren darf nur das Menü.
             self._guard_admin()
             if urlparse(url).scheme not in {"http", "https"}:
                 raise RequestError(HTTPStatus.BAD_REQUEST, "Stream-URL muss mit http:// oder https:// beginnen")
-        quality = self._config().get("stream", {}).get("quality", "auto")
+        quality = stream.get("quality", "auto")
         source = stream_source.resolve(
-            url, refresh=_query_value(params, "refresh") == "1", height_limit=stream_source.max_height(quality)
+            url,
+            refresh=_query_value(params, "refresh") == "1",
+            height_limit=stream_source.max_height(quality),
+            fps_limit=int(stream.get("max_fps", 30)),
         )
         if source["kind"] not in {"hls", "file"}:
             return source
@@ -359,6 +375,13 @@ class StorchHandler(BaseHTTPRequestHandler):
             "/api/bluetooth/connect": self._post_bluetooth_connect,
             "/api/bluetooth/disconnect": self._post_bluetooth_disconnect,
             "/api/bluetooth/remove": self._post_bluetooth_remove,
+            "/api/radio/search": self._post_radio_search,
+            "/api/radio/play": self._post_radio_play,
+            "/api/player/sleep": self._post_player_sleep,
+            "/api/pair/start": self._post_pair_start,
+            "/api/pair/cancel": self._post_pair_cancel,
+            "/api/pair/claim": self._post_pair_claim,
+            "/api/display/power": self._post_display_power,
         }
 
     def do_POST(self) -> None:  # noqa: N802
@@ -391,6 +414,8 @@ class StorchHandler(BaseHTTPRequestHandler):
         return self._new_session()
 
     def _post_admin_login(self, body: dict[str, Any]) -> dict[str, Any]:
+        if not self._loopback_client() and not self._config().get("server", {}).get("lan_access"):
+            raise RequestError(HTTPStatus.FORBIDDEN, "Anmeldung mit PIN aus dem Heimnetz ist aus; bitte den Kopplungscode vom Bildschirm eingeben")
         encoded = str(self._config().get("admin", {}).get("pin_hash", ""))
         if not encoded:
             raise RequestError(HTTPStatus.CONFLICT, "Admin-PIN wurde noch nicht eingerichtet")
@@ -519,9 +544,18 @@ class StorchHandler(BaseHTTPRequestHandler):
         except (music.MusicError, player.PlayerError, ytmusic.YTMusicError) as exc:
             raise RequestError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
 
+    def _stop_spotify_on_pi(self) -> None:
+        current = self.context.state.snapshot().get("music", {})
+        if current.get("controls") == "spotify" and current.get("device") == "pi" and not current.get("paused"):
+            music.spotify_control("stop")
+
     def _post_player_play(self, body: dict[str, Any]) -> dict[str, Any]:
         self._guard_admin()
         kind, identifier = str(body.get("kind", "")), str(body.get("id", ""))[:200]
+        listening.remember({
+            "source": self._service(body), "kind": kind, "id": identifier,
+            "title": body.get("title"), "subtitle": body.get("subtitle"), "cover": body.get("cover"),
+        })
         try:
             if self._service(body) == "spotify":
                 # Nur ein Player gleichzeitig: YouTube Music auf dem Pi anhalten.
@@ -529,9 +563,7 @@ class StorchHandler(BaseHTTPRequestHandler):
                     player.control("stop")
                 music.spotify_play(kind, identifier)
             else:
-                current = self.context.state.snapshot().get("music", {})
-                if current.get("controls") == "spotify" and current.get("device") == "pi" and not current.get("paused"):
-                    music.spotify_control("stop")
+                self._stop_spotify_on_pi()
                 player.play(kind, identifier)
         except (music.MusicError, player.PlayerError, ytmusic.YTMusicError) as exc:
             raise RequestError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
@@ -546,7 +578,9 @@ class StorchHandler(BaseHTTPRequestHandler):
         target, action = str(body.get("target", "")), str(body.get("action", ""))
         LOGGER.info("Wiedergabe steuern: %s %s (von %s)", target, action, self.client_address[0])
         try:
-            if target == "pi":
+            if target == "pi" and action in {"next", "previous"} and player.current_station():
+                self._switch_station(1 if action == "next" else -1)
+            elif target == "pi":
                 player.control(action, body.get("value"))
             elif target == "spotify":
                 music.spotify_control(action, body.get("value"))
@@ -556,6 +590,110 @@ class StorchHandler(BaseHTTPRequestHandler):
             raise RequestError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
         self.context.state.refresh_soon("music")
         return {"ok": True}
+
+    def _switch_station(self, step: int) -> None:
+        """Vor und Zurück beim Radio: nächster bzw. vorheriger Lieblingssender."""
+        favorites = self._config().get("music", {}).get("radio", {}).get("favorites", [])
+        if not favorites:
+            raise player.PlayerError("Noch keine Lieblingssender gemerkt")
+        current = (player.current_station() or {}).get("uuid")
+        uuids = [item["uuid"] for item in favorites]
+        index = uuids.index(current) + step if current in uuids else 0
+        station = favorites[index % len(favorites)]
+        player.play_radio(station)
+        listening.remember({"source": "radio", "kind": "station", "id": station["uuid"], "title": station["name"], "subtitle": station.get("country", ""), "station": station})
+
+    def _post_radio_search(self, body: dict[str, Any]) -> dict[str, Any]:
+        self._guard_admin()
+        try:
+            return {"ok": True, "results": radio.search(str(body.get("query", ""))[:80], str(body.get("filter", "")))}
+        except radio.RadioError as exc:
+            raise RequestError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
+
+    def _post_radio_play(self, body: dict[str, Any]) -> dict[str, Any]:
+        self._guard_admin()
+        raw = body.get("station")
+        station = radio.station({
+            "stationuuid": raw.get("uuid"), "name": raw.get("name"), "url": raw.get("url"), "country": raw.get("country"),
+            "codec": raw.get("codec"), "bitrate": raw.get("bitrate"), "tags": ",".join(raw.get("tags") or []),
+        }) if isinstance(raw, dict) else None
+        if station is None:
+            raise RequestError(HTTPStatus.BAD_REQUEST, "Ungültiger Sender")
+        try:
+            self._stop_spotify_on_pi()
+            player.play_radio(station)
+        except (music.MusicError, player.PlayerError) as exc:
+            raise RequestError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
+        radio.count_click(station["uuid"])
+        listening.remember({"source": "radio", "kind": "station", "id": station["uuid"], "title": station["name"], "subtitle": station["country"], "station": station})
+        player.full_output_volume()
+        self.context.state.refresh_soon("music")
+        return {"ok": True, "station": station}
+
+    def _post_player_sleep(self, body: dict[str, Any]) -> dict[str, Any]:
+        if not self._loopback_client():
+            self._guard_admin()
+        try:
+            minutes = max(0, min(600, int(body.get("minutes", 0))))
+        except (TypeError, ValueError) as exc:
+            raise RequestError(HTTPStatus.BAD_REQUEST, "Ungültige Minutenzahl") from exc
+
+        def switch_off() -> None:
+            if player.active():
+                player.control("stop")
+            current = self.context.state.snapshot().get("music", {})
+            if current.get("controls") == "spotify" and not current.get("paused"):
+                music.spotify_control("stop")
+            self.context.state.refresh_soon("music")
+
+        end = listening.set_sleep(minutes, str(body.get("label", ""))[:20], switch_off)
+        self.context.state.refresh_soon("music")
+        return {"ok": True, "sleep_end": int(end * 1000)}
+
+    def _get_music_recent(self, _params: QueryParams) -> dict[str, Any]:
+        self._guard_admin()
+        return {"ok": True, "results": listening.recent()}
+
+    def _post_pair_start(self, _body: dict[str, Any]) -> dict[str, Any]:
+        self._guard_admin()
+        return {"ok": True, **pairing.start(self._config())}
+
+    def _post_pair_cancel(self, _body: dict[str, Any]) -> dict[str, Any]:
+        self._guard_admin()
+        pairing.cancel()
+        return {"ok": True}
+
+    def _get_pair_status(self, _params: QueryParams) -> dict[str, Any]:
+        self._guard_admin()
+        return {"ok": True, **pairing.status(self._config())}
+
+    def _post_pair_claim(self, body: dict[str, Any]) -> dict[str, Any]:
+        if not pairing.claim(str(body.get("code", ""))[:12]):
+            raise RequestError(HTTPStatus.FORBIDDEN, "Code falsch oder abgelaufen; am Bildschirm einen neuen erzeugen")
+        LOGGER.info("Handy gekoppelt: %s", self.client_address[0])
+        return self._new_session()
+
+    def _get_system_info(self, _params: QueryParams) -> dict[str, Any]:
+        self._guard_admin()
+        try:
+            saved = time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(config_path().stat().st_mtime))
+        except OSError:
+            saved = ""
+        return {
+            "ok": True,
+            "version": __version__,
+            "uptime_seconds": int(time.monotonic() - self.context.started_at),
+            "config_saved": saved,
+            "backlight": display.backlight_available(),
+            "public_url": pairing.public_url(self._config()),
+            "remote": not self._loopback_client(),
+        }
+
+    def _post_display_power(self, body: dict[str, Any]) -> dict[str, Any]:
+        # Nur der Bildschirm selbst schaltet sein Licht (Nachtmodus).
+        if not self._loopback_client():
+            raise RequestError(HTTPStatus.FORBIDDEN, "Nur am Bildschirm selbst möglich")
+        return {"ok": True, "switched": display.set_backlight(bool(body.get("on", True)))}
 
     def _get_bluetooth(self, _params: QueryParams) -> dict[str, Any]:
         self._guard_admin()
@@ -621,8 +759,8 @@ class StorchHandler(BaseHTTPRequestHandler):
         try:
             url = hls_proxy.verified_url(_query_value(params, "u"), _query_value(params, "s"))
             if path == hls_proxy.PLAYLIST_PATH:
-                quality = self._config().get("stream", {}).get("quality", "auto")
-                body = hls_proxy.fetch_playlist(url, stream_source.max_height(quality))
+                stream = self._config().get("stream", {})
+                body = hls_proxy.fetch_playlist(url, stream_source.max_height(stream.get("quality", "auto")), int(stream.get("max_fps", 30)))
                 self._send_body(body, "application/vnd.apple.mpegurl", HTTPStatus.OK, head_only=head_only)
                 return
             upstream = hls_proxy.open_upstream(url, byte_range=hls_proxy.bounded_range(self.headers.get("Range", "")))

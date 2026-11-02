@@ -77,6 +77,34 @@ def _format_minutes(value: Any) -> str:
     return f"{minutes} min" if minutes < 60 else f"{minutes // 60}h {minutes % 60:02d}"
 
 
+# VRR-Verkehrsmittel: 0–2 Bahn, 3 U-Bahn, 4 Straßen-/Stadtbahn, 5 Bus, 6 Schwebebahn.
+TRAM_TYPES = {3, 4, 6}
+TRAIN_TYPES = {0, 1, 2}
+
+
+def vehicle(line: str, kind: Any) -> str:
+    """Art der Linie für Farbe und Form des Linienschilds: bus, tram, night oder train."""
+    try:
+        number = int(kind)
+    except (TypeError, ValueError):
+        number = -1
+    if line.upper().startswith("N") and number not in TRAM_TYPES | TRAIN_TYPES:
+        return "night"
+    if number in TRAM_TYPES:
+        return "tram"
+    if number in TRAIN_TYPES:
+        return "train"
+    return "bus"
+
+
+def _epoch(value: Any) -> int | None:
+    try:
+        number = int(float(value))
+    except (TypeError, ValueError):
+        return None
+    return number if number > 1_000_000_000 else None
+
+
 def short_name(name: str) -> str:
     """Nur den Haltestellennamen ohne Ort/Stadtteil: „Gellershagen, Altdorferstraße“ → „Altdorferstraße“."""
     clean = " ".join(str(name or "").split())
@@ -117,11 +145,13 @@ def _board(stop: dict[str, Any], default_max: int, target_len: int) -> dict[str,
     limit = int(stop.get("max_rows") or default_max)
     rows: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
+    lines: dict[str, str] = {}
     for departure in data.get("departureData", []):
         if not isinstance(departure, dict):
             continue
         line = str(departure.get("lineNumber") or departure.get("name") or "–").strip()
-        if not _matches_line(line, filters, nightbus):
+        lines.setdefault(line, vehicle(line, departure.get("type")))
+        if not _matches_line(line, filters, nightbus) or len(rows) >= limit:
             continue
         target = short_name(str(departure.get("direction") or departure.get("route") or "")) or "–"
         key = (line.casefold(), target.casefold())
@@ -131,9 +161,20 @@ def _board(stop: dict[str, Any], default_max: int, target_len: int) -> dict[str,
         if len(target) > target_len:
             target = target[: target_len - 1].rstrip() + "…"
         countdown = departure.get("countdown")
-        rows.append({"line": line, "target": target, "mins": _format_minutes(countdown), "minutes": _minutes(countdown)})
-        if len(rows) >= limit:
-            break
+        delay = _minutes(departure.get("delay"))
+        rows.append({
+            "line": line,
+            "target": target,
+            "mins": _format_minutes(countdown),
+            "minutes": _minutes(countdown),
+            "type": vehicle(line, departure.get("type")),
+            # Verspätung in Minuten (nur bei Echtzeitdaten), dazu Plan- und erwartete Abfahrt als Unix-Zeit.
+            "delay": delay if delay and delay > 0 else 0,
+            "realtime": bool(departure.get("isRealTime")),
+            "planned": _epoch(departure.get("orgFullTime")),
+            "at": _epoch(departure.get("fullTime")),
+            "platform": str(departure.get("platform") or "").strip()[:12],
+        })
     # Ohne eigenen Anzeigenamen (oder mit dem automatisch übernommenen Suchtreffer) zeigt die Tafel
     # den Haltestellennamen aus der VRR-Antwort; dort sind Ort und Haltestelle per Komma getrennt.
     custom = str(stop.get("title") or "").strip()
@@ -148,6 +189,9 @@ def _board(stop: dict[str, Any], default_max: int, target_len: int) -> dict[str,
         "station_name": station_name,
         "rows": rows,
         "hide_if_empty": bool(stop.get("hide_if_empty", True)),
+        "walk_minutes": int(stop.get("walk_minutes") or 0),
+        # Alle Linien dieser Haltestelle (auch gefilterte), für die Filterauswahl im Menü.
+        "lines": [{"line": name, "type": kind} for name, kind in sorted(lines.items(), key=lambda item: (len(item[0]), item[0]))][:24],
         "ok": True,
     }
 
@@ -175,6 +219,8 @@ def get_boards(config: dict[str, Any], *, force: bool = False) -> list[dict[str,
                 "station_name": str(stop.get("station_name", "")),
                 "rows": [],
                 "hide_if_empty": bool(stop.get("hide_if_empty", True)),
+                "walk_minutes": int(stop.get("walk_minutes") or 0),
+                "lines": [],
                 "ok": False,
                 "error": str(exc)[:160],
             }

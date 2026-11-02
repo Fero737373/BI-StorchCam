@@ -10,4 +10,7 @@ from bi_storchcam.defaults import DEFAULT_CONFIG
 
 @pytest.fixture
 def config() -> dict:
-    return validate_config(copy.deepcopy(DEFAULT_CONFIG))
+    # DWD-Warnungen fragen sonst im Hintergrund das Netz an; eigene Tests schalten sie gezielt ein.
+    raw = copy.deepcopy(DEFAULT_CONFIG)
+    raw["weather"]["warnings"] = "off"
+    return validate_config(raw)

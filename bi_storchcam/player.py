@@ -1,10 +1,12 @@
-"""YouTube Music playback on the Pi itself: mpv plays, yt-dlp resolves the audio streams.
+"""Playback on the Pi itself: YouTube Music (yt-dlp resolves the audio streams) and internet radio.
 
 mpv runs idle in the background and is driven over its JSON IPC socket. The queue lives
 here; yt-dlp turns each video ID into a stream URL with the YouTube Music session cookies
 (Premium quality, no ads). Resolving takes a few seconds on a Pi, so the next track is
 resolved in the background while the current one plays. Audio goes to PulseAudio/PipeWire,
-which routes it to a connected Bluetooth speaker.
+which routes it to a connected Bluetooth speaker. Radio stations play their stream address
+directly; the current song comes from the stream's ICY metadata, and a dropped stream is
+reconnected a few times before giving up.
 """
 
 from __future__ import annotations
@@ -32,7 +34,10 @@ QUEUE_LIMIT = 50
 RESTART_SECONDS = 5
 
 _lock = threading.RLock()
-_queue: dict[str, Any] = {"tracks": [], "index": -1, "loading": False, "error": ""}
+_queue: dict[str, Any] = {"tracks": [], "index": -1, "loading": False, "error": "", "kind": "ytmusic", "station": None}
+_radio = {"retries": 0}
+RADIO_RETRIES = 5
+RADIO_RETRY_SECONDS = 4
 _urls: dict[str, tuple[str, float]] = {}
 _mpv: dict[str, Any] = {"client": None}
 _volume = {"value": 100}
@@ -146,10 +151,24 @@ def _client() -> MpvClient:
 
 
 def _on_mpv_event(message: dict[str, Any]) -> None:
-    # Nur ein natürliches Songende schaltet weiter; „stop“ kommt auch beim Laden des nächsten Songs.
-    if message.get("event") == "end-file" and message.get("reason") in {"eof", "error"}:
-        LOGGER.info("Song zu Ende (%s), nächster folgt", message.get("reason"))
-        threading.Thread(target=_advance, args=(1,), name="player-next", daemon=True).start()
+    event = message.get("event")
+    if event == "file-loaded" and _queue["kind"] == "radio":
+        _radio["retries"] = 0
+    # Nur ein natürliches Ende zählt; „stop“ kommt auch beim Laden des nächsten Songs.
+    if event != "end-file" or message.get("reason") not in {"eof", "error"}:
+        return
+    if _queue["kind"] == "radio":
+        # Ein Radiostream endet nie von selbst: die Verbindung ist weg, also neu verbinden.
+        if _radio["retries"] < RADIO_RETRIES and _queue["tracks"]:
+            _radio["retries"] += 1
+            LOGGER.info("Radiostream abgerissen, Versuch %s von %s", _radio["retries"], RADIO_RETRIES)
+            threading.Timer(RADIO_RETRY_SECONDS, _load_radio).start()
+        else:
+            with _lock:
+                _queue["error"] = "Sender nicht erreichbar"
+        return
+    LOGGER.info("Song zu Ende (%s), nächster folgt", message.get("reason"))
+    threading.Thread(target=_advance, args=(1,), name="player-next", daemon=True).start()
 
 
 def cookie_file() -> Path:
@@ -201,6 +220,48 @@ def _prefetch(index: int) -> None:
             _stream_url(video_id)
         except PlayerError as exc:
             LOGGER.info("Nächsten Song nicht vorbereitet: %s", exc)
+
+
+def _load_radio() -> None:
+    with _lock:
+        tracks = _queue["tracks"]
+        if _queue["kind"] != "radio" or not tracks:
+            return
+        url = tracks[0]["url"]
+        _queue.update({"loading": True, "error": ""})
+    try:
+        client = _client()
+        client.command("loadfile", url, "replace")
+        client.command("set_property", "pause", False)
+    except PlayerError as exc:
+        with _lock:
+            _queue["error"] = str(exc)
+        LOGGER.warning("Radio lässt sich nicht abspielen: %s", exc)
+    finally:
+        with _lock:
+            _queue["loading"] = False
+
+
+def play_radio(station: dict[str, Any]) -> None:
+    url = str(station.get("url", ""))
+    if urlparse(url).scheme not in {"http", "https"}:
+        raise PlayerError("Ungültige Senderadresse")
+    track = {"videoId": "", "title": str(station.get("name") or "Radio"), "artist": "", "cover": "", "duration": 0, "url": url}
+    with _lock:
+        _queue.update({"tracks": [track], "index": 0, "loading": True, "error": "", "kind": "radio", "station": dict(station)})
+    _radio["retries"] = 0
+    threading.Thread(target=_load_radio, name="player-radio", daemon=True).start()
+
+
+def active() -> bool:
+    """Ob der Pi gerade etwas in der Warteschlange hat (ohne mpv zu fragen)."""
+    with _lock:
+        return bool(_queue["tracks"])
+
+
+def current_station() -> dict[str, Any] | None:
+    with _lock:
+        return dict(_queue["station"]) if _queue["kind"] == "radio" and _queue["tracks"] and _queue["station"] else None
 
 
 def _load(index: int) -> None:
@@ -362,7 +423,7 @@ def play(kind: str, identifier: str) -> None:
     if not tracks:
         raise PlayerError("Keine abspielbaren Songs gefunden")
     with _lock:
-        _queue.update({"tracks": tracks, "index": 0, "loading": True, "error": ""})
+        _queue.update({"tracks": tracks, "index": 0, "loading": True, "error": "", "kind": "ytmusic", "station": None})
     threading.Thread(target=_load, args=(0,), name="player-load", daemon=True).start()
 
 
@@ -389,6 +450,8 @@ def control(action: str, value: Any = None) -> None:
     client = _active_client()
     if action == "toggle":
         client.command("cycle", "pause")
+    elif action in {"next", "previous"} and _queue["kind"] == "radio":
+        raise PlayerError("Beim Radio wechseln Vor und Zurück den Lieblingssender")
     elif action == "next":
         threading.Thread(target=_advance, args=(1,), name="player-next", daemon=True).start()
     elif action == "previous":
@@ -399,7 +462,7 @@ def control(action: str, value: Any = None) -> None:
     elif action == "stop":
         client.command("stop")
         with _lock:
-            _queue.update({"tracks": [], "index": -1})
+            _queue.update({"tracks": [], "index": -1, "station": None})
     else:
         raise PlayerError("Unbekannte Aktion")
 
@@ -413,6 +476,8 @@ def now_playing() -> dict[str, Any] | None:
         return None
     track = tracks[index]
     running = bool(client and client.alive())
+    if _queue["kind"] == "radio":
+        return _radio_now(track, client if running else None, loading, error)
     if running and not loading and client.get("idle-active"):
         return None  # Warteschlange zu Ende gespielt
     paused = bool(client.get("pause")) if running else True
@@ -427,6 +492,42 @@ def now_playing() -> dict[str, Any] | None:
         "cover": track["cover"],
         "progress_ms": int(float(position or 0) * 1000),
         "duration_ms": int(float(duration or track["duration"] or 0) * 1000),
+        "paused": paused or loading,
+        "loading": loading,
+        "error": error,
+        "volume": _volume["value"],
+        "fetched_at": int(time.time() * 1000),
+    }
+
+
+def _icy_title(client: MpvClient | None, station_name: str) -> str:
+    """Aktueller Titel aus den ICY-Metadaten des Streams („Künstler - Titel“), sonst leer."""
+    if client is None:
+        return ""
+    metadata = client.get("metadata")
+    title = ""
+    if isinstance(metadata, dict):
+        title = str(metadata.get("icy-title") or "").strip()
+    if not title:
+        media = str(client.get("media-title") or "").strip()
+        title = "" if media.startswith(("http://", "https://")) or media == station_name else media
+    return " – ".join(part.strip() for part in title.split(" - ", 1)) if " - " in title else title
+
+
+def _radio_now(track: dict[str, Any], client: MpvClient | None, loading: bool, error: str) -> dict[str, Any]:
+    station = _queue["station"] or {}
+    paused = bool(client.get("pause")) if client else True
+    return {
+        "source": "radio",
+        "device": "pi",
+        "title": track["title"],
+        "artist": _icy_title(client, track["title"]) if not loading else "Verbinde …",
+        "album": "",
+        "cover": "",
+        "station": {key: station.get(key) for key in ("uuid", "name", "url", "country", "codec", "bitrate", "tags")},
+        "live": True,
+        "progress_ms": 0,
+        "duration_ms": 0,
         "paused": paused or loading,
         "loading": loading,
         "error": error,

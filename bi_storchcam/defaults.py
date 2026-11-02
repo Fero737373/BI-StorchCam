@@ -1,6 +1,6 @@
 """Safe production defaults for the one supported web-kiosk application."""
 
-CONFIG_SCHEMA_VERSION = 4
+CONFIG_SCHEMA_VERSION = 5
 
 DEFAULT_CONFIG = {
     "app": {
@@ -15,6 +15,10 @@ DEFAULT_CONFIG = {
         "port": 8000,
         "max_request_bytes": 262144,
         "admin_session_minutes": 30,
+        # Adresse, unter der Handys im Heimnetz den Pi erreichen (für den QR-Code); leer = automatisch.
+        "public_url": "",
+        # Mit PIN auch ohne neuen Kopplungscode vom Handy aus anmelden.
+        "lan_access": False,
     },
     "kiosk": {
         "enabled": True,
@@ -48,6 +52,15 @@ DEFAULT_CONFIG = {
         "muted": True,
         "autoplay": True,
         "quality": "auto",
+        # Höchste Bildrate im eigenen Player: 30 schont den Pi, 60 ist flüssiger.
+        "max_fps": 30,
+        # Ton der Kamera: aus, leise und aus bei Musik („duck“) oder an.
+        "audio": "off",
+        # Gemerkte Kameras; die Reihenfolge bestimmt den Ersatz bei Ausfall.
+        "favorites": [],
+        "auto_fallback": True,
+        # Notizen je Kamera-Adresse, erscheinen in der Kamera-Karte.
+        "notes": {},
     },
     "admin": {
         "pin_hash": "",
@@ -60,11 +73,18 @@ DEFAULT_CONFIG = {
     "music": {
         "source": "off",
         "spotify": {"client_id": ""},
+        "radio": {"favorites": []},
     },
     "ui": {
         "theme": "dark",
         "sky": "auto",
         "layout_profile": "auto",
+        # Leseabstand zum Bildschirm in Metern (1, 2 oder 3 und mehr); skaliert die Infoleiste.
+        "distance": 2,
+        # Infoleiste nach so vielen Sekunden ohne Berührung verkleinern (0 = nie).
+        "compact_after": 120,
+        "setup_done": False,
+        "night": {"enabled": False, "start": "23:00", "end": "06:00", "screen_off": False},
         "clock": {"enabled": True},
         "weather": {"enabled": True},
         "transit": {"enabled": False},
@@ -76,12 +96,16 @@ DEFAULT_CONFIG = {
         "forecast_hours": 8,
         "rain_mm_threshold": 0.1,
         "rain_probability_threshold": 45,
+        # Amtliche Warnungen des Deutschen Wetterdienstes (über Bright Sky) ab dieser Stufe zeigen.
+        "warnings": "moderate",
     },
     "transit": {
         "provider": "vrr",
         "refresh_seconds": 60,
         "default_max_rows": 2,
         "target_len": 16,
+        # Losgeh-Zeit (Abfahrt minus Gehzeit) statt Abfahrtszeit zeigen.
+        "leave_mode": True,
         "stops": [],
     },
     "logging": {

@@ -74,6 +74,11 @@ def test_master_playlist_keeps_pi_friendly_variants_and_rewrites_all_addresses()
     assert "googlevideo" not in text and "example.org" not in "".join(uris(text))
 
 
+def test_sixty_fps_only_when_allowed() -> None:
+    text = hls_proxy.rewrite_playlist(MASTER, "https://m.example.org/master.m3u8", max_height=1080, max_fps=60)
+    assert "FRAME-RATE=60" in text and len(uris(text)) == 3
+
+
 def test_lower_quality_setting_drops_bigger_variants() -> None:
     text = hls_proxy.rewrite_playlist(MASTER, "https://m.example.org/master.m3u8", max_height=720)
     assert [decoded(uri)[1] for uri in uris(text)] == ["https://m.example.org/hd720/index.m3u8"]

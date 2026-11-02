@@ -121,6 +121,8 @@ def test_ordinary_video_plays_as_file_within_pi_limits(monkeypatch: pytest.Monke
     assert full["expires"] == 1_900_000_000 and full["title"] == "Nestbau"
     small = stream_source.resolve("https://youtu.be/W2CicgFq5oo", now=1000, height_limit=720)
     assert small["kind"] == "file" and "h=720&c=avc1.640028" in small["upstream"]
+    smooth = stream_source.resolve("https://youtu.be/W2CicgFq5oo", now=1000, height_limit=720, fps_limit=60)
+    assert "h=720&c=avc1.64001f" in smooth["upstream"]
 
 
 def test_errors_and_videos_without_playable_formats_fall_back_to_embedding(monkeypatch: pytest.MonkeyPatch) -> None:

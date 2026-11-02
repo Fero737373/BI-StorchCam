@@ -80,6 +80,63 @@ def future_forecast(
     return selected
 
 
+def _number(values: list[Any], index: int) -> float | None:
+    try:
+        value = values[index]
+    except (IndexError, TypeError):
+        return None
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def hourly_series(hourly: dict[str, Any], timezone_name: str, hours: int = 25, now: datetime | None = None) -> list[dict[str, Any]]:
+    """Stunden ab der laufenden Stunde für den Wetterstreifen und die 24-Stunden-Ansicht."""
+    zone = ZoneInfo(timezone_name)
+    current = (now.astimezone(zone) if now else datetime.now(zone)).replace(minute=0, second=0, microsecond=0)
+    series: list[dict[str, Any]] = []
+    for index, raw_time in enumerate(hourly.get("time", [])):
+        try:
+            stamp = datetime.fromisoformat(str(raw_time))
+            stamp = stamp.replace(tzinfo=zone) if stamp.tzinfo is None else stamp.astimezone(zone)
+        except (TypeError, ValueError):
+            continue
+        if stamp < current:
+            continue
+        temp = _number(hourly.get("temperature_2m", []), index)
+        series.append({
+            "time": stamp.isoformat(),
+            "hour": stamp.hour,
+            "temp": round(temp) if temp is not None else None,
+            "probability": int(_number(hourly.get("precipitation_probability", []), index) or 0),
+            "rain_mm": round(_number(hourly.get("precipitation", []), index) or 0, 1),
+            "wind": round(_number(hourly.get("wind_speed_10m", []), index) or 0),
+            "code": int(_number(hourly.get("weather_code", []), index) or 0),
+            "is_day": bool(_number(hourly.get("is_day", []), index) if hourly.get("is_day") else 7 <= stamp.hour < 19),
+        })
+        if len(series) >= hours:
+            break
+    return series
+
+
+def sun_times(daily: dict[str, Any] | None, timezone_name: str) -> list[dict[str, str]]:
+    """Sonnenauf- und -untergang der nächsten Tage als ISO-Zeiten in der Ortszeit."""
+    if not isinstance(daily, dict):
+        return []
+    zone = ZoneInfo(timezone_name)
+    result: list[dict[str, str]] = []
+    for rise, sunset in zip(daily.get("sunrise", []) or [], daily.get("sunset", []) or [], strict=False):
+        try:
+            result.append({
+                "rise": datetime.fromisoformat(str(rise)).replace(tzinfo=zone).isoformat(),
+                "set": datetime.fromisoformat(str(sunset)).replace(tzinfo=zone).isoformat(),
+            })
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
 def is_rainy(item: dict[str, Any], cfg: dict[str, Any]) -> bool:
     mm_threshold = float(cfg.get("rain_mm_threshold", 0.1))
     probability_threshold = int(cfg.get("rain_probability_threshold", 45))
@@ -122,7 +179,8 @@ def get_weather(config: dict[str, Any], *, force: bool = False, now: datetime | 
         "latitude": str(location.get("latitude", 52.0302)),
         "longitude": str(location.get("longitude", 8.5325)),
         "current": "temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,is_day",
-        "hourly": "precipitation,precipitation_probability,weather_code",
+        "hourly": "temperature_2m,precipitation,precipitation_probability,weather_code,wind_speed_10m,is_day",
+        "daily": "sunrise,sunset",
         "forecast_days": "3",
         "timezone": timezone_name,
     }
@@ -152,6 +210,9 @@ def get_weather(config: dict[str, Any], *, force: bool = False, now: datetime | 
             "forecast": [
                 {**item, "time": item["time"].isoformat(), "rainy": is_rainy(item, weather)} for item in forecast
             ],
+            "hourly": hourly_series(hourly, timezone_name, 25, now),
+            "sun": sun_times(data.get("daily"), timezone_name),
+            "rain_threshold": int(weather.get("rain_probability_threshold", 45)),
             "updated_at": datetime.now(ZoneInfo(timezone_name)).isoformat(timespec="seconds"),
             "stale": False,
         }

@@ -20,13 +20,23 @@ from .defaults import CONFIG_SCHEMA_VERSION, DEFAULT_CONFIG
 
 LOGGER = logging.getLogger(__name__)
 
-THEMES = {"dark", "light", "high-contrast", "y2k", "dagobert"}
+# „auto“ wechselt nach Tageszeit zwischen hell und dunkel.
+THEMES = {"auto", "dark", "light", "high-contrast", "y2k", "dagobert", "flap", "paper", "plasma"}
 # Tag/Nacht der Bild-Themes (Y2K, Dagobert): automatisch nach Open-Meteo oder fest.
 SKY_MODES = {"auto", "day", "night"}
 MUSIC_SOURCES = {"off", "auto", "spotify", "ytmusic"}
 # Höchste Bildhöhe im eigenen Player; „auto“ bedeutet 1080p mit höchstens 30 Bildern pro Sekunde.
 STREAM_QUALITIES = {"auto", "1080", "720", "480"}
 LAYOUT_PROFILES = {"auto", "minimal", "standard", "information"}
+STREAM_AUDIO = {"off", "duck", "on"}
+WARNING_LEVELS = {"off", "minor", "moderate", "severe"}
+DISTANCES = {1, 2, 3}
+MAX_STREAM_FAVORITES = 12
+MAX_NOTED_CAMERAS = 40
+MAX_NOTES = 10
+MAX_RADIO_FAVORITES = 30
+CLOCK_TIME = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
+RADIO_ID = re.compile(r"[0-9a-fA-F-]{8,64}")
 UI_BLOCKS = ("clock", "weather", "transit", "system")
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 BROWSER_KINDS = {"auto", "chromium", "chrome", "edge"}
@@ -170,7 +180,7 @@ def _validate_stop(raw: Any, index: int, default_max: int) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ConfigError(f"{name} muss ein Objekt sein")
     allowed = {
-        "title", "station_name", "station_id", "line_filter", "nightbus_only", "hide_if_empty", "max_rows"
+        "title", "station_name", "station_id", "line_filter", "nightbus_only", "hide_if_empty", "max_rows", "walk_minutes"
     }
     _only(raw, allowed, name)
     filters = _string_list(raw.get("line_filter", []), f"{name}.line_filter muss eine Textliste sein")
@@ -186,6 +196,7 @@ def _validate_stop(raw: Any, index: int, default_max: int) -> dict[str, Any]:
         "nightbus_only": _bool(raw.get("nightbus_only", False), "nightbus_only"),
         "hide_if_empty": _bool(raw.get("hide_if_empty", True), "hide_if_empty"),
         "max_rows": _bounded_int(raw.get("max_rows", default_max), "max_rows", 1, 12),
+        "walk_minutes": _bounded_int(raw.get("walk_minutes", 0), f"{name}.walk_minutes", 0, 30),
     }
 
 
@@ -231,6 +242,15 @@ def migrate_config(raw: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         ui["theme"] = "dark"
     if ui.get("sky", "auto") not in SKY_MODES:
         ui["sky"] = "auto"
+    stream = migrated.get("stream")
+    if previous < 5:
+        # Neu in Version 5: Ton der Kamera, Leseabstand statt Layoutprofil, Einrichtung gilt mit Stream als erledigt.
+        if isinstance(stream, dict) and "audio" not in stream:
+            stream["audio"] = "off" if stream.get("muted", True) else "on"
+        if "distance" not in ui:
+            ui["distance"] = {"minimal": 1, "information": 3}.get(str(ui.get("layout_profile")), 2)
+        if isinstance(stream, dict) and str(stream.get("url", "")).strip():
+            ui.setdefault("setup_done", True)
     music = migrated.get("music")
     if isinstance(music, dict):
         music.pop("ytmusic", None)  # Google-Client der gesperrten Geräteanmeldung; YouTube Music meldet sich jetzt im Browser an.
@@ -266,8 +286,13 @@ def _validate_app(app: dict[str, Any]) -> None:
 
 
 def _validate_server(server: dict[str, Any]) -> None:
-    _only(server, {"host", "port", "max_request_bytes", "admin_session_minutes"}, "server")
+    _only(server, {"host", "port", "max_request_bytes", "admin_session_minutes", "public_url", "lan_access"}, "server")
+    public_url = _string(server["public_url"], "server.public_url", 200).rstrip("/")
+    if public_url and (urlparse(public_url).scheme not in {"http", "https"} or not urlparse(public_url).netloc):
+        raise ConfigError("server.public_url muss mit http:// oder https:// beginnen")
     server.update({
+        "public_url": public_url,
+        "lan_access": _bool(server["lan_access"], "server.lan_access"),
         "host": _validate_host(_string(server["host"], "server.host", 80)),
         "port": _bounded_int(server["port"], "server.port", 1024, 65535),
         "max_request_bytes": _bounded_int(server["max_request_bytes"], "server.max_request_bytes", 4096, 1048576),
@@ -326,16 +351,65 @@ def _validate_location(location: dict[str, Any]) -> None:
     })
 
 
+def _validate_favorite(raw: Any, index: int) -> dict[str, str]:
+    name = f"stream.favorites[{index}]"
+    if not isinstance(raw, dict):
+        raise ConfigError(f"{name} muss ein Objekt sein")
+    _only(raw, {"url", "title", "channel"}, name)
+    url = _validate_stream_url(_string(raw.get("url", ""), f"{name}.url", 2048))
+    if not url:
+        raise ConfigError(f"{name}.url fehlt")
+    return {
+        "url": url,
+        "title": _string(raw.get("title", ""), f"{name}.title", 160),
+        "channel": _string(raw.get("channel", ""), f"{name}.channel", 120),
+    }
+
+
+def _validate_notes(raw: Any) -> dict[str, list[str]]:
+    if not isinstance(raw, dict) or len(raw) > MAX_NOTED_CAMERAS:
+        raise ConfigError(f"stream.notes muss ein Objekt mit höchstens {MAX_NOTED_CAMERAS} Kameras sein")
+    notes: dict[str, list[str]] = {}
+    for key, values in raw.items():
+        url = _validate_stream_url(_string(key, "Kamera-Adresse der Notiz", 2048))
+        items = _string_list(values, "Notizen müssen eine Textliste sein")
+        if len(items) > MAX_NOTES:
+            raise ConfigError(f"Höchstens {MAX_NOTES} Notizen je Kamera")
+        cleaned = [_string(item, "Notiz", 90) for item in items if item.strip()]
+        if url and cleaned:
+            notes[url] = cleaned
+    return notes
+
+
 def _validate_stream(stream: dict[str, Any]) -> None:
-    _only(stream, {"url", "muted", "autoplay", "quality"}, "stream")
+    _only(stream, {"url", "muted", "autoplay", "quality", "max_fps", "audio", "favorites", "auto_fallback", "notes"}, "stream")
+    if stream["max_fps"] not in (30, 60) or isinstance(stream["max_fps"], bool):
+        raise ConfigError("stream.max_fps muss 30 oder 60 sein")
     quality = str(stream["quality"])
     if quality not in STREAM_QUALITIES:
         raise ConfigError("stream.quality muss auto, 1080, 720 oder 480 sein")
+    audio = str(stream["audio"])
+    if audio not in STREAM_AUDIO:
+        raise ConfigError("stream.audio muss off, duck oder on sein")
+    favorites = stream["favorites"]
+    if not isinstance(favorites, list) or len(favorites) > MAX_STREAM_FAVORITES:
+        raise ConfigError(f"stream.favorites muss eine Liste mit höchstens {MAX_STREAM_FAVORITES} Einträgen sein")
+    unique: list[dict[str, str]] = []
+    for index, raw in enumerate(favorites):
+        favorite = _validate_favorite(raw, index)
+        if favorite["url"] not in {item["url"] for item in unique}:
+            unique.append(favorite)
     stream.update({
         "url": _validate_stream_url(_string(stream["url"], "stream.url", 2048)),
-        "muted": _bool(stream["muted"], "stream.muted"),
+        # „muted“ bleibt für ältere Oberflächen erhalten und folgt dem Ton der Kamera.
+        "muted": audio == "off",
         "autoplay": _bool(stream["autoplay"], "stream.autoplay"),
         "quality": quality,
+        "max_fps": int(stream["max_fps"]),
+        "audio": audio,
+        "favorites": unique,
+        "auto_fallback": _bool(stream["auto_fallback"], "stream.auto_fallback"),
+        "notes": _validate_notes(stream["notes"]),
     })
 
 
@@ -358,8 +432,31 @@ def _validate_youtube(youtube: dict[str, Any]) -> None:
     })
 
 
+def _validate_station(raw: Any, index: int) -> dict[str, Any]:
+    name = f"music.radio.favorites[{index}]"
+    if not isinstance(raw, dict):
+        raise ConfigError(f"{name} muss ein Objekt sein")
+    _only(raw, {"uuid", "name", "url", "country", "codec", "bitrate", "tags"}, name)
+    uuid = _string(raw.get("uuid", ""), f"{name}.uuid", 64)
+    if not RADIO_ID.fullmatch(uuid):
+        raise ConfigError(f"{name}.uuid ist ungültig")
+    url = _string(raw.get("url", ""), f"{name}.url", 1024)
+    if urlparse(url).scheme not in {"http", "https"}:
+        raise ConfigError(f"{name}.url muss eine HTTP- oder HTTPS-Adresse sein")
+    tags = _string_list(raw.get("tags", []), f"{name}.tags muss eine Textliste sein")
+    return {
+        "uuid": uuid,
+        "name": _string(raw.get("name", ""), f"{name}.name", 120) or "Radiosender",
+        "url": url,
+        "country": _string(raw.get("country", ""), f"{name}.country", 80),
+        "codec": _string(raw.get("codec", ""), f"{name}.codec", 20),
+        "bitrate": _bounded_int(raw.get("bitrate", 0), f"{name}.bitrate", 0, 10000),
+        "tags": [_string(tag, "Sender-Stichwort", 40) for tag in tags[:8] if tag.strip()],
+    }
+
+
 def _validate_music(music: dict[str, Any]) -> None:
-    _only(music, {"source", "spotify"}, "music")
+    _only(music, {"source", "spotify", "radio"}, "music")
     source = _string(music["source"], "music.source", 10)
     if source not in MUSIC_SOURCES:
         raise ConfigError("Ungültige music.source")
@@ -367,14 +464,43 @@ def _validate_music(music: dict[str, Any]) -> None:
     client_id = _string(music["spotify"]["client_id"], "music.spotify.client_id", 64).strip()
     if client_id and not re.fullmatch(r"[A-Za-z0-9]+", client_id):
         raise ConfigError("Die Spotify-Client-ID enthält ungültige Zeichen")
+    _only(music["radio"], {"favorites"}, "music.radio")
+    stations = music["radio"]["favorites"]
+    if not isinstance(stations, list) or len(stations) > MAX_RADIO_FAVORITES:
+        raise ConfigError(f"Höchstens {MAX_RADIO_FAVORITES} Lieblingssender")
+    favorites: list[dict[str, Any]] = []
+    for index, raw in enumerate(stations):
+        station = _validate_station(raw, index)
+        if station["uuid"] not in {item["uuid"] for item in favorites}:
+            favorites.append(station)
     music.update({
         "source": source,
         "spotify": {"client_id": client_id},
+        "radio": {"favorites": favorites},
     })
 
 
 def _validate_ui(ui: dict[str, Any]) -> None:
-    _only(ui, {"theme", "sky", "layout_profile", *UI_BLOCKS}, "ui")
+    _only(ui, {"theme", "sky", "layout_profile", "distance", "compact_after", "setup_done", "night", *UI_BLOCKS}, "ui")
+    distance = _bounded_int(ui["distance"], "ui.distance", 1, 3)
+    night = ui["night"]
+    if not isinstance(night, dict):
+        raise ConfigError("ui.night muss ein Objekt sein")
+    _only(night, {"enabled", "start", "end", "screen_off"}, "ui.night")
+    for key in ("start", "end"):
+        if not CLOCK_TIME.fullmatch(str(night[key])):
+            raise ConfigError(f"ui.night.{key} muss eine Uhrzeit wie 23:00 sein")
+    ui.update({
+        "distance": distance,
+        "compact_after": _bounded_int(ui["compact_after"], "ui.compact_after", 0, 3600),
+        "setup_done": _bool(ui["setup_done"], "ui.setup_done"),
+        "night": {
+            "enabled": _bool(night["enabled"], "ui.night.enabled"),
+            "start": str(night["start"]),
+            "end": str(night["end"]),
+            "screen_off": _bool(night["screen_off"], "ui.night.screen_off"),
+        },
+    })
     theme = _string(ui["theme"], "ui.theme", 30)
     sky = _string(ui["sky"], "ui.sky", 10)
     if sky not in SKY_MODES:
@@ -393,9 +519,11 @@ def _validate_ui(ui: dict[str, Any]) -> None:
 
 
 def _validate_weather(weather: dict[str, Any]) -> None:
-    _only(weather, {"provider", "refresh_seconds", "forecast_hours", "rain_mm_threshold", "rain_probability_threshold"}, "weather")
+    _only(weather, {"provider", "refresh_seconds", "forecast_hours", "rain_mm_threshold", "rain_probability_threshold", "warnings"}, "weather")
     if _string(weather["provider"], "weather.provider", 40) != "openmeteo":
         raise ConfigError("Derzeit wird nur der Wetterprovider openmeteo unterstützt")
+    if weather["warnings"] not in WARNING_LEVELS:
+        raise ConfigError("weather.warnings muss off, minor, moderate oder severe sein")
     weather.update({
         "provider": "openmeteo",
         "refresh_seconds": _bounded_int(weather["refresh_seconds"], "weather.refresh_seconds", 60, 3600),
@@ -406,7 +534,7 @@ def _validate_weather(weather: dict[str, Any]) -> None:
 
 
 def _validate_transit(transit: dict[str, Any]) -> None:
-    _only(transit, {"provider", "refresh_seconds", "default_max_rows", "target_len", "stops"}, "transit")
+    _only(transit, {"provider", "refresh_seconds", "default_max_rows", "target_len", "leave_mode", "stops"}, "transit")
     if _string(transit["provider"], "transit.provider", 40) != "vrr":
         raise ConfigError("Derzeit wird nur der ÖPNV-Provider vrr unterstützt")
     default_max = _bounded_int(transit["default_max_rows"], "transit.default_max_rows", 1, 12)
@@ -418,6 +546,7 @@ def _validate_transit(transit: dict[str, Any]) -> None:
         "refresh_seconds": _bounded_int(transit["refresh_seconds"], "transit.refresh_seconds", 15, 3600),
         "default_max_rows": default_max,
         "target_len": _bounded_int(transit["target_len"], "transit.target_len", 8, 80),
+        "leave_mode": _bool(transit["leave_mode"], "transit.leave_mode"),
         "stops": [_validate_stop(stop, index, default_max) for index, stop in enumerate(stops)],
     })
 
@@ -446,6 +575,8 @@ def validate_config(raw: dict[str, Any]) -> dict[str, Any]:
     _validate_location(cfg["location"])
     _validate_stream(cfg["stream"])
     _validate_admin(cfg["admin"], cfg["server"]["host"])
+    if cfg["server"]["lan_access"] and not cfg["admin"]["pin_hash"]:
+        raise ConfigError("Zugriff aus dem Heimnetz braucht zuerst eine Admin-PIN")
     _validate_youtube(cfg["youtube"])
     _validate_music(cfg["music"])
     _validate_ui(cfg["ui"])

@@ -24,7 +24,7 @@ QUALITIES = {"auto": 1080, "1080": 1080, "720": 720, "480": 480}
 YOUTUBE_HOSTS = {"youtube.com", "youtube-nocookie.com", "music.youtube.com"}
 # H.264 zuerst (überall flott), VP9 als Ausweg; AV1 ist für den Pi in Software zu schwer.
 FILE_CODECS = {"avc1": 2, "vp09": 1, "vp9": 1}
-MAX_FILE_FPS = 30.5
+FPS_LIMITS = {30, 60}
 
 _cache: dict[str, dict[str, Any]] = {}
 _cache_lock = threading.Lock()
@@ -89,7 +89,7 @@ def _hls_address(formats: list[dict[str, Any]]) -> str:
     return str(best.get("manifest_url") or best.get("url") or "")
 
 
-def _file_format(formats: list[dict[str, Any]], height_limit: int) -> dict[str, Any] | None:
+def _file_format(formats: list[dict[str, Any]], height_limit: int, fps_limit: int = 30) -> dict[str, Any] | None:
     """Für Videos ohne HLS: die beste einzelne Videodatei, die der Pi flüssig abspielt (stumm, Ton ist egal)."""
     candidates = []
     for fmt in formats:
@@ -102,12 +102,12 @@ def _file_format(formats: list[dict[str, Any]], height_limit: int) -> dict[str, 
             and fmt.get("protocol") in {"https", "http"}
             and fmt.get("ext") in {"mp4", "webm"}
             and 0 < height <= height_limit
-            and fps <= MAX_FILE_FPS
+            and fps <= fps_limit + 0.5
         ):
-            candidates.append((rank, height, float(fmt.get("tbr") or 0), fmt))
+            candidates.append((rank, height, fps, float(fmt.get("tbr") or 0), fmt))
     if not candidates:
         return None
-    return max(candidates, key=lambda item: item[:3])[3]
+    return max(candidates, key=lambda item: item[:4])[4]
 
 
 def _describe(live_status: str) -> str:
@@ -118,7 +118,7 @@ def _describe(live_status: str) -> str:
     }.get(live_status, "YouTube liefert für dieses Video keine abspielbare Datei")
 
 
-def _youtube_source(video_id: str, height_limit: int) -> dict[str, Any]:
+def _youtube_source(video_id: str, height_limit: int, fps_limit: int) -> dict[str, Any]:
     import yt_dlp  # type: ignore[import-untyped]  # erst hier laden: groß und nur für YouTube nötig
 
     options = {
@@ -149,13 +149,13 @@ def _youtube_source(video_id: str, height_limit: int) -> dict[str, Any]:
     if playlist:
         return {"kind": "hls", "upstream": playlist, **details}
     if live_status not in {"is_live", "is_upcoming"}:
-        chosen = _file_format(formats, height_limit)
+        chosen = _file_format(formats, height_limit, fps_limit)
         if chosen:
             return {"kind": "file", "upstream": str(chosen["url"]), **details}
     raise StreamError(f"{_describe(live_status)} ({len(formats)} Formate gefunden)")
 
 
-def resolve(url: str, *, refresh: bool = False, now: float | None = None, height_limit: int = 1080) -> dict[str, Any]:
+def resolve(url: str, *, refresh: bool = False, now: float | None = None, height_limit: int = 1080, fps_limit: int = 30) -> dict[str, Any]:
     """``{"kind": "hls"|"file", "upstream", "expires", ...}``, ``{"kind": "embed", "reason"}`` oder ``{"kind": "none"}``.
 
     ``file`` ist ein normales Video ohne HLS (kein Livestream); der Kiosk spielt es als Schleife.
@@ -169,14 +169,14 @@ def resolve(url: str, *, refresh: bool = False, now: float | None = None, height
     video_id = youtube_id(clean)
     if not video_id:
         return {"kind": "embed", "reason": "Diese Adresse ist weder YouTube noch HLS und wird eingebettet"}
-    key = f"{video_id}:{height_limit}"
+    key = f"{video_id}:{height_limit}:{fps_limit}"
     with _resolve_lock:
         with _cache_lock:
             cached = _cache.get(key)
         if cached and not refresh and cached["expires"] - REFRESH_MARGIN > current:
             return dict(cached)
         try:
-            result: dict[str, Any] = _youtube_source(video_id, height_limit)
+            result: dict[str, Any] = _youtube_source(video_id, height_limit, fps_limit if fps_limit in FPS_LIMITS else 30)
         except StreamError as exc:
             LOGGER.warning("Stream %s läuft eingebettet: %s", video_id, exc)
             return {"kind": "embed", "reason": str(exc)}
