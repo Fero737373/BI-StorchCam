@@ -4,15 +4,15 @@
 
 - `GET /api/health`: Version, Uptime und State-Readiness
 - `GET /api/state`: letzter In-Memory-Snapshot ohne neue Providerabfrage
-- `GET /api/admin/status`: lokaler PIN-/Sessionstatus
+- `GET /api/admin/status`: PIN-/Sessionstatus, dazu `remote` (Anfrage kommt nicht vom Bildschirm selbst) und `pin_login` (PIN-Anmeldung erlaubt)
 - `POST /api/admin/setup`: einmaliges lokales PIN-Setup
 - `POST /api/admin/login`: zeitlich begrenzte Admin-Session
 - `GET /api/config`: validierte, redigierte Konfiguration; nach Setup authentifiziert
 - `POST /api/config/save`: authentifizierter, größenbegrenzter Schreibzugriff
 - `GET /api/station/search`: authentifizierte VRR-Suche
 - `GET /api/live/search?q=`: Live-Streams auf YouTube
-- `GET /api/stream/source`: wie der Kiosk den Stream abspielt: `{kind: "hls", url, title, channel, expires_in}` für den eigenen Player, `{kind: "embed", reason}` oder `{kind: "none"}`. `refresh=1` holt eine frische Adresse; `url=` probiert eine noch nicht gespeicherte Adresse aus (nur im Menü)
-- `GET /api/stream/hls/playlist?u=&s=` und `GET /api/stream/hls/segment?u=&s=`: reichen Playlists und Segmente der Quelle durch. Nur Adressen mit gültiger HMAC-Signatur aus einer zuvor ausgelieferten Playlist werden abgerufen; der Schlüssel entsteht bei jedem Start neu
+- `GET /api/stream/source`: wie der Kiosk den Stream abspielt: `{kind: "hls"|"file", url, title, channel, live, expires_in}` für den eigenen Player (`file` = normales Video in Schleife), `{kind: "embed", reason}` oder `{kind: "none"}`. `refresh=1` holt eine frische Adresse; `url=` probiert eine andere Adresse aus: Favoriten darf der Kiosk selbst (Ersatz bei Ausfall), alles andere nur das Menü
+- `GET /api/stream/hls/playlist?u=&s=` und `GET /api/stream/hls/segment?u=&s=`: reichen Playlists und Segmente der Quelle durch. Nur Adressen mit gültiger HMAC-Signatur aus einer zuvor ausgelieferten Playlist werden abgerufen; der Schlüssel entsteht bei jedem Start neu. Das Segment-Endpunkt reicht `Range` weiter (offene Bereiche in 10-MB-Stücken) und antwortet mit 206, damit Videodateien springen und in Schleife laufen
 - `GET /api/location/search?q=`: Adress- und Ortssuche weltweit
 - `GET /api/location/timezone?lat=&lon=`: Zeitzone zu Koordinaten
 - `POST /api/music/spotify/authorize` (Admin): startet die Spotify-Anmeldung (Authorization Code mit PKCE) und liefert die Login-Adresse
@@ -24,11 +24,23 @@
 - `POST /api/music/ytmusic/disconnect` (Admin): löscht den gespeicherten YouTube-Music-Zugang
 - `POST /api/player/search` (Admin): `{service: "ytmusic"|"spotify", query}` → Treffer mit `kind`, `id`, `title`, `subtitle`, `cover`
 - `POST /api/player/playlists` (Admin): `{service}` → eigene Playlists (YouTube-Music-Bibliothek inkl. „Liked Music“ bzw. Spotify `/me/playlists`), Format wie bei der Suche
-- `POST /api/player/play` (Admin): `{service, kind, id}` startet die Wiedergabe auf dem Pi; es spielt immer nur ein Dienst
-- `POST /api/player/control` (Admin; vom Pi selbst auch ohne Anmeldung für die Knöpfe der Songkarte): `{target: "pi"|"spotify", action: "toggle"|"next"|"previous"|"stop"|"volume", value}`
+- `POST /api/player/play` (Admin): `{service, kind, id, title?, subtitle?, cover?}` startet die Wiedergabe auf dem Pi und merkt sie für „Weiterhören“; es spielt immer nur ein Dienst
+- `POST /api/radio/search` (Admin): `{query, filter}` → Sender aus Radio Browser (`filter`: `news`, `pop`, `rock`, `jazz`, `klassik`, `de`; ohne Suchwort die beliebtesten)
+- `POST /api/radio/play` (Admin): `{station}` spielt den Sender über mpv auf dem Pi, meldet das Abspielen an Radio Browser und merkt ihn für „Weiterhören“
+- `POST /api/player/sleep` (Admin; vom Bildschirm selbst auch ohne Anmeldung): `{minutes, label}` schaltet die Musik nach der Zeit aus, `0` hebt den Timer auf; das Ende steht als `sleep_end` (ms) im Musik-Zustand
+- `GET /api/music/recent` (Admin): zuletzt gehört über alle Quellen
+- `POST /api/pair/start`, `GET /api/pair/status`, `POST /api/pair/cancel` (Admin): Kopplungscode fürs Handy (6 Ziffern, 10 Minuten, einmalig) mit Link und QR-Code als SVG-Daten-URI
+- `POST /api/pair/claim` (ohne Anmeldung): `{code}` → Sitzung wie nach einer PIN-Anmeldung; nach fünf falschen Versuchen verfällt der Code
+- `GET /api/system/info` (Admin): Version, Laufzeit, letzte Sicherung der Konfiguration, ob die Hintergrundbeleuchtung schaltbar ist, Adresse im Heimnetz
+- `POST /api/display/power` (nur vom Bildschirm selbst): `{on}` schaltet die Hintergrundbeleuchtung für den Nachtmodus
+- `POST /api/player/control` (Admin; vom Pi selbst auch ohne Anmeldung für die Knöpfe der Songkarte): `{target: "pi"|"spotify", action: "toggle"|"next"|"previous"|"stop"|"volume", value}`; beim Radio wechseln `next` und `previous` den Lieblingssender
 - `GET /api/music/spotify/pair`, `POST /api/music/spotify/pair`, `POST /api/music/spotify/unpair` (Admin): Pi als Spotify-Lautsprecher koppeln (Kopplungsadresse und QR-Code) bzw. die Kopplung löschen
 - `GET /api/bluetooth` (Admin): Adapter, Audiogeräte und laufende Aktion; ohne Adapter `available: false` mit Fehlertext
 - `POST /api/bluetooth/scan`, `/connect`, `/disconnect`, `/remove` (Admin): `{mac}`; laufen im Hintergrund, der Fortschritt steht in `GET /api/bluetooth`
+
+`GET /api/state` enthält neben Wetter (`hourly` für 25 Stunden ab der laufenden Stunde, `sun` mit Auf- und Untergang), Abfahrten (`delay`, `type` = `bus`/`tram`/`night`/`train`, `at`/`planned` als Unix-Zeit, `walk_minutes` je Haltestelle) und Musik auch `warnings` (DWD) und `health` (je Quelle `ok`, `checked_at`, `last_ok`, `error`, `interval`) für die Übersicht im Menü.
+
+Zugriff: Der Bildschirm selbst (Loopback) darf ohne PIN alles, wenn keine PIN verlangt ist. Andere Geräte brauchen immer eine Sitzung, entweder über einen Kopplungscode vom Bildschirm oder, wenn `server.lan_access` an ist, über die PIN.
 
 Fehler werden als JSON mit passenden HTTP-Statuscodes ausgegeben. Tracebacks werden nicht an den Browser übertragen.
 
@@ -37,8 +49,11 @@ Fehler werden als JSON mit passenden HTTP-Statuscodes ausgegeben. Tracebacks wer
 - Open-Meteo: aktuelles Wetter und stündliche Zukunft ab der konfigurierten Zeitzone
 - Nominatim (OpenStreetMap): Adress- und Ortssuche, Rückfall auf Open-Meteo-Geocoding
 - YouTube: Live-Suche über die öffentliche Suchseite oder optional die Data API v3
-- YouTube-Livestream im eigenen Player: yt-dlp liefert die HLS-Master-Playlist (googlevideo, gültig einige Stunden, Ablauf steht in der Adresse). Der Proxy entfernt Varianten über `stream.quality` und über 30 Bilder pro Sekunde, hls.js wählt aus dem Rest passend zur Leitung. Der Player holt zehn Minuten vor Ablauf eine neue Adresse, startet ein pausiertes Video sofort wieder und baut die Verbindung nach 20 Sekunden ohne neues Bild neu auf; nach fünf Fehlversuchen fällt er auf die Einbettung zurück
-- VRR-Haltestellenmonitor: Suche und Abfahrten in der VRR-Region
+- YouTube-Livestream im eigenen Player: yt-dlp liefert die HLS-Master-Playlist (googlevideo, gültig einige Stunden, Ablauf steht in der Adresse). Der Proxy entfernt Varianten über `stream.quality` und über `stream.max_fps` (Standard 30 Bilder pro Sekunde), hls.js wählt aus dem Rest passend zur Leitung. Der Player holt zehn Minuten vor Ablauf eine neue Adresse, startet ein pausiertes Video sofort wieder und baut die Verbindung nach 20 Sekunden ohne neues Bild neu auf; nach fünf Fehlversuchen wechselt er zum nächsten Favoriten (wenn `stream.auto_fallback` an ist und Favoriten gemerkt sind), sonst auf die Einbettung
+- VRR-Haltestellenmonitor: Suche und Abfahrten in der VRR-Region; je Abfahrt Verkehrsmittel (`type`), Verspätung (`delay`) und Plan- bzw. erwartete Zeit (`orgFullTime`/`fullTime`)
+- Bright Sky (`/alerts?lat=&lon=`): amtliche Warnungen des Deutschen Wetterdienstes für die Gemeinde des Orts, alle zehn Minuten; außerhalb Deutschlands antwortet die API mit 404, dann zeigt der Kiosk nichts
+- Radio Browser: Sendersuche über einen per DNS (`all.api.radio-browser.info`) gefundenen Server, Rückfall auf feste Server; jedes Abspielen wird wie gewünscht über `/json/url/<uuid>` gemeldet. mpv spielt die Senderadresse direkt, der Titel kommt aus den ICY-Metadaten des Streams; reißt der Stream ab, verbindet mpv bis zu fünfmal neu
+- YouTube-Videos ohne HLS (kein Livestream): yt-dlp liefert die Formatliste, die App nimmt die beste einzelne Videodatei in H.264 (sonst VP9) bis zur eingestellten Höhe und Bildrate; der Kiosk spielt sie stumm in Schleife
 - Spotify Web API: aktueller Song (`/me/player/currently-playing`), Suche, Wiedergabe und Steuerung (`/me/player/...`); der Refresh-Token liegt in `spotify_token.json` neben der `config.json` (Dateirechte 600). Für Steuerung und eigene Playlists braucht die Verbindung die Rechte `user-read-playback-state`, `user-modify-playback-state`, `playlist-read-private` und `playlist-read-collaborative`; ältere Verbindungen im Menü einmal neu verbinden
 - Spotify auf dem Pi: librespot 0.8 (aus raspotify 0.48.3) läuft als Spotify-Connect-Lautsprecher „StorchCam“ mit PulseAudio-Ausgabe. Gekoppelt wird per Gerätecode (`--enable-device-auth`, Adresse spotify.com/pair); die Zugangsdaten liegen in `librespot/` neben der `config.json`. Abgespielt wird über die Web API mit `device_id` dieses Lautsprechers
 - YouTube Music auf dem Pi: mpv (JSON-IPC) spielt die Audio-Streams, die yt-dlp mit den YouTube-Music-Cookies auflöst; yt-dlp braucht dafür die JavaScript-Laufzeit Deno. Ein Song startet das passende Radio, Alben und Playlists laufen als Warteschlange

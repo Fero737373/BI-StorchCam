@@ -1,35 +1,37 @@
 # BI-StorchCam
 
-BI-StorchCam ist ein leichtgewichtiger lokaler Web-Kiosk für einen Livestream mit Uhr, Wetter und optionalen VRR-Abfahrten. Der Livestream füllt den ganzen Bildschirm; alle Zusatzinformationen liegen in einer Infoleiste am unteren Rand.
+BI-StorchCam ist ein leichtgewichtiger lokaler Web-Kiosk für eine beliebige Live-Cam mit Uhr, Wetter, Unwetterwarnungen, optionalen VRR-Abfahrten und Musik (Radio, YouTube Music, Spotify). Die Kamera füllt den ganzen Bildschirm; alle Zusatzinformationen liegen in einer Infoleiste am unteren Rand.
 
-> **Status:** `0.2.0-beta.1`. Der Quellstand ist für einen ersten Beta-Test gehärtet.
+Wie die Oberfläche aussieht und sich bedienen lässt, zeigt die klickbare Vorschau in [docs/vorschau/](docs/vorschau/).
+
+> **Status:** `0.3.0-beta.1`. Neue Oberfläche, Radio, Warnungen und Kopplung fürs Handy; vor einer stabilen Version steht der Test auf dem Pi aus.
 
 ## Screenshots
 
-Die automatisierten UI-Tests erzeugen bei Fehlern Screenshots für 1024×600, 1280×720 und 1920×1080. Referenzbilder mit Mock-Daten (alle Profile, Themes und Fehlerzustände) entstehen auf Wunsch:
-
-```bash
-SCREENSHOT_DIR=/tmp/storchcam-shots npx playwright test -g "reference screenshots"
-```
-
-Produktive Referenzscreenshots werden nach dem ersten bestandenen Pi-Hardwaretest ergänzt.
+Die automatisierten UI-Tests prüfen die Anzeige bei 800×480, 1024×600, 1280×720, 1920×1080 und im Hochformat und speichern bei Fehlern Screenshots. Produktive Referenzscreenshots werden nach dem ersten bestandenen Pi-Hardwaretest ergänzt.
 
 ## Funktionen
 
 - eine einzige Web-Kiosk-Architektur und ein zentraler Einstiegspunkt
-- vollflächiger Livestream im eigenen Player: YouTube- und HLS-Quellen laufen in einem video-Element ohne YouTube-Bedienelemente; Antippen, Menü und Dialoge halten das Bild nicht an, bei Aussetzern bleibt das letzte Bild stehen und der Player verbindet sich selbst neu. Andere Seiten werden wie bisher eingebettet
-- Infoleiste unten aus Milchglas: Uhr mit Datum und Systemzeile, Wetter mit Stundenleiste der Regenwahrscheinlichkeit und die nächsten drei Abfahrten
-- Layoutprofile `minimal`, `standard`, `information` und Viewport-Auswahl über `auto`; ausgeschaltete Blöcke verschwinden samt Trenner
-- Themes `dark`, `light`, `high-contrast`, alle Texte mit mindestens 4,5:1 Kontrast, dazu `y2k` mit Wolken am Tag und Sternenhimmel bei Nacht sowie `dagobert` im Comic-Stil (Geldspeicher, fallende Taler, Sternenhimmel)
+- vollflächiger Livestream im eigenen Player: YouTube-Livestreams und HLS-Quellen laufen über hls.js, normale YouTube-Videos als stumme Schleife, beides in einem video-Element ohne YouTube-Bedienelemente. Antippen, Menü und Dialoge halten das Bild nicht an, bei Aussetzern bleibt das letzte Bild stehen und der Player verbindet sich selbst neu. Andere Seiten werden wie bisher eingebettet
+- Kamera-Favoriten: Die Reihenfolge bestimmt den Ersatz, wenn eine Kamera ausfällt; die App wechselt zurück, sobald die erste wieder läuft. Notizen je Kamera erscheinen in der Kamera-Karte (Antippen auf den Kamera-Hinweis oben links)
+- Infoleiste unten: Uhr mit Datum und Statuszeile, Wetter mit Streifen für die nächsten Stunden (Temperaturkurve, Regenbalken, Regenschwelle, Sonnenauf- und -untergang) und die nächsten Abfahrten als Losgeh-Zeit (Abfahrt minus Gehzeit) mit Verspätung und Linienform nach Verkehrsmittel. Antippen öffnet Wetter für 24 Stunden bzw. alle Abfahrten. Nach einer einstellbaren Zeit ohne Berührung wird die Leiste zur schmalen Kompaktleiste; Wischen nach unten verkleinert oder blendet sie aus, nach oben holt sie zurück
+- amtliche Unwetterwarnungen des Deutschen Wetterdienstes über Bright Sky, ab einstellbarer Stufe
+- Leseabstand (etwa 1 m, 2 m, 3 m und mehr) statt Layoutprofilen; die Anzeige passt sich außerdem Hoch- und Querformat an
+- Themes `auto` (hell am Tag, dunkel nachts), `dark`, `light`, `high-contrast`, `y2k` mit Wolken am Tag und Sternenhimmel bei Nacht, `dagobert` im Comic-Stil, `flap` (Fallblatt mit umklappenden Ziffern), `paper` (ruhig wie E-Ink) und `plasma` (dunkles Industrieblau mit wanderndem Lichtstrahl)
+- Nachtmodus mit Zeitplan: dimmt den Bildschirm oder schaltet, wo das System es erlaubt, die Hintergrundbeleuchtung ab; Antippen weckt ihn für fünf Minuten. Einbrennschutz: die Leiste wandert alle drei Minuten um einen Pixel
+- kleine Animationen (gleitende Auswahl, federnde Schalter, Wellen beim Antippen, Equalizer, Platzhalter beim Laden), nur über `transform` und `opacity`; bei „reduzierte Bewegung“ aus
 - Schrift Barlow lokal eingebunden (SIL OFL 1.1), funktioniert offline
 - Open-Meteo-Wetter ab der aktuellen Uhrzeit, Regenstunden nach den konfigurierten Schwellen
 - mehrere VRR-Haltestellen mit Linien- und Nachtbusfiltern; Abfahrten aller Haltestellen nach Minuten sortiert
 - Menü-Knopf oben links (oder `Ctrl+Alt+S`) mit Touch-Oberfläche und Bildschirmtastatur
 - Livestream-Auswahl aus allem, was gerade auf YouTube live ist, ohne API-Schlüssel
 - weltweite Ortssuche; Uhr und Wetter folgen der Zeitzone des Orts
-- aktueller Song oben rechts mit Cover und Fortschritt: Spotify direkt, YouTube Music per Google-Anmeldung am Bildschirm
-- Musik abspielen (Menü „Abspielen“): YouTube Music oder Spotify durchsuchen oder eigene Playlists wählen und auf dem Pi abspielen, mit Pause/Weiter/Lautstärke im Menü und auf der Songkarte (klein nur Cover und Titel, antippen für groß mit Bedienung); Ton über Bluetooth-Lautsprecher (Suchen, Koppeln, Trennen im Menü). Braucht YouTube Premium bzw. Spotify Premium; ohne Bluetooth-Adapter zeigt das Menü einen Fehler
-- im Docker-Betrieb ohne PIN, sonst PBKDF2-gehashte PIN und zeitlich begrenzte Admin-Sessions
+- Musik auf einer Seite: Internetradio (Sendersuche über die freie Radio-Browser-Datenbank, Wiedergabe über mpv, aktueller Titel aus dem Stream), YouTube Music und Spotify. Oben läuft, was spielt, mit Lautstärke, Ausgabe und Ausschalt-Timer (15, 30, 60 Minuten oder bis zum Nachtmodus); darunter „Weiterhören“ über alle Quellen, Lieblingssender bzw. Playlists und eine Suche mit Filtern. Vor und Zurück wechseln beim Radio den Lieblingssender
+- Songkarte oben rechts: klein nur Bild und Titel, antippen für groß mit Bedienung; beim Radio Sendername, „Jetzt: Künstler – Titel“ und Equalizer statt Fortschritt. YouTube Music und Spotify brauchen Premium; Ton über Bluetooth-Lautsprecher (Suchen, Koppeln, Trennen im Menü)
+- Einrichtung beim ersten Start in drei Schritten: Kamera, Ort, Haltestellen
+- am Handy einstellen: Menü → „Am Handy“ zeigt QR-Code und sechsstelligen Code (10 Minuten gültig, einmalig); danach steht das ganze Menü am Handy zur Verfügung
+- im Docker-Betrieb am Bildschirm ohne PIN, Geräte im Heimnetz nur mit Kopplungscode oder PIN; sonst PBKDF2-gehashte PIN und zeitlich begrenzte Admin-Sessions
 - Hintergrund-State ohne Provideraufrufe pro Browseranfrage
 - überwachte Chromium-, Chrome- oder Edge-Prozesse mit begrenztem Backoff
 - atomische Konfiguration mit letzter Sicherung
@@ -43,6 +45,8 @@ BI-StorchCam läuft als Docker-Container (getestet auf Raspberry Pi OS / Debian 
 ## Bekannte Einschränkungen
 
 - YouTube-Livestreams löst die App mit yt-dlp in eine HLS-Adresse auf (braucht im Container Deno, siehe Dockerfile). Ändert YouTube etwas, das yt-dlp noch nicht kennt, fällt die App auf die Einbettung zurück; ein Update von yt-dlp behebt das meist. Das Abspielen außerhalb des YouTube-Players weicht von den YouTube-Nutzungsbedingungen ab; für den privaten Kiosk ist das eine bewusste Entscheidung.
+- Die Hintergrundbeleuchtung lässt sich nur schalten, wenn `/sys/class/backlight/*/bl_power` beschreibbar ist; im Container meist nicht. Dann dimmt der Nachtmodus nur das Bild.
+- DWD-Warnungen gibt es nur für Orte in Deutschland.
 - Andere Stream-Plattformen kann die App nur einbetten; sie können das per CSP oder `X-Frame-Options` blockieren. Ein geladenes `iframe` wird deshalb nicht als bestätigte Wiedergabe bezeichnet.
 - ÖPNV basiert aktuell auf dem VRR-Haltestellenmonitor. Andere Regionen werden nicht allgemein als unterstützt beworben.
 - Wayland-Displayrotation wird nicht automatisch verändert. Hardwareprofile wenden Rotation nur sicher unter X11 an.
@@ -51,7 +55,7 @@ BI-StorchCam läuft als Docker-Container (getestet auf Raspberry Pi OS / Debian 
 
 ## Externe Dienste
 
-Für Live-Daten benötigt BI-StorchCam Netzwerkzugriff zu YouTube und googlevideo.com (Livestream über den lokalen Proxy), Open-Meteo (Wetter, Ortssuche, Zeitzone), Nominatim/OpenStreetMap (Adresssuche), dem VRR-Haltestellenmonitor, für die Musikanzeige zu Spotify bzw. YouTube Music (Google) und für die Livestream-Suche zu YouTube (öffentliche Suchseite bzw. YouTube Data API, Vorschaubilder von i.ytimg.com). Der Stream benötigt Zugriff auf die konfigurierte Streamdomain. Die App enthält keine Cloud-Benutzerverwaltung und sendet keine lokale PIN.
+Für Live-Daten benötigt BI-StorchCam Netzwerkzugriff zu YouTube und googlevideo.com (Livestream über den lokalen Proxy), Open-Meteo (Wetter, Ortssuche, Zeitzone), Nominatim/OpenStreetMap (Adresssuche), dem VRR-Haltestellenmonitor, Bright Sky (DWD-Warnungen), der Radio-Browser-Datenbank und den Streams der gewählten Radiosender, für die Musikanzeige zu Spotify bzw. YouTube Music (Google) und für die Livestream-Suche zu YouTube (öffentliche Suchseite bzw. YouTube Data API, Vorschaubilder von i.ytimg.com). Der Stream benötigt Zugriff auf die konfigurierte Streamdomain. Die App enthält keine Cloud-Benutzerverwaltung und sendet keine lokale PIN.
 
 ## Docker
 
@@ -62,7 +66,16 @@ mkdir -p data
 docker compose up -d --build
 ```
 
-Mehr ist nicht nötig: kein API-Schlüssel, keine PIN. Der Container startet Server und Chromium-Kiosk; die Anzeige erscheint im Vollbild direkt auf dem angeschlossenen Bildschirm. Zusätzlich ist sie auf dem Gerät selbst unter `http://localhost:8080` erreichbar (bewusst nicht aus dem Netzwerk, weil das Menü keine PIN hat).
+Mehr ist nicht nötig: kein API-Schlüssel, keine PIN. Der Container startet Server und Chromium-Kiosk; die Anzeige erscheint im Vollbild direkt auf dem angeschlossenen Bildschirm. Zusätzlich ist sie auf dem Gerät selbst unter `http://localhost:8080` erreichbar; außer dem Bildschirm selbst braucht jedes Gerät dafür einen Kopplungscode aus dem Menü („Am Handy“).
+
+Für „Am Handy“ muss der Port im Heimnetz erreichbar sein. Dafür in einer `.env` neben `docker-compose.yml` eintragen und neu starten:
+
+```bash
+BI_STORCHCAM_BIND=0.0.0.0
+BI_STORCHCAM_PUBLIC_URL=http://fero.local:8080
+```
+
+`BI_STORCHCAM_PUBLIC_URL` ist die Adresse, unter der Handys den Pi erreichen (Hostname oder IP-Adresse, Port 8080); sie steht im QR-Code. Alternativ lässt sie sich im Menü unter „Am Handy“ eintragen.
 
 Nach Codeänderungen immer mit `--build` starten, sonst läuft das alte Image weiter.
 
@@ -80,6 +93,8 @@ Optionale Umgebungsvariablen (z. B. in einer `.env` neben `docker-compose.yml`):
 | `YOUTUBE_API_KEY` | nutzt für die Live-Suche die offizielle YouTube-API statt der öffentlichen Suchseite |
 | `BI_STORCHCAM_KIOSK=0` | nur Server, kein Browser auf dem Bildschirm |
 | `BI_STORCHCAM_REQUIRE_PIN=1` + `BI_STORCHCAM_ADMIN_PIN` | Menü wieder mit PIN schützen |
+| `BI_STORCHCAM_BIND=0.0.0.0` | Port 8080 im Heimnetz freigeben (für „Am Handy“); Standard nur `127.0.0.1` |
+| `BI_STORCHCAM_PUBLIC_URL` | Adresse des Pi im Heimnetz für den QR-Code, z. B. `http://fero.local:8080` |
 
 Diagnoseoptionen laufen ebenfalls im Container, z. B. `docker compose run --rm bi-storchcam --test-weather`.
 
@@ -87,13 +102,15 @@ Ohne Docker: `python -m pip install -e .` und `python -m bi_storchcam --no-brows
 
 ## Menü
 
-Der Knopf oben links öffnet das Menü. Alles ist per Touch bedienbar, Texteingaben laufen über die eingebaute Bildschirmtastatur.
+Der Knopf oben links (oder `Ctrl+Alt+S`) öffnet das Menü als Seitenpanel; die Kamera bleibt daneben sichtbar und läuft weiter, auf schmalen Bildschirmen als kleines Bild in der Ecke. Jede Änderung wirkt und speichert sofort; ein Hinweis zeigt zehn Sekunden lang „Rückgängig“. Texteingaben laufen am Bildschirm über die eingebaute Bildschirmtastatur.
 
-- **Livestream:** zeigt Streams, die gerade auf YouTube live sind (Start mit „Storch“, Suchwort frei wählbar). Antippen spielt den Stream sofort ab. Ohne Schlüssel liest die App die öffentliche YouTube-Suche mit dem Filter „Live“; ändert YouTube diese Seite, kann die Suche ausfallen, bis die App angepasst ist. Manche Kanäle verbieten das Einbetten; dann zeigt der Player einen Hinweis.
+- **Livestream:** was gerade läuft, Bildqualität, Bildrate (30 oder 60 Bilder pro Sekunde), Ton der Kamera (aus, leise und aus bei Musik, an), Favoriten mit Reihenfolge und automatischem Ersatz, Notizen zur Kamera und die Suche nach Streams, die gerade auf YouTube live sind. Antippen spielt sofort, der Stern merkt den Stream als Favorit. Unter „Eigene Adresse“ lassen sich YouTube-Links, HLS-Adressen oder Webseiten eintragen.
 - **Ort:** weltweite Suche nach Adresse, Straße oder Ort (Nominatim/OpenStreetMap, Rückfall auf Open-Meteo). Antippen übernimmt Name, Koordinaten und Zeitzone; Uhr und Wetter folgen.
-- **Anzeige:** Layoutprofil, Theme, sichtbare Blöcke.
-- **ÖPNV:** Haltestellen, derzeit nur im VRR (Nordrhein-Westfalen).
-- **System:** optionaler YouTube-API-Schlüssel und Start-Suchwort.
+- **Anzeige:** Theme mit Vorschau, Tag/Nacht für Y2K und Dagobert, Leseabstand, Blöcke der Infoleiste, Zeit bis zur Kompaktleiste, Unwetterwarnungen und Nachtmodus.
+- **ÖPNV:** Losgeh-Zeit an oder aus, je Haltestelle Gehzeit und Linienfilter; Haltestellen derzeit nur im VRR (Nordrhein-Westfalen).
+- **Musik:** Wiedergabe, Radio, YouTube Music und Spotify; unter „Konten und Lautsprecher“ Anmeldungen, Spotify auf dem Pi und Bluetooth.
+- **System:** Zustand der Datenquellen (Zustand, letzte Antwort, Abfrageintervall), optionaler YouTube-API-Schlüssel, Start-Suchwort und „Einrichtung erneut starten“.
+- **Am Handy:** QR-Code und Kopplungscode, Adresse des Pi im Heimnetz und ob ein Handy sich auch mit PIN anmelden darf.
 
 ## Adminzugriff außerhalb von Docker
 
@@ -130,6 +147,8 @@ BI-StorchCam verarbeitet Standort, Stream-URL und Haltestellen lokal. Externe An
 - Wetter: [Open-Meteo](https://open-meteo.com/)
 - Adresssuche: [Nominatim](https://nominatim.org/), Daten © [OpenStreetMap-Mitwirkende](https://www.openstreetmap.org/copyright)
 - ÖPNV: VRR-Haltestellenmonitor
+- Unwetterwarnungen: [Deutscher Wetterdienst](https://www.dwd.de/) über [Bright Sky](https://brightsky.dev/)
+- Radiosender: [Radio Browser](https://www.radio-browser.info/), Community-Datenbank
 
 - Videoplayer: [hls.js](https://github.com/video-dev/hls.js) 1.7.3, Apache-2.0, liegt unter `bi_storchcam/web/vendor/`
 

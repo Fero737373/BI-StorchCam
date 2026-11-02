@@ -1,166 +1,63 @@
 "use strict";
 
+/* BI-StorchCam Live-Cam-Kiosk.
+   Kamera im eigenen Player, Infoleiste mit Uhr, Wetter und Abfahrten, Songkarte oben rechts und ein Menü als
+   Seitenpanel. Änderungen im Menü werden sofort gespeichert und lassen sich 10 Sekunden lang rückgängig machen.
+   Die CSP verbietet Inline-Styles im HTML; Farben kommen über Klassen und CSS-Variablen, Maße über CSSOM. */
+
+const $ = (selector, root = document) => root.querySelector(selector);
+const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const byId = (id) => document.getElementById(id);
-const elements = {
-  body: document.body,
-  live: byId("live"),
-  video: byId("liveVideo"),
-  freeze: byId("streamFreeze"),
-  stage: byId("stage"),
-  streamNotice: byId("streamNotice"),
-  streamNoticeText: byId("streamNoticeText"),
-  streamEmpty: byId("streamEmpty"),
-  streamStatus: byId("streamStatus"),
-  streamStatusText: byId("streamStatusText"),
-  streamEmptyTitle: byId("streamEmptyTitle"),
-  streamEmptyText: byId("streamEmptyText"),
-  infobar: byId("infobar"),
-  clockbar: byId("clockbar"),
-  clockMain: byId("clockMain"),
-  clock: byId("clock"),
-  date: byId("date"),
-  weather: byId("weather"),
-  weatherText: byId("weatherText"),
-  weatherIcon: byId("weatherIcon"),
-  weatherTemp: byId("weatherTemp"),
-  weatherCondition: byId("weatherCondition"),
-  weatherDetails: byId("weatherDetails"),
-  weatherError: byId("weatherError"),
-  rainLabel: byId("rainLabel"),
-  rainSummary: byId("rainSummary"),
-  rainHours: byId("rainHours"),
-  sysbar: byId("sysbar"),
-  sys: byId("sys"),
-  transitPanel: byId("transitPanel"),
-  boards: byId("boards"),
-  hotspot: byId("adminHotspot"),
-  pinDialog: byId("pinDialog"),
-  pinForm: byId("pinForm"),
-  pinTitle: byId("pinTitle"),
-  pinHelp: byId("pinHelp"),
-  pin: byId("adminPin"),
-  pinConfirm: byId("adminPinConfirm"),
-  pinConfirmField: byId("pinConfirmField"),
-  pinStatus: byId("pinStatus"),
-  submitPin: byId("submitPin"),
-  settings: byId("settingsDialog"),
-  settingsForm: byId("settingsForm"),
-  saveState: byId("saveState"),
-  stopEditor: byId("stopEditor"),
-  stationResults: byId("stationResults"),
-  stationSearchStatus: byId("stationSearchStatus"),
-  toast: byId("toast"),
-  settingsShell: document.querySelector(".settings-shell"),
-  liveQuery: byId("liveQuery"),
-  liveStatus: byId("liveStatus"),
-  liveResults: byId("liveResults"),
-  liveCurrent: byId("liveCurrent"),
-  placeQuery: byId("placeQuery"),
-  placeStatus: byId("placeStatus"),
-  placeResults: byId("placeResults"),
-  placeCurrent: byId("placeCurrent"),
-  youtubeKeyState: byId("youtubeKeyState"),
-  osk: byId("osk"),
-  nowPlaying: byId("nowPlaying"),
-  npCover: byId("npCover"),
-  npTitle: byId("npTitle"),
-  npArtist: byId("npArtist"),
-  npProgress: byId("npProgress"),
-  npBar: byId("npBar"),
-  npTime: byId("npTime"),
-  npOpen: byId("npOpen"),
-  npControls: byId("npControls"),
-  npToggle: byId("npToggle"),
-  npVolume: byId("npVolume"),
-  npVolumeRow: byId("npVolumeRow"),
-  playerNow: document.querySelector(".player-now"),
-  playerCover: byId("playerCover"),
-  playerTitle: byId("playerTitle"),
-  playerArtist: byId("playerArtist"),
-  playerToggle: byId("playerToggle"),
-  playerVolume: byId("playerVolume"),
-  playerQuery: byId("playerQuery"),
-  playerStatus: byId("playerStatus"),
-  playerResults: byId("playerResults"),
-  playerPlaylists: byId("playerPlaylists"),
-  playlistStatus: byId("playlistStatus"),
-  btState: byId("btState"),
-  btStatus: byId("btStatus"),
-  btDevices: byId("btDevices"),
-  spPairState: byId("spPairState"),
-  spPairStatus: byId("spPairStatus"),
-  spPairBox: byId("spPairBox"),
-  musicNow: byId("musicNow"),
-  spotifyState: byId("spotifyState"),
-  spotifyStatus: byId("spotifyStatus"),
-  ytState: byId("ytState"),
-  ytStatus: byId("ytStatus"),
-};
-
-let token = sessionStorage.getItem("bi-storchcam-admin-token") || "";
-let setupMode = false;
-let currentConfig = null;
-let workingStops = [];
-let dirty = false;
-let lastTrigger = null;
-let streamSignature = "";
-let toastTimer = null;
-let runtimeTimezone = "Europe/Berlin";
-let youtubeKeySet = false;
-let spotifyConnected = false;
-let ytConnected = false;
-let ytPollTimer = null;
-let nowPlaying = null;
-let menuTab = "live";
-let playerService = "";
-let npCloseTimer = null;
-let btPollTimer = null;
-let pairPollTimer = null;
-let pendingTimezone = "";
-let liveTitle = "";
-let liveLoadedOnce = false;
-let oskTarget = null;
-let oskShift = false;
-let runtimeConfig = null;
-let lastState = null;
-let backendDown = false;
-let streamView = { state: "loading", full: "Lokales Backend wird geladen", card: null };
-
-const NARROW_WIDTH = 760;
-const RAIN_NOW_CODES = new Set([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99]);
 const SVG_NS = "http://www.w3.org/2000/svg";
-// Wettersymbole im 24er-Raster; Farben kommen über Klassen aus dem CSS (CSP erlaubt keine Inline-Styles).
-const CLOUD = "M7 18.5h10.5a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.4 11.1 3.7 3.7 0 0 0 7 18.5z";
-const SUN_RAYS = "M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4";
-const SMALL_SUN = '<g class="wi-sun"><circle cx="7" cy="7" r="2.4"/><path d="M7 1.8v1.3M1.8 7h1.3M3.3 3.3l.9.9M10.7 3.3l-.9.9M3.3 10.7l.9-.9"/></g>';
-const SMALL_MOON = '<path class="wi-moon" d="M10.2 8.6A3.6 3.6 0 1 1 5.4 3.8a2.9 2.9 0 0 0 4.8 4.8z"/>';
-const WEATHER_ICONS = {
-  sun: `<g class="wi-sun"><circle cx="12" cy="12" r="4"/><path d="${SUN_RAYS}"/></g>`,
-  moon: '<path class="wi-moon" d="M19 14.6A7.5 7.5 0 1 1 9.4 5a6 6 0 0 0 9.6 9.6z"/>',
-  partly: `${SMALL_SUN}<path class="wi-cloud" transform="translate(1.5 2)" d="${CLOUD}"/>`,
-  "partly-night": `${SMALL_MOON}<path class="wi-cloud" transform="translate(1.5 2)" d="${CLOUD}"/>`,
-  cloudy: `<path class="wi-cloud" d="${CLOUD}"/>`,
-  fog: `<path class="wi-cloud" transform="translate(0 -4)" d="${CLOUD}"/><path class="wi-fog" d="M4.5 18.5h15M6.5 21.5h11"/>`,
-  rain: `<path class="wi-cloud" transform="translate(0 -4)" d="${CLOUD}"/><path class="wi-drop" d="M8.5 17.5l-1 3M12.5 17.5l-1 3M16.5 17.5l-1 3"/>`,
-  showers: `${SMALL_SUN}<path class="wi-cloud" transform="translate(1.5 1.5)" d="${CLOUD}"/><path class="wi-drop" d="M11 21l-.7 2.2M15.5 21l-.7 2.2"/>`,
-  "showers-night": `${SMALL_MOON}<path class="wi-cloud" transform="translate(1.5 1.5)" d="${CLOUD}"/><path class="wi-drop" d="M11 21l-.7 2.2M15.5 21l-.7 2.2"/>`,
-  snow: `<path class="wi-cloud" transform="translate(0 -4)" d="${CLOUD}"/><path class="wi-snow" d="M8.5 18.5h.01M12 20.5h.01M15.5 18.5h.01M10 22h.01M14 22h.01"/>`,
-  thunder: `<path class="wi-cloud" transform="translate(0 -4)" d="${CLOUD}"/><path class="wi-bolt" d="M12.8 15.5l-2.6 3.8h3.4l-2.4 3.7"/>`,
-};
-const ERROR_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9.5"/><path d="M12 7v6.2M12 16.8h.01"/></svg>';
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function el(tag, className = "", text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined && text !== null) node.textContent = String(text);
+  return node;
+}
+
+function icon(id, className = "i") {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("class", className);
+  svg.setAttribute("aria-hidden", "true");
+  const use = document.createElementNS(SVG_NS, "use");
+  use.setAttribute("href", `#${id}`);
+  svg.append(use);
+  return svg;
+}
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+function capitalize(text) {
+  const value = String(text || "");
+  return value ? value[0].toLocaleUpperCase("de-DE") + value.slice(1) : value;
 }
+
+function hue(text) {
+  let sum = 0;
+  for (const character of String(text || "")) sum = (sum * 31 + character.codePointAt(0)) % 360;
+  return sum;
+}
+
+function initials(name) {
+  const words = String(name || "?").replace(/[^\p{L}\p{N} ]/gu, " ").split(/\s+/).filter(Boolean);
+  if (!words.length) return "?";
+  if (words.length === 1) return words[0].slice(0, 3).toLocaleUpperCase("de-DE");
+  return (words[0][0] + (/\d/.test(words[1]) ? words[1].slice(0, 2) : words[1][0])).toLocaleUpperCase("de-DE");
+}
+
+/* ---------- Zustand ---------- */
+let token = sessionStorage.getItem("bi-storchcam-admin-token") || "";
+let runtime = null;          // öffentliche Laufzeitkonfiguration aus /api/state
+let lastState = null;        // letzter Zustand vom Server
+let currentConfig = null;    // vollständige Konfiguration (nur mit Menüzugang)
+const meta = { youtubeKeySet: false, spotifyConnected: false, ytConnected: false, remote: false, pinLogin: true, backlight: false };
+let backendDown = false;
+let booted = false;
 
 async function api(path, options = {}) {
   const headers = new Headers(options.headers || {});
@@ -176,158 +73,874 @@ async function api(path, options = {}) {
   if (!response.ok) {
     const error = new Error(payload.error || `HTTP ${response.status}`);
     error.status = response.status;
+    if (response.status === 401 && token) {
+      token = "";
+      sessionStorage.removeItem("bi-storchcam-admin-token");
+    }
     throw error;
   }
   return payload;
 }
 
+const post = (path, body = {}) => api(path, { method: "POST", body: JSON.stringify(body) });
+
 function setStatus(target, text, kind = "") {
+  if (!target) return;
   target.textContent = text;
   target.classList.remove("error", "success");
   if (kind) target.classList.add(kind);
 }
 
-function showToast(text) {
-  elements.toast.textContent = text;
-  elements.toast.classList.remove("hidden");
+/* ---------- Zeit in der Zeitzone des Orts ---------- */
+const tz = () => runtime?.timezone || "Europe/Berlin";
+const FORMATS = {};
+function formatter(key, options) {
+  const id = `${key}|${tz()}`;
+  FORMATS[id] = FORMATS[id] || new Intl.DateTimeFormat("de-DE", { ...options, timeZone: tz() });
+  return FORMATS[id];
+}
+const fmtTime = (value) => formatter("time", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+const fmtDate = (value) => formatter("date", { weekday: "long", day: "numeric", month: "long" }).format(new Date(value));
+function hourOf(value) {
+  const part = formatter("hour", { hour: "numeric", hourCycle: "h23" }).formatToParts(new Date(value)).find((item) => item.type === "hour");
+  return Number(part?.value ?? 0);
+}
+function minutesOfDay(value = Date.now()) {
+  const parts = formatter("hm", { hour: "numeric", minute: "numeric", hourCycle: "h23" }).formatToParts(new Date(value));
+  const get = (type) => Number(parts.find((item) => item.type === type)?.value ?? 0);
+  return get("hour") * 60 + get("minute");
+}
+function ago(iso) {
+  const stamp = Date.parse(iso || "");
+  if (!Number.isFinite(stamp)) return "–";
+  const seconds = Math.max(0, Math.round((Date.now() - stamp) / 1000));
+  if (seconds < 60) return `vor ${seconds} Sek.`;
+  if (seconds < 3600) return `vor ${Math.round(seconds / 60)} Min.`;
+  return `vor ${Math.floor(seconds / 3600)} Std. ${Math.round((seconds % 3600) / 60)} Min.`;
+}
+function every(seconds) {
+  if (!seconds) return "–";
+  return seconds < 60 ? `${seconds} Sek.` : seconds < 3600 ? `${Math.round(seconds / 60)} Min.` : `${Math.round(seconds / 3600)} Std.`;
+}
+function isDaytime() {
+  const weather = lastState?.weather;
+  if (weather?.ok && typeof weather.is_day === "boolean") return weather.is_day;
+  const hour = hourOf(Date.now());
+  return hour >= 7 && hour < 19;
+}
+
+/* ---------- Hinweis mit Rückgängig ---------- */
+let toastTimer = null;
+function toast(text, undo) {
+  const box = byId("toast");
+  byId("toastText").textContent = text;
+  const button = byId("toastUndo");
+  button.hidden = !undo;
+  button.onclick = undo ? async () => { box.hidden = true; await undo(); } : null;
+  const wasHidden = box.hidden;
+  box.hidden = false;
+  if (wasHidden && !reduceMotion) box.animate([{ opacity: 0, transform: "translate(-50%, 16px) scale(.96)" }, { opacity: 1, transform: "translate(-50%, 0)" }], { duration: 380, easing: "cubic-bezier(.34,1.56,.64,1)" });
+  const check = byId("toastCheck");
+  check.classList.remove("draw");
+  void check.getBoundingClientRect();
+  check.classList.add("draw");
+  const duration = undo ? 10000 : 3500;
+  const bar = byId("toastBar");
+  bar.getAnimations().forEach((animation) => animation.cancel());
+  if (!reduceMotion) bar.animate([{ transform: "scaleX(1)" }, { transform: "scaleX(0)" }], { duration, easing: "linear", fill: "forwards" });
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => elements.toast.classList.add("hidden"), 3500);
+  toastTimer = setTimeout(() => { box.hidden = true; }, duration);
 }
 
-function isMinimal() {
-  return elements.body.dataset.layout === "minimal";
-}
-
-function isNarrow() {
-  return window.innerWidth < NARROW_WIDTH;
-}
-
-function updateClock() {
-  const now = new Date();
-  // Uhr und Datum in der Zeitzone des gewählten Orts, nicht der des Geräts.
-  const timeZone = runtimeTimezone;
-  elements.clock.textContent = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit", timeZone }).format(now);
-  const weekday = isMinimal() ? "short" : "long";
-  elements.date.textContent = new Intl.DateTimeFormat("de-DE", { weekday, day: "numeric", month: "long", timeZone }).format(now);
-}
-
-function formatTime(iso) {
-  if (!iso) return "";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: runtimeTimezone }).format(date);
-}
-
-function hourOf(iso) {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "–";
-  const parts = new Intl.DateTimeFormat("de-DE", { hour: "numeric", hourCycle: "h23", timeZone: runtimeTimezone }).formatToParts(date);
-  return String(Number(parts.find((part) => part.type === "hour")?.value ?? NaN));
-}
-
-function updateInfobar() {
-  const ui = runtimeConfig?.ui || {};
-  const showClock = !!ui.clock?.enabled;
-  const showSystem = !!ui.system?.enabled;
-  elements.clockMain.classList.toggle("hidden", !showClock);
-  elements.sysbar.classList.toggle("hidden", !showSystem);
-  const blocks = [
-    // Lange Datumsangaben („Donnerstag, 30. September“) dürfen die Uhrspalte über die Mindestbreite hinaus verbreitern.
-    [elements.clockbar, showClock || showSystem, "minmax(var(--col-clock), max-content)"],
-    [elements.weather, !!ui.weather?.enabled, "minmax(0, 1fr)"],
-    [elements.transitPanel, !!ui.transit?.enabled, "var(--col-transit)"],
-  ];
-  const tracks = [];
-  blocks.forEach(([block, visible, track]) => {
-    block.classList.toggle("hidden", !visible);
-    const separator = block.previousElementSibling?.classList.contains("ib-sep") ? block.previousElementSibling : null;
-    separator?.classList.add("hidden");
-    if (!visible) return;
-    if (tracks.length && separator) {
-      separator.classList.remove("hidden");
-      tracks.push("1px");
-    }
-    tracks.push(track);
-  });
-  // Ohne Wetterspalte gibt es keine flexible Spalte; dann wächst die letzte sichtbare.
-  if (!ui.weather?.enabled && tracks.length) tracks[tracks.length - 1] = `minmax(${tracks.at(-1)}, 1fr)`;
-  elements.infobar.classList.toggle("hidden", !tracks.length);
-  elements.body.classList.toggle("no-infobar", !tracks.length);
-  elements.infobar.style.gridTemplateColumns = tracks.join(" ");
-}
-
-function resolveLayout(requested) {
-  if (requested !== "auto") return requested;
-  if (window.innerWidth < 1150 || window.innerHeight < 650) return "minimal";
-  if (window.innerWidth >= 1700 && window.innerHeight >= 850) return "information";
-  return "standard";
-}
-
-function applyRuntimeConfig(runtime) {
-  if (!runtime || !runtime.ui) return;
-  const ui = runtime.ui;
-  runtimeConfig = runtime;
-  runtimeTimezone = runtime.timezone || runtime.app?.timezone || "Europe/Berlin";
-  elements.body.dataset.theme = ui.theme || "dark";
-  applySky(lastState?.weather);
-  const layout = resolveLayout(ui.layout_profile || "auto");
-  if (elements.body.dataset.layout !== layout) {
-    elements.body.dataset.layout = layout;
-    updateClock();
-  }
-  updateInfobar();
-  configureStream(runtime.stream || {});
-}
-
-function effectiveStreamUrl(stream) {
-  const raw = String(stream.url || "").trim();
-  if (!raw) return "";
+/* Jede Änderung im Menü: sofort speichern, Anzeige anpassen, 10 Sekunden „Rückgängig“ anbieten. */
+async function saveConfig(mutate, label, { undo = true, quiet = false } = {}) {
+  if (!currentConfig) await loadConfig();
+  const before = clone(currentConfig);
+  const next = clone(currentConfig);
+  mutate(next);
   try {
-    const url = new URL(raw);
-    url.searchParams.set("autoplay", stream.autoplay ? "1" : "0");
-    url.searchParams.set("mute", stream.muted ? "1" : "0");
-    url.searchParams.set("playsinline", "1");
-    return url.toString();
-  } catch (_error) {
-    return raw;
+    const result = await post("/api/config/save", { config: next });
+    adoptConfig(result.config);
+  } catch (error) {
+    toast(`Nicht gespeichert: ${error.message}`);
+    syncSheet();
+    return false;
+  }
+  byId("saveFoot").textContent = `Gespeichert um ${fmtTime(Date.now())}`;
+  if (!quiet) {
+    toast(`Gespeichert · ${label}`, undo ? async () => {
+      try {
+        const result = await post("/api/config/save", { config: before });
+        adoptConfig(result.config);
+        toast("Rückgängig gemacht");
+      } catch (error) {
+        toast(`Rückgängig nicht möglich: ${error.message}`);
+      }
+    } : null);
+  }
+  return true;
+}
+
+function adoptConfig(config) {
+  currentConfig = config;
+  applyRuntime({
+    ...(runtime || {}),
+    ui: config.ui,
+    stream: config.stream,
+    location: config.location,
+    timezone: config.app?.timezone || runtime?.timezone,
+    transit_leave_mode: !!config.transit?.leave_mode,
+    transit_stop_count: (config.transit?.stops || []).length,
+    music_source: config.music?.source,
+    warnings: config.weather?.warnings,
+  });
+  armCompact();
+  syncSheet();
+  setTimeout(refreshState, 1500);
+}
+
+/* ---------- Layout, Leseabstand, Theme ---------- */
+const DISTANCE_SCALE = { 1: 0.86, 2: 1, 3: 1.2 };
+function computeLayout() {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  const portrait = height > width * 1.05 || width < 640;
+  const base = portrait ? Math.min(1.1, Math.max(0.7, width / 540)) : Math.min(1.55, Math.max(0.74, Math.min(width / 1280, height / 720)));
+  let scale = base * (DISTANCE_SCALE[runtime?.ui?.distance] || 1);
+  if (!portrait) scale = Math.min(scale, width / 1060);
+  document.body.style.setProperty("--s", scale.toFixed(3));
+  document.body.dataset.layout = portrait ? "portrait" : "landscape";
+}
+
+function effectiveTheme() {
+  const theme = runtime?.ui?.theme || "dark";
+  return theme === "auto" ? (isDaytime() ? "light" : "dark") : theme;
+}
+
+function applyTheme() {
+  const theme = effectiveTheme();
+  const sky = runtime?.ui?.sky || "auto";
+  if (document.body.dataset.theme !== theme) {
+    document.body.dataset.theme = theme;
+    if (booted) renderClock(true);
+  }
+  document.body.dataset.sky = sky === "auto" ? (isDaytime() ? "day" : "night") : sky;
+  $$("#themeGrid .theme-card").forEach((card) => card.setAttribute("aria-pressed", String(card.dataset.theme === (runtime?.ui?.theme || "dark"))));
+}
+
+function blocks() {
+  const ui = runtime?.ui || {};
+  return { clock: !!ui.clock?.enabled, weather: !!ui.weather?.enabled, transit: !!ui.transit?.enabled, system: !!ui.system?.enabled };
+}
+const anyBlock = () => Object.values(blocks()).some(Boolean);
+
+function applyBlocks() {
+  const shown = blocks();
+  const clockBlock = byId("clockBlock");
+  clockBlock.hidden = !(shown.clock || shown.system);
+  byId("clock").hidden = !shown.clock;
+  byId("date").hidden = !shown.clock;
+  byId("sys").hidden = !shown.system;
+  byId("weatherBlock").hidden = !shown.weather;
+  byId("transitBlock").hidden = !shown.transit;
+  const separators = $$(".ib-sep");
+  separators[0].hidden = clockBlock.hidden || (!shown.weather && !shown.transit);
+  separators[1].hidden = !shown.transit || (!shown.weather && clockBlock.hidden);
+  const bar = byId("infobar");
+  if (document.body.dataset.layout !== "portrait") {
+    const columns = [];
+    if (!clockBlock.hidden) columns.push("minmax(calc(212px * var(--s)), max-content)");
+    if (!separators[0].hidden) columns.push("1px");
+    if (shown.weather) columns.push("minmax(0, 1fr)");
+    if (!separators[1].hidden) columns.push("1px");
+    if (shown.transit) columns.push(shown.weather ? "calc(430px * var(--s))" : "minmax(calc(430px * var(--s)), 1fr)");
+    bar.style.gridTemplateColumns = columns.join(" ");
+  } else {
+    bar.style.gridTemplateColumns = "";
+  }
+  setBar(barMode, true);
+}
+
+function layoutDock() {
+  requestAnimationFrame(() => document.body.style.setProperty("--dock-h", `${byId("dock").offsetHeight}px`));
+}
+
+/* ---------- Uhr und Statuszeile ---------- */
+let lastMinute = "";
+function flapText(node, text) {
+  if (document.body.dataset.theme !== "flap") {
+    if (node.children.length || node.textContent !== text) node.textContent = text;
+    return;
+  }
+  const old = $$(".fl", node).map((item) => item.textContent);
+  if (old.length && old.join("") === text) return;
+  node.replaceChildren(...[...text].map((character, index) => {
+    const flap = el("span", character === ":" ? "fl fl-sep" : "fl", character);
+    if (old.length && old[index] !== character && character !== ":" && !reduceMotion) flap.classList.add("flip");
+    return flap;
+  }));
+}
+
+function renderClock(force = false) {
+  const now = Date.now();
+  const time = fmtTime(now);
+  if (force) lastMinute = "";
+  flapText(byId("clock"), time);
+  flapText(byId("nightClock"), time);
+  flapText(byId("mbClock"), time);
+  byId("date").textContent = fmtDate(now);
+  if (lastMinute && lastMinute !== time && document.body.dataset.theme === "paper" && !reduceMotion) {
+    const block = byId("clockBlock");
+    block.classList.remove("eink");
+    void block.offsetWidth;
+    block.classList.add("eink");
+  }
+  lastMinute = time;
+  renderStatus();
+}
+
+function sourceStates() {
+  const health = lastState?.health || {};
+  const names = { weather: "Wetter · Open-Meteo", boards: "Abfahrten · VRR", warnings: "Warnungen · DWD", music: "Musik", system: "System" };
+  const rows = Object.entries(health).map(([key, item]) => {
+    const state = item.ok ? "ok" : item.last_ok ? "warn" : "bad";
+    let text = item.ok ? "Aktuell" : item.detail || (state === "warn" ? "Veraltet" : "Gestört");
+    if (key === "warnings" && item.ok) {
+      const count = lastState?.warnings?.alerts?.length || 0;
+      text = lastState?.warnings?.covered === false ? "Ort außerhalb Deutschlands" : count ? `${count} Warnung${count > 1 ? "en" : ""} aktiv` : "Keine Warnung";
+    }
+    return { key, name: names[key] || key, state, text, last: item.ok ? ago(item.checked_at) : item.error || ago(item.last_ok), limit: every(item.interval) };
+  });
+  rows.push({ key: "stream", name: "Livestream · eigener Player", ...streamHealth() });
+  return rows;
+}
+
+function renderStatus() {
+  const states = sourceStates();
+  const worst = states.some((item) => item.state === "bad") ? "bad" : states.some((item) => item.state === "warn") ? "warn" : "ok";
+  const dotClass = `dot${worst === "warn" ? " is-warn" : worst === "bad" ? " is-bad" : ""}`;
+  byId("sysDot").className = dotClass;
+  byId("mbDot").className = dotClass;
+  const parts = [];
+  if (player.reconnecting) parts.push("Kamera antwortet nicht · neuer Versuch");
+  if (states.find((item) => item.key === "boards" && item.state !== "ok")) parts.push("Abfahrten gestört");
+  if (states.find((item) => item.key === "weather" && item.state !== "ok")) parts.push("Wetter veraltet");
+  if (player.override) parts.push("Ersatz-Stream läuft");
+  if (lastState?.warnings?.alerts?.length) parts.push("DWD-Warnung aktiv");
+  if (!parts.length) parts.push(backendDown ? "Lokales Backend nicht erreichbar" : "Alles aktuell");
+  const system = lastState?.system;
+  if (system && system.enabled !== false) {
+    if (system.ram !== null && system.ram !== undefined) parts.push(`RAM ${system.ram} %`);
+    if (system.temp !== null && system.temp !== undefined) parts.push(`${system.temp} °C`);
+  }
+  byId("sysText").textContent = parts.slice(0, 3).join(" · ");
+}
+
+/* ---------- Wetter ---------- */
+const CLOUD = "M7 18.5h10.5a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.4 11.1 3.7 3.7 0 0 0 7 18.5z";
+const SUN_RAYS = "M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4";
+const SMALL_SUN = '<g class="wi-sun"><circle cx="7" cy="7" r="2.4"/><path d="M7 1.8v1.3M1.8 7h1.3M3.3 3.3l.9.9M10.7 3.3l-.9.9M3.3 10.7l.9-.9"/></g>';
+const SMALL_MOON = '<path class="wi-moon" d="M10.2 8.6A3.6 3.6 0 1 1 5.4 3.8a2.9 2.9 0 0 0 4.8 4.8z"/>';
+const WX = {
+  sun: `<g class="wi-sun"><circle cx="12" cy="12" r="4"/><path d="${SUN_RAYS}"/></g>`,
+  moon: '<path class="wi-moon" d="M19 14.6A7.5 7.5 0 1 1 9.4 5a6 6 0 0 0 9.6 9.6z"/>',
+  partly: `${SMALL_SUN}<path class="wi-cloud" transform="translate(1.5 2)" d="${CLOUD}"/>`,
+  "partly-night": `${SMALL_MOON}<path class="wi-cloud" transform="translate(1.5 2)" d="${CLOUD}"/>`,
+  cloudy: `<path class="wi-cloud" d="${CLOUD}"/>`,
+  fog: `<path class="wi-cloud" transform="translate(0 -4)" d="${CLOUD}"/><path class="wi-drop" d="M4.5 18.5h15M6.5 21.5h11"/>`,
+  rain: `<path class="wi-cloud" transform="translate(0 -4)" d="${CLOUD}"/><path class="wi-drop" d="M8.5 17.5l-1 3M12.5 17.5l-1 3M16.5 17.5l-1 3"/>`,
+  showers: `${SMALL_SUN}<path class="wi-cloud" transform="translate(1.5 1.5)" d="${CLOUD}"/><path class="wi-drop" d="M11 21l-.7 2.2M15.5 21l-.7 2.2"/>`,
+  "showers-night": `${SMALL_MOON}<path class="wi-cloud" transform="translate(1.5 1.5)" d="${CLOUD}"/><path class="wi-drop" d="M11 21l-.7 2.2M15.5 21l-.7 2.2"/>`,
+  snow: `<path class="wi-cloud" transform="translate(0 -4)" d="${CLOUD}"/><path class="wi-drop" d="M8.5 18.5h.01M12 20.5h.01M15.5 18.5h.01M10 22h.01M14 22h.01"/>`,
+  thunder: `<path class="wi-cloud" transform="translate(0 -4)" d="${CLOUD}"/><path class="wi-bolt" d="M12.8 15.5l-2.6 3.8h3.4l-2.4 3.7"/>`,
+};
+function weatherKind(code, day = true) {
+  if (code === 0 || code === 1) return day ? "sun" : "moon";
+  if (code === 2) return day ? "partly" : "partly-night";
+  if (code === 45 || code === 48) return "fog";
+  if (code >= 51 && code <= 67) return "rain";
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "snow";
+  if (code >= 80 && code <= 82) return day ? "showers" : "showers-night";
+  if (code >= 95 && code <= 99) return "thunder";
+  return "cloudy";
+}
+const wxSvg = (kind) => `<svg viewBox="0 0 24 24" aria-hidden="true">${WX[kind] || WX.cloudy}</svg>`;
+
+function hoursOf(weather) {
+  return (weather?.hourly || []).filter((hour) => hour.temp !== null && hour.temp !== undefined);
+}
+
+function stripSummaryText(weather, hours) {
+  const threshold = weather.rain_threshold || 45;
+  if (weather.stale) return `Stand ${weather.updated_at ? fmtTime(weather.updated_at) : "–"} · keine Verbindung`;
+  if (!hours.length) return "";
+  const wet = hours.find((hour) => hour.probability >= threshold);
+  if (wet === hours[0]) return `Regen jetzt · ${hours[0].probability} %`;
+  if (wet) return `Regen ab ${wet.hour} Uhr · ${wet.probability} %`;
+  return `kein Regen bis ${hours.at(-1).hour} Uhr`;
+}
+
+function renderWeather() {
+  const weather = lastState?.weather;
+  const block = byId("weatherBlock");
+  if (!weather?.ok) {
+    byId("weatherIcon").innerHTML = wxSvg("cloudy");
+    byId("weatherTemp").textContent = "–°";
+    byId("weatherCond").textContent = weather?.error ? "Wetter nicht erreichbar" : "Wetter wird geladen";
+    byId("weatherDetails").textContent = weather?.error ? "neuer Versuch läuft" : "";
+    byId("stripSummary").textContent = "";
+    byId("strip").replaceChildren();
+    block.classList.add("is-stale");
+    renderMini();
+    return;
+  }
+  byId("weatherIcon").innerHTML = wxSvg(weatherKind(weather.code, weather.is_day));
+  const temperature = byId("weatherTemp");
+  const text = `${weather.temp}°`;
+  if (temperature.textContent !== text) {
+    temperature.textContent = text;
+    if (booted && !reduceMotion) temperature.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 500 });
+  }
+  byId("weatherCond").textContent = capitalize(weather.condition);
+  const details = byId("weatherDetails");
+  details.replaceChildren(el("span", "", `gefühlt ${weather.feels}° · Wind ${weather.wind} km/h`), el("span", "wd-hum", ` · Luftfeuchte ${weather.hum} %`));
+  block.classList.toggle("is-stale", !!weather.stale);
+  renderStrip(weather);
+  renderMini();
+}
+
+function sunMarks(weather) {
+  const marks = [];
+  (weather.sun || []).forEach((day) => {
+    [[day.rise, "↑", "Sonnenaufgang"], [day.set, "↓", "Sonnenuntergang"]].forEach(([iso, arrow, name]) => {
+      const stamp = Date.parse(iso || "");
+      if (Number.isFinite(stamp)) marks.push({ stamp, arrow, name, label: fmtTime(stamp) });
+    });
+  });
+  return marks;
+}
+
+function markInHour(marks, hourIso) {
+  const start = Date.parse(hourIso);
+  return marks.find((mark) => mark.stamp >= start && mark.stamp < start + 3600e3);
+}
+
+/* Wetterstreifen: Temperaturkurve über Regenbalken, gestrichelte Regenschwelle und Sonnenzeiten. */
+function renderStrip(weather) {
+  const svg = byId("strip");
+  const width = Math.max(120, Math.round(svg.getBoundingClientRect().width || 300));
+  const scale = parseFloat(getComputedStyle(document.body).getPropertyValue("--s")) || 1;
+  const count = width >= 520 ? 12 : width >= 330 ? 8 : 6;
+  const hours = hoursOf(weather).slice(0, count);
+  byId("stripLabel").textContent = `Nächste ${hours.length || count} Stunden`;
+  byId("stripSummary").textContent = stripSummaryText(weather, hours);
+  if (hours.length < 2) { svg.replaceChildren(); return; }
+  const threshold = weather.rain_threshold || 45;
+  const height = Math.round(70 * scale);
+  const font = Math.max(10.5, 12 * scale * 1.05);
+  const tempTop = 4;
+  const tempBottom = Math.round(height * 0.34);
+  const barTop = Math.round(height * 0.42);
+  const barBottom = height - Math.round(font + 4);
+  const cell = width / hours.length;
+  const gap = Math.max(3, cell * 0.12);
+  const temps = hours.map((hour) => hour.temp);
+  const low = Math.min(...temps);
+  const high = Math.max(...temps);
+  const ty = (value) => (high === low ? (tempTop + tempBottom) / 2 : tempBottom - ((value - low) / (high - low)) * (tempBottom - tempTop - font * 0.2));
+  const barHeight = barBottom - barTop;
+  const peak = hours.reduce((best, hour) => (hour.probability > best.probability ? hour : best));
+  const marks = sunMarks(weather);
+  let out = "";
+  hours.forEach((hour, index) => {
+    const x = index * cell + gap / 2;
+    const barWidth = cell - gap;
+    const filled = Math.max(3, (hour.probability / 100) * barHeight);
+    const wet = hour.probability >= threshold;
+    out += `<rect x="${x.toFixed(1)}" y="${barTop}" width="${barWidth.toFixed(1)}" height="${barHeight}" rx="4" fill="var(--bar-track)"/>`;
+    out += `<rect x="${x.toFixed(1)}" y="${(barBottom - filled).toFixed(1)}" width="${barWidth.toFixed(1)}" height="${filled.toFixed(1)}" rx="3" fill="${wet ? "var(--bar-wet)" : "var(--bar-dry)"}"/>`;
+    if (hour === peak && hour.probability >= 30 && filled > font + 2) out += `<text x="${(x + barWidth / 2).toFixed(1)}" y="${(barBottom - filled + font).toFixed(1)}" text-anchor="middle" font-size="${font * 0.9}" font-weight="700" fill="${wet ? "var(--on-wet)" : "var(--text)"}">${hour.probability}</text>`;
+    let label = index === 0 ? "jetzt" : String(hour.hour);
+    const mark = index > 0 ? markInHour(marks, hour.time) : null;
+    if (mark) {
+      const sx = index * cell + ((mark.stamp - Date.parse(hour.time)) / 3600e3) * cell;
+      label = `${mark.arrow}${mark.label}`;
+      out += `<line x1="${sx.toFixed(1)}" x2="${sx.toFixed(1)}" y1="${tempTop + 2}" y2="${barBottom}" stroke="var(--hint)" stroke-width="1.2" stroke-dasharray="3 3"/>`;
+    }
+    out += `<text x="${(index * cell + cell / 2).toFixed(1)}" y="${height - 2}" text-anchor="middle" font-size="${font}" font-weight="${index === 0 || mark ? 600 : 400}" fill="${mark ? "var(--hint)" : index === 0 ? "var(--text)" : "var(--faint)"}">${label}</text>`;
+  });
+  const line = barBottom - (threshold / 100) * barHeight;
+  out += `<line x1="0" x2="${width}" y1="${line.toFixed(1)}" y2="${line.toFixed(1)}" stroke="var(--muted)" stroke-opacity="0.7" stroke-width="1.2" stroke-dasharray="4 4"/>`;
+  const points = hours.map((hour, index) => `${(index * cell + cell / 2).toFixed(1)},${ty(hour.temp).toFixed(1)}`).join(" ");
+  out += `<polyline points="${points}" fill="none" stroke="var(--temp-line)" stroke-width="${Math.max(1.6, 2 * scale)}" stroke-linejoin="round" stroke-linecap="round"/>`;
+  const labelled = new Set([0, temps.indexOf(low), temps.indexOf(high)]);
+  labelled.forEach((index) => {
+    const x = index * cell + cell / 2;
+    const y = ty(hours[index].temp);
+    out += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${2.6 * scale}" fill="var(--temp-line)"/>`;
+    const anchor = index === 0 ? "start" : index === hours.length - 1 ? "end" : "middle";
+    const dx = index === 0 ? 6 : index === hours.length - 1 ? -6 : 0;
+    out += `<text x="${(x + dx).toFixed(1)}" y="${(y < tempTop + font ? y + font + 2 : y - 4).toFixed(1)}" text-anchor="${anchor}" font-size="${font * 0.95}" font-weight="600" fill="var(--temp-line)">${hours[index].temp}°</text>`;
+  });
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("height", String(height));
+  svg.innerHTML = out;
+}
+
+function renderWeatherChart() {
+  const weather = lastState?.weather;
+  const svg = byId("wchart");
+  const hours = hoursOf(weather).slice(0, 24);
+  byId("dwTitle").textContent = `Wetter · ${runtime?.location?.label || ""} · nächste 24 Stunden`;
+  if (hours.length < 2) { svg.replaceChildren(); return; }
+  const threshold = weather.rain_threshold || 45;
+  byId("dwSub").textContent = `Temperatur, Regenwahrscheinlichkeit, Wind · gestrichelt: Regenschwelle ${threshold} % · schließt sich nach 20 Sekunden`;
+  const width = Math.max(320, Math.round(svg.getBoundingClientRect().width || 800));
+  const height = 250;
+  const pad = 8;
+  const cell = (width - 2 * pad) / hours.length;
+  const iconY = 6, tTop = 72, tBottom = 128, bTop = 146, bBottom = 200, hourY = 218, windY = 240;
+  const temps = hours.map((hour) => hour.temp);
+  const low = Math.min(...temps), high = Math.max(...temps);
+  const ty = (value) => tBottom - ((value - low) / Math.max(1, high - low)) * (tBottom - tTop);
+  const marks = sunMarks(weather);
+  let out = "";
+  hours.forEach((hour, index) => { if (!hour.is_day) out += `<rect x="${(pad + index * cell).toFixed(1)}" y="0" width="${(cell + 0.5).toFixed(1)}" height="${bBottom}" fill="var(--bar-track)"/>`; });
+  hours.forEach((hour, index) => {
+    const x = pad + index * cell;
+    const filled = Math.max(2, (hour.probability / 100) * (bBottom - bTop));
+    out += `<rect x="${(x + cell * 0.15).toFixed(1)}" y="${(bBottom - filled).toFixed(1)}" width="${(cell * 0.7).toFixed(1)}" height="${filled.toFixed(1)}" rx="2" fill="${hour.probability >= threshold ? "var(--bar-wet)" : "var(--bar-dry)"}"/>`;
+    if (index % 3 === 0) {
+      const cx = x + cell / 2;
+      out += `<g transform="translate(${(cx - 13).toFixed(1)} ${iconY}) scale(1.08)" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">${WX[weatherKind(hour.code, hour.is_day)]}</g>`;
+      out += `<text x="${cx.toFixed(1)}" y="${hourY}" text-anchor="middle" font-size="12" fill="var(--faint)">${index === 0 ? "jetzt" : `${hour.hour} Uhr`}</text>`;
+      out += `<text x="${cx.toFixed(1)}" y="${windY}" text-anchor="middle" font-size="12" fill="var(--muted)">${hour.wind} km/h</text>`;
+      out += `<text x="${cx.toFixed(1)}" y="${(ty(hour.temp) - 9).toFixed(1)}" text-anchor="middle" font-size="13" font-weight="600" fill="var(--text)">${hour.temp}°</text>`;
+      if (hour.probability >= 20) out += `<text x="${cx.toFixed(1)}" y="${(bBottom - filled - 4).toFixed(1)}" text-anchor="middle" font-size="11" fill="var(--muted)">${hour.probability} %</text>`;
+    }
+    const mark = markInHour(marks, hour.time);
+    if (mark) {
+      const sx = x + ((mark.stamp - Date.parse(hour.time)) / 3600e3) * cell;
+      out += `<line x1="${sx.toFixed(1)}" x2="${sx.toFixed(1)}" y1="38" y2="${bBottom}" stroke="var(--hint)" stroke-dasharray="3 3"/><text x="${(sx + 5).toFixed(1)}" y="50" font-size="11.5" font-weight="600" fill="var(--hint)">${mark.name} ${mark.label}</text>`;
+    }
+  });
+  const line = bBottom - (threshold / 100) * (bBottom - bTop);
+  out += `<line x1="${pad}" x2="${width - pad}" y1="${line}" y2="${line}" stroke="var(--muted)" stroke-opacity="0.6" stroke-dasharray="4 4"/>`;
+  out += `<polyline points="${hours.map((hour, index) => `${(pad + index * cell + cell / 2).toFixed(1)},${ty(hour.temp).toFixed(1)}`).join(" ")}" fill="none" stroke="var(--temp-line)" stroke-width="2.4" stroke-linejoin="round"/>`;
+  hours.forEach((hour, index) => { if (index % 3 === 0) out += `<circle cx="${(pad + index * cell + cell / 2).toFixed(1)}" cy="${ty(hour.temp).toFixed(1)}" r="3.2" fill="var(--temp-line)"/>`; });
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("height", String(height));
+  svg.innerHTML = out;
+}
+
+/* ---------- Abfahrten mit Losgeh-Zeit ---------- */
+const LINE_ICONS = { tram: "i-tram", night: "i-moon", train: "i-train", bus: "i-bus" };
+
+function departures() {
+  const list = [];
+  (lastState?.boards || []).forEach((board, boardIndex) => {
+    if (!board.ok) return;
+    const checked = Date.parse(board.checked_at || "") || Date.now();
+    (board.rows || []).forEach((row) => {
+      const at = row.at ? row.at * 1000 : checked + (Number(row.minutes) || 0) * 60e3;
+      list.push({
+        key: `${board.station_id}|${row.line}|${row.target}|${row.planned || Math.round(at / 60e3)}`,
+        line: row.line, type: row.type || "bus", target: row.target, stop: board.title, walk: Number(board.walk_minutes || 0),
+        at, delay: Number(row.delay || 0), boardIndex,
+      });
+    });
+  });
+  return list.filter((item) => item.at > Date.now() - 30e3).sort((a, b) => a.at - b.at);
+}
+
+function leaveMode() {
+  return runtime?.transit_leave_mode !== false;
+}
+
+function depState(item, now = Date.now()) {
+  const minutes = (item.at - now) / 60e3;
+  const leave = minutes - item.walk;
+  if (!leaveMode() || !item.walk) return { kind: "plain", minutes, leave };
+  if (leave < -0.1) return { kind: "late", minutes, leave };
+  if (leave < 1) return { kind: "go", minutes, leave };
+  return { kind: "leave", minutes, leave };
+}
+
+function badge(item) {
+  const node = el("span", `line-badge${item.type === "bus" ? "" : ` t-${item.type}`}`);
+  node.append(icon(LINE_ICONS[item.type] || "i-bus"), document.createTextNode(item.line));
+  return node;
+}
+
+function timeBlock(item, state) {
+  const block = el("span", "dep-time");
+  if (state.kind === "go") { block.append(el("span", "dep-go", "Jetzt los")); return block; }
+  if (state.kind === "late") { block.append(el("span", "dep-late", `fährt in ${Math.max(0, Math.round(state.minutes))} min`)); return block; }
+  const value = Math.max(0, Math.round(state.kind === "plain" ? state.minutes : state.leave));
+  if (state.kind === "plain" && value <= 0) { block.append(el("span", "dep-go", "jetzt")); return block; }
+  if (value >= 60) {
+    if (state.kind === "leave") block.append(el("span", "leave-label", "los um"));
+    block.append(el("span", "dep-clock", fmtTime(state.kind === "plain" ? item.at : item.at - item.walk * 60e3)));
+    return block;
+  }
+  if (state.kind === "leave") block.append(el("span", "leave-label", "los in"));
+  block.append(el("span", "dep-num", String(value)), el("span", "dep-unit", "min"));
+  return block;
+}
+
+function delayChip(item) {
+  const chip = el("span", `delay${item.delay >= 5 ? " is-big" : ""}`, `+${item.delay}`);
+  chip.title = `${item.delay} Minuten später als geplant`;
+  return chip;
+}
+
+function fillRow(row, item, showStop) {
+  const state = depState(item);
+  row.className = `departure${state.kind === "go" ? " is-go" : state.kind === "late" ? " is-late" : ""}`;
+  const oldNumber = $(".dep-num", row)?.textContent;
+  const main = el("span", "dep-main");
+  main.append(el("span", "dep-target", item.target));
+  // Verspätung direkt hinter der Abfahrtszeit; der lange Haltestellenname wird bei Platzmangel gekürzt.
+  const sub = el("span", "dep-sub");
+  sub.append(document.createTextNode(`fährt ${fmtTime(item.at)}`));
+  if (item.delay > 0) sub.append(delayChip(item));
+  if (showStop) sub.append(el("span", "dep-stop", `· ab ${item.stop}`));
+  main.append(sub);
+  row.replaceChildren(badge(item), main, timeBlock(item, state));
+  const number = $(".dep-num", row);
+  if (number && document.body.dataset.theme === "flap") {
+    const text = number.textContent;
+    const previous = (oldNumber || "").slice(-text.length).padStart(text.length);
+    number.replaceChildren(...[...text].map((character, index) => {
+      const flap = el("span", "fl", character);
+      if (oldNumber && previous.at(index) !== character && !reduceMotion) flap.classList.add("flip");
+      return flap;
+    }));
+  } else if (oldNumber && number && oldNumber !== number.textContent && !reduceMotion) {
+    number.animate([{ transform: "translateY(-45%)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 380, easing: "cubic-bezier(.2,.8,.2,1)" });
   }
 }
 
-function renderStreamView(view) {
-  elements.streamStatus.dataset.state = view.state;
-  elements.streamStatusText.textContent = view.full;
-  elements.streamEmpty.classList.toggle("has-stream", !view.card);
-  if (view.card) {
-    elements.streamEmptyTitle.textContent = view.card.title;
-    elements.streamEmptyText.textContent = view.card.text;
+function errorRow(board) {
+  const row = el("div", "departure is-error");
+  row.dataset.key = `err-${board.station_id || board.title}`;
+  const symbol = el("span", "dep-icon");
+  symbol.append(icon("i-alert"));
+  const main = el("span", "dep-main");
+  main.append(el("span", "dep-error", `${board.title} · keine Daten`), el("span", "dep-sub", `Stand ${board.checked_at ? fmtTime(board.checked_at) : "–"} · neuer Versuch läuft`));
+  row.append(symbol, main);
+  return row;
+}
+
+function messageRow(key, title, text) {
+  const row = el("div", "departure is-empty");
+  row.dataset.key = key;
+  const main = el("span", "dep-main");
+  main.append(el("span", "dep-target", title), el("span", "dep-sub", text));
+  row.append(main);
+  return row;
+}
+
+function maxRows() {
+  return document.body.dataset.layout === "portrait" ? 3 : window.innerWidth < 760 ? 2 : 3;
+}
+
+function renderBoards() {
+  const box = byId("boards");
+  const boards = lastState?.boards || [];
+  const failed = boards.filter((board) => !board.ok);
+  const all = departures();
+  const items = all.slice(0, Math.max(1, maxRows() - Math.min(1, failed.length)));
+  const stops = new Set(items.map((item) => item.stop));
+  const multiple = stops.size > 1;
+  const leaving = leaveMode() && items.some((item) => item.walk > 0);
+  byId("trTitle").textContent = leaving ? "Losgehen" : "Abfahrten";
+  byId("trStation").textContent = multiple || !items.length ? "" : `ab ${[...stops][0]}`;
+  const wanted = [];
+  failed.slice(0, 1).forEach((board) => wanted.push({ key: `err-${board.station_id || board.title}`, error: board }));
+  items.forEach((item) => wanted.push({ key: item.key, item }));
+  if (!wanted.length) {
+    const configured = Number(runtime?.transit_stop_count || 0);
+    wanted.push(configured
+      ? { key: "msg-none", message: ["Gerade keine Abfahrten", "Die Tafel aktualisiert sich jede Minute"] }
+      : { key: "msg-setup", message: ["Keine Haltestelle eingerichtet", "Im Menü unter ÖPNV hinzufügen"] });
+  }
+  const existing = new Map($$(".departure", box).filter((row) => !row.dataset.leaving).map((row) => [row.dataset.key, row]));
+  existing.forEach((row, key) => {
+    if (wanted.some((entry) => entry.key === key)) return;
+    row.dataset.leaving = "1";
+    if (reduceMotion || !booted) { row.remove(); return; }
+    row.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateX(-16px)" }], { duration: 320, easing: "ease-in" }).finished.then(() => row.remove()).catch(() => row.remove());
+  });
+  wanted.forEach((entry, index) => {
+    let row = existing.get(entry.key);
+    const fresh = !row;
+    if (fresh) {
+      row = entry.error ? errorRow(entry.error) : entry.message ? messageRow(entry.key, ...entry.message) : el("div", "departure");
+      row.dataset.key = entry.key;
+    }
+    if (entry.item) fillRow(row, entry.item, multiple);
+    const anchor = box.children[index];
+    if (anchor !== row) box.insertBefore(row, anchor || null);
+    if (fresh && booted && !reduceMotion) row.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: 420, easing: "cubic-bezier(.2,.8,.2,1)" });
+  });
+  renderMini();
+  return items.some((item) => depState(item).kind === "go");
+}
+
+function renderBoardTable() {
+  const table = byId("boardTable");
+  const leaving = leaveMode();
+  const head = el("tr");
+  ["Linie", "Ziel", "Haltestelle", "Abfahrt", leaving ? "Losgehen" : "In"].forEach((title) => head.append(el("th", "", title)));
+  const thead = el("thead");
+  thead.append(head);
+  const body = el("tbody");
+  departures().forEach((item) => {
+    const state = depState(item);
+    const row = el("tr", state.kind === "go" ? "is-go" : state.kind === "late" ? "is-late" : "");
+    const line = el("td");
+    line.append(badge(item));
+    const time = el("td");
+    time.append(document.createTextNode(`${fmtTime(item.at)} `));
+    if (item.delay > 0) time.append(delayChip(item));
+    const left = state.kind === "go" ? "Jetzt los" : state.kind === "late" ? "nicht mehr erreichbar"
+      : state.kind === "plain" ? `${Math.max(0, Math.round(state.minutes))} min`
+        : state.leave >= 60 ? `um ${fmtTime(item.at - item.walk * 60e3)}` : `in ${Math.round(state.leave)} min`;
+    row.append(line, el("td", "target", item.target), el("td", "stop", item.walk ? `${item.stop} · ${item.walk} min Weg` : item.stop), time, el("td", state.kind === "go" ? "go" : "", left));
+    body.append(row);
+  });
+  (lastState?.boards || []).filter((board) => !board.ok).forEach((board) => {
+    const row = el("tr");
+    const cell = el("td", "", `${board.title} liefert gerade keine Daten, neuer Versuch läuft.`);
+    cell.colSpan = 5;
+    row.append(cell);
+    body.append(row);
+  });
+  if (!body.children.length) {
+    const row = el("tr");
+    const cell = el("td", "", "Keine Abfahrten. Haltestellen richtest du im Menü unter ÖPNV ein.");
+    cell.colSpan = 5;
+    row.append(cell);
+    body.append(row);
+  }
+  table.replaceChildren(thead, body);
+  byId("legendLeave").hidden = !leaving;
+}
+
+function renderMini() {
+  const weather = lastState?.weather;
+  const box = byId("mbWeather");
+  box.replaceChildren();
+  if (weather?.ok) {
+    const symbol = el("span", "wx");
+    symbol.innerHTML = wxSvg(weatherKind(weather.code, weather.is_day));
+    box.append(symbol, el("b", "", `${weather.temp}°`), el("span", "", byId("stripSummary").textContent || capitalize(weather.condition)));
+  }
+  const departure = byId("mbDep");
+  departure.replaceChildren();
+  const next = departures().find((item) => depState(item).kind !== "late");
+  if (next) {
+    const state = depState(next);
+    const when = state.kind === "go" ? "Jetzt los" : state.kind === "plain" ? `${Math.max(0, Math.round(state.minutes))} min` : `los in ${Math.round(state.leave)} min`;
+    departure.append(badge(next), el("span", "", next.target), el("b", "", when));
   }
 }
 
-function setStreamView(view) {
-  streamView = view;
-  if (!backendDown) renderStreamView(view);
+/* ---------- Infoleiste: voll, kompakt, ausgeblendet ---------- */
+let barMode = "full";
+let compactTimer = null;
+let forceFullUntil = 0;
+
+function setBar(mode, silent = false) {
+  const previous = barMode;
+  barMode = mode;
+  document.body.dataset.bar = mode;
+  byId("infobar").hidden = mode !== "full" || !anyBlock();
+  byId("minibar").hidden = mode !== "compact" || !anyBlock();
+  byId("barPeek").hidden = mode !== "hidden" || !anyBlock();
+  document.body.classList.toggle("no-infobar", mode !== "full" || !anyBlock());
+  if (booted && !silent && previous !== mode && !reduceMotion) {
+    const shown = mode === "full" ? byId("infobar") : mode === "compact" ? byId("minibar") : byId("barPeek");
+    if (!shown.hidden) shown.animate([{ opacity: 0, transform: "translateY(16px) scale(.985)" }, { opacity: 1, transform: "none" }], { duration: 420, easing: "cubic-bezier(.2,.9,.25,1.05)" });
+  }
+  if (mode === "full") requestAnimationFrame(() => { if (lastState?.weather?.ok) renderStrip(lastState.weather); });
+  layoutDock();
 }
 
-// Eigener Player: YouTube-Livestreams und HLS-Quellen laufen über hls.js, normale YouTube-Videos als
-// Videodatei in Schleife, beides in einem video-Element ohne Bedienelemente über den lokalen Proxy;
-// alles andere bleibt eingebettet. Antippen, Menü und Dialoge halten das Video nie an.
-const player = { hls: null, stream: null, source: null, generation: 0, retries: 0, retryTimer: null, refreshTimer: null, lastTime: -1, lastProgress: Date.now() };
+function busy() {
+  return !byId("sheet").hidden || $$(".detail").some((detail) => !detail.hidden) || Date.now() < forceFullUntil
+    || !!lastState?.warnings?.alerts?.length || byId("wizard").open || byId("nowPlaying").classList.contains("is-open");
+}
+
+function armCompact() {
+  clearTimeout(compactTimer);
+  const seconds = Number(runtime?.ui?.compact_after ?? 120);
+  if (!seconds) return;
+  compactTimer = setTimeout(() => {
+    if (busy()) { armCompact(); return; }
+    if (barMode === "full") setBar("compact");
+  }, seconds * 1000);
+}
+
+function expandFor(milliseconds) {
+  if (nightState.active) return;
+  forceFullUntil = Date.now() + milliseconds;
+  if (barMode !== "full") setBar("full");
+}
+
+/* ---------- Detailansichten ---------- */
+let detailTimer = null;
+function openDetail(kind) {
+  closeDetails(true);
+  const detail = byId({ depart: "detailDepart", weather: "detailWeather", warning: "detailWarning" }[kind]);
+  detail.getAnimations().forEach((animation) => animation.cancel());
+  if (kind === "depart") renderBoardTable();
+  if (kind === "warning") renderWarningDetail();
+  detail.hidden = false;
+  if (kind === "weather") renderWeatherChart();
+  const bar = $(".detail-timer", detail);
+  if (!reduceMotion) bar.animate([{ transform: "scaleX(1)" }, { transform: "scaleX(0)" }], { duration: 20000, easing: "linear", fill: "forwards" });
+  detailTimer = setTimeout(() => closeDetails(), 20000);
+}
+
+function closeDetails(instant = false) {
+  clearTimeout(detailTimer);
+  $$(".detail").forEach((detail) => {
+    if (detail.hidden) return;
+    if (instant || reduceMotion) { detail.hidden = true; return; }
+    detail.animate([{ opacity: 1, transform: "translate(-50%, 0)" }, { opacity: 0, transform: "translate(-50%, 12px)" }], { duration: 180, easing: "cubic-bezier(.4,0,1,1)" })
+      .finished.then(() => { detail.hidden = true; }).catch(() => { detail.hidden = true; });
+  });
+}
+
+/* ---------- Amtliche Warnungen (DWD) ---------- */
+function warningWhen(alert) {
+  const onset = Date.parse(alert.onset || "");
+  const expires = Date.parse(alert.expires || "");
+  if (Number.isFinite(onset) && onset > Date.now()) return `ab ${fmtTime(onset)} Uhr`;
+  if (Number.isFinite(expires)) return `bis ${fmtTime(expires)} Uhr`;
+  return "";
+}
+
+function renderWarnings() {
+  const alerts = lastState?.warnings?.alerts || [];
+  const box = byId("warning");
+  const had = !box.hidden;
+  box.hidden = !alerts.length;
+  if (!alerts.length) { if (had) layoutDock(); return; }
+  const first = alerts[0];
+  const text = byId("warningText");
+  text.replaceChildren(document.createTextNode(`${first.headline} ${warningWhen(first)}`.trim()), el("small", "", ` · Deutscher Wetterdienst${alerts.length > 1 ? ` · +${alerts.length - 1}` : ""}`));
+  box.classList.toggle("is-severe", first.level >= 3);
+  if (!had) {
+    layoutDock();
+    if (barMode !== "full" && !nightState.active) setBar("full");
+  }
+}
+
+function renderWarningDetail() {
+  const alerts = lastState?.warnings?.alerts || [];
+  const body = byId("dwarnBody");
+  body.replaceChildren(...alerts.map((alert) => {
+    const card = el("div", "card");
+    card.append(el("strong", "", `${alert.headline} ${warningWhen(alert)}`.trim()));
+    if (alert.description) card.append(el("p", "hint", alert.description));
+    if (alert.instruction) card.append(el("p", "hint", alert.instruction));
+    return card;
+  }));
+  byId("dwarnTitle").textContent = alerts.length > 1 ? `${alerts.length} amtliche Warnungen` : "Amtliche Warnung";
+}
+
+/* ---------- Nachtmodus ---------- */
+const nightState = { active: false, wakeUntil: 0, screenOff: false };
+function nightWindow() {
+  const night = runtime?.ui?.night;
+  if (!night?.enabled) return false;
+  const toMinutes = (text) => { const [hours, minutes] = String(text).split(":").map(Number); return hours * 60 + minutes; };
+  const now = minutesOfDay();
+  const start = toMinutes(night.start);
+  const end = toMinutes(night.end);
+  return start <= end ? now >= start && now < end : now >= start || now < end;
+}
+
+function applyNight() {
+  const night = runtime?.ui?.night || {};
+  const active = nightWindow() && Date.now() > nightState.wakeUntil && byId("sheet").hidden;
+  const overlay = byId("night");
+  const screenOff = active && !!night.screen_off;
+  if (active !== nightState.active) {
+    nightState.active = active;
+    overlay.hidden = !active;
+    byId("nightText").textContent = `Nachtmodus bis ${night.end || "6:00"} · antippen weckt den Bildschirm für 5 Minuten`;
+    if (active) { closeDetails(true); setBar("compact", true); }
+    else if (booted) setBar("full");
+  }
+  overlay.classList.toggle("is-off", screenOff);
+  if (screenOff !== nightState.screenOff) {
+    nightState.screenOff = screenOff;
+    if (!meta.remote) post("/api/display/power", { on: !screenOff }).catch(() => {});
+  }
+}
+
+function wakeFromNight() {
+  nightState.wakeUntil = Date.now() + 5 * 60e3;
+  applyNight();
+  toast("Bildschirm für 5 Minuten wach");
+}
+
+/* ---------- Eigener Videoplayer ----------
+   YouTube-Livestreams und HLS laufen über hls.js, normale YouTube-Videos als Videodatei in Schleife, beides in
+   einem video-Element ohne Bedienelemente über den lokalen Proxy; alles andere bleibt eingebettet. Antippen, Menü
+   und Dialoge halten das Video nie an. Bei Ausfall bleibt das letzte Bild stehen; gelingt der Neuaufbau nicht,
+   springt ein gemerkter Favorit ein und die Anzeige kehrt zurück, sobald die Kamera wieder läuft. */
+const elements = {
+  playerBox: byId("player"),
+  live: byId("live"),
+  video: byId("liveVideo"),
+  freeze: byId("streamFreeze"),
+  fade: byId("fade"),
+};
+const player = {
+  hls: null, source: null, url: "", generation: 0, retries: 0, retryTimer: null, refreshTimer: null, checkTimer: null,
+  lastTime: -1, lastProgress: Date.now(), signature: "", override: null, tried: new Set(), reconnecting: false, kind: "", primary: null,
+};
 const PLAYER_MAX_RETRIES = 5;
+const PRIMARY_CHECK_MS = 5 * 60e3;
+const titles = new Map();  // Titel/Kanal je Adresse aus Suche und Favoriten, bis der Server eigene liefert
+
+function youtubeId(url) {
+  const match = String(url || "").match(/(?:youtube(?:-nocookie)?\.com\/(?:embed\/|live\/|shorts\/|watch\?(?:.*&)?v=)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  return match ? match[1] : "";
+}
+const thumbnailFor = (url) => (youtubeId(url) ? `https://i.ytimg.com/vi/${youtubeId(url)}/mqdefault.jpg` : "");
+
+function streamInfo(url) {
+  const favorite = (runtime?.stream?.favorites || []).find((item) => item.url === url);
+  const known = titles.get(url) || {};
+  const source = player.url === url ? player.source || {} : {};
+  return {
+    title: source.title || known.title || favorite?.title || (youtubeId(url) ? "YouTube-Livestream" : url.replace(/^https?:\/\//, "").slice(0, 60)),
+    channel: source.channel || known.channel || favorite?.channel || "",
+  };
+}
 
 function videoActive() {
-  return elements.stage.classList.contains("has-video");
+  return elements.playerBox.classList.contains("is-video");
 }
 
-function showNotice(text) {
-  elements.streamNoticeText.textContent = text;
-  elements.streamNotice.classList.remove("hidden");
+function showReconnect(title, sub, ok = false) {
+  byId("signalText").textContent = title;
+  byId("signalSub").textContent = sub;
+  byId("signalLost").classList.toggle("is-ok", ok);
+  byId("signalLost").hidden = false;
 }
 
-function hideNotice() {
-  elements.streamNotice.classList.add("hidden");
+function hideReconnect() {
+  byId("signalLost").hidden = true;
+  byId("signalLost").classList.remove("is-ok");
 }
 
-// Das letzte Bild bleibt über einen Wechsel oder Neuaufbau stehen, statt schwarz zu werden.
 function freezeFrame() {
   const video = elements.video;
   if (!videoActive() || video.readyState < 2 || !video.videoWidth) return;
@@ -344,6 +957,20 @@ function freezeFrame() {
 
 function releaseFrame() {
   elements.freeze.classList.remove("is-on");
+  elements.playerBox.classList.remove("is-frozen");
+}
+
+// Kamerawechsel blendet weich über: das alte Bild liegt kurz über dem neuen.
+function crossfade() {
+  const video = elements.video;
+  if (reduceMotion || !videoActive() || video.readyState < 2 || !video.videoWidth) return;
+  const canvas = elements.fade;
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  try {
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    canvas.animate([{ opacity: 1 }, { opacity: 1, offset: 0.3 }, { opacity: 0 }], { duration: 1600, easing: "ease-in-out", fill: "forwards" });
+  } catch (_error) { /* ohne Bild kein Überblenden */ }
 }
 
 function stopVideo() {
@@ -352,23 +979,44 @@ function stopVideo() {
   if (player.hls) player.hls.destroy();
   player.hls = null;
   player.source = null;
-  elements.stage.classList.remove("has-video");
+  elements.playerBox.classList.remove("is-video");
   elements.video.removeAttribute("src");
   releaseFrame();
-  hideNotice();
+  hideReconnect();
 }
 
-function playEmbed(stream) {
+function setStreamView(state, text) {
+  byId("streamStatusText").textContent = text;
+  const overlay = byId("streamEmpty");
+  const showOverlay = state === "empty" || state === "down" || (state === "loading" && !videoActive() && !elements.live.getAttribute("src"));
+  overlay.hidden = !showOverlay;
+  byId("streamSpinner").hidden = state === "empty";
+  byId("streamEmptyIcon").hidden = state !== "empty";
+  byId("streamReload").hidden = state !== "down";
+  byId("streamEmptyTitle").textContent = state === "empty" ? "Kein Livestream eingerichtet" : state === "down" ? "Lokales Backend nicht erreichbar" : "Livestream wird vorbereitet";
+  byId("streamEmptyText").textContent = state === "empty" ? "Im Menü unter Livestream eine Kamera suchen oder eine Adresse eintragen." : state === "down" ? "Die Anzeige fragt alle 5 Sekunden automatisch erneut an." : "";
+  document.body.classList.toggle("no-video", state === "empty");
+  renderStatus();
+}
+
+function playEmbed(url) {
   stopVideo();
+  player.kind = "embed";
+  const target = new URL(url);
+  target.searchParams.set("autoplay", "1");
+  target.searchParams.set("mute", runtime?.stream?.audio === "on" ? "0" : "1");
+  target.searchParams.set("playsinline", "1");
   elements.live.src = "about:blank";
-  requestAnimationFrame(() => { elements.live.src = effectiveStreamUrl(stream); });
+  requestAnimationFrame(() => { elements.live.src = target.toString(); });
+  setStreamView("embedded", "Stream läuft eingebettet");
+  showChip();
 }
 
-async function loadSource(stream, refresh, generation) {
+async function loadSource(url, refresh, generation) {
   let source = { kind: "embed" };
   try {
     const query = new URLSearchParams();
-    if ((stream.url || "") !== (runtimeConfig?.stream?.url || "")) query.set("url", stream.url);
+    if (url !== (runtime?.stream?.url || "")) query.set("url", url);
     if (refresh) query.set("refresh", "1");
     const suffix = query.toString();
     source = await api(`/api/stream/source${suffix ? `?${suffix}` : ""}`);
@@ -376,23 +1024,38 @@ async function loadSource(stream, refresh, generation) {
     source = { kind: "embed" };
   }
   if (generation !== player.generation) return;
+  player.url = url;
   if (source.kind === "hls" && window.Hls?.isSupported()) {
-    playHls(source, stream, generation);
+    playHls(source, generation);
   } else if (source.kind === "file") {
-    playFile(source, stream, generation);
+    playFile(source, generation);
+  } else if (source.kind === "embed" && source.reason && youtubeId(url) && fallbackCandidate()) {
+    // YouTube meldet die Kamera als nicht erreichbar: lieber einen Favoriten zeigen als ein Fehlerbild.
+    startFallback(source.reason);
   } else {
-    playEmbed(stream);
+    playEmbed(url);
   }
 }
 
-function playHls(source, stream, generation) {
-  const Hls = window.Hls;
+function attachCommon(source) {
   freezeFrame();
   if (player.hls) player.hls.destroy();
+  player.hls = null;
   elements.live.removeAttribute("src");
-  elements.stage.classList.add("has-video");
+  elements.playerBox.classList.add("is-video");
+  player.source = source;
+  player.kind = source.kind;
+  player.lastProgress = Date.now();
+  if (source.title) titles.set(player.url, { title: source.title, channel: source.channel });
+  // Titel gleich zeigen, sobald er bekannt ist, nicht erst wenn das erste Bild da ist.
+  if (byId("chipTitle").textContent !== streamInfo(player.url).title) showChip();
+  applyAudio();
+}
+
+function playHls(source, generation) {
+  const Hls = window.Hls;
+  attachCommon(source);
   const video = elements.video;
-  video.muted = !!stream.muted;
   video.loop = false;
   const hls = new Hls({
     liveSyncDurationCount: 3,
@@ -405,38 +1068,37 @@ function playHls(source, stream, generation) {
     fragLoadingMaxRetry: 6,
   });
   player.hls = hls;
-  player.source = source;
-  player.lastProgress = Date.now();
   hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(source.url));
-  hls.on(Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}); });
+  hls.on(Hls.Events.MANIFEST_PARSED, () => playVideo());
   hls.on(Hls.Events.ERROR, (_event, data) => onPlayerError(data, generation));
   hls.attachMedia(video);
-  scheduleRefresh(source, stream, generation);
-  if (!video.currentTime) setStreamView({ state: "loading", full: `Livestream wird geladen${source.title ? `: ${source.title}` : ""}`, card: null });
+  scheduleRefresh(source, generation);
+  if (!video.currentTime) setStreamView("loading", `Livestream wird geladen${source.title ? `: ${source.title}` : ""}`);
 }
 
-// Normales Video (kein Livestream): läuft stumm in Schleife, damit der Bildschirm nie stehen bleibt.
-function playFile(source, stream, generation) {
-  freezeFrame();
-  if (player.hls) player.hls.destroy();
-  player.hls = null;
-  elements.live.removeAttribute("src");
-  elements.stage.classList.add("has-video");
+// Normales Video (kein Livestream): läuft in Schleife, damit der Bildschirm nie stehen bleibt.
+function playFile(source, generation) {
+  attachCommon(source);
   const video = elements.video;
-  video.muted = !!stream.muted;
   video.loop = true;
-  player.source = source;
-  player.lastProgress = Date.now();
   video.src = source.url;
-  video.play().catch(() => {});
-  scheduleRefresh(source, stream, generation);
-  setStreamView({ state: "loading", full: `Video wird geladen${source.title ? `: ${source.title}` : ""}`, card: null });
+  playVideo();
+  scheduleRefresh(source, generation);
+  setStreamView("loading", `Video wird geladen${source.title ? `: ${source.title}` : ""}`);
 }
 
-function scheduleRefresh(source, stream, generation) {
+function playVideo() {
+  const video = elements.video;
+  video.play().catch(() => {
+    // Mit Ton darf der Browser (etwa am Handy) nicht von selbst starten: dann stumm.
+    if (!video.muted) { video.muted = true; video.play().catch(() => {}); }
+  });
+}
+
+function scheduleRefresh(source, generation) {
   clearTimeout(player.refreshTimer);
   // YouTube-Adressen laufen nach einigen Stunden ab; rechtzeitig eine frische holen.
-  if (source.expires_in) player.refreshTimer = setTimeout(() => loadSource(stream, true, generation), source.expires_in * 1000);
+  if (source.expires_in) player.refreshTimer = setTimeout(() => loadSource(player.url, true, generation), source.expires_in * 1000);
 }
 
 function onPlayerError(data, generation) {
@@ -448,406 +1110,332 @@ function onPlayerError(data, generation) {
   }
   player.retries += 1;
   freezeFrame();
+  elements.playerBox.classList.add("is-frozen");
+  player.reconnecting = true;
+  const name = streamInfo(player.url).title.split(" · ")[0];
   if (player.retries > PLAYER_MAX_RETRIES) {
+    player.reconnecting = false;
+    if (fallbackCandidate()) { startFallback(`${name} antwortet nicht`); return; }
     // Der eigene Player kommt nicht durch: lieber eingebettet zeigen als gar nichts.
-    showNotice("Eigener Player gestört · Stream läuft eingebettet");
-    playEmbed(player.stream);
+    toast("Eigener Player gestört · Stream läuft eingebettet");
+    playEmbed(player.url);
     return;
   }
   const delay = Math.min(30000, 2000 * 2 ** (player.retries - 1));
-  showNotice(`Verbindung zur Kamera unterbrochen · neuer Versuch ${player.retries} von ${PLAYER_MAX_RETRIES}`);
-  setStreamView({ state: "reconnecting", full: "Verbindung zur Kamera unterbrochen, neuer Versuch läuft", card: null });
+  showReconnect(`${name} antwortet nicht`, `Letztes Bild bleibt stehen · Versuch ${player.retries} von ${PLAYER_MAX_RETRIES}`);
+  setStreamView("reconnecting", "Verbindung zur Kamera unterbrochen, neuer Versuch läuft");
   clearTimeout(player.retryTimer);
-  player.retryTimer = setTimeout(() => loadSource(player.stream, true, generation), delay);
+  player.retryTimer = setTimeout(() => loadSource(player.url, true, generation), delay);
+}
+
+/* Ersatz bei Ausfall: nächster Favorit, der noch nicht versucht wurde. */
+function fallbackCandidate() {
+  if (!runtime?.stream?.auto_fallback) return null;
+  const primary = runtime.stream.url;
+  return (runtime.stream.favorites || []).find((item) => item.url !== primary && item.url !== player.url && !player.tried.has(item.url)) || null;
+}
+
+function startFallback(reason) {
+  const next = fallbackCandidate();
+  if (!next) { playEmbed(player.url); return; }
+  const failed = streamInfo(player.override ? player.override.url : runtime.stream.url).title.split(" · ")[0];
+  player.tried.add(player.url);
+  player.override = next;
+  hideReconnect();
+  configureStream(runtime.stream, true);
+  byId("fbTitle").textContent = `${failed} ist offline`;
+  byId("fbSub").textContent = `Zeige jetzt ${next.title || "einen Favoriten"}. Zurück, sobald die Kamera wieder läuft.`;
+  byId("fallbackNote").hidden = false;
+  console.info("Ersatz-Stream:", reason);
+  clearInterval(player.checkTimer);
+  player.checkTimer = setInterval(checkPrimary, PRIMARY_CHECK_MS);
+  showChip(20000);
+}
+
+async function checkPrimary() {
+  if (!player.override) { clearInterval(player.checkTimer); return; }
+  try {
+    const source = await api("/api/stream/source?refresh=1");
+    if (source.kind === "hls" || source.kind === "file") {
+      endFallback();
+      toast("Kamera wieder da · zurück zum ersten Favoriten");
+    }
+  } catch (_error) { /* nächster Versuch in fünf Minuten */ }
+}
+
+function endFallback() {
+  clearInterval(player.checkTimer);
+  player.override = null;
+  player.tried.clear();
+  byId("fallbackNote").hidden = true;
+  configureStream(runtime.stream, true);
 }
 
 function configureStream(stream, force = false) {
-  const signature = JSON.stringify({ url: stream.url || "", autoplay: !!stream.autoplay, muted: !!stream.muted, quality: stream.quality || "auto" });
-  if (!force && signature === streamSignature) return;
-  streamSignature = signature;
+  const primary = String(stream.url || "").trim();
+  if (player.primary !== null && player.primary !== primary && player.override) {
+    // Im Menü wurde eine andere Kamera gewählt: der Ersatz endet.
+    clearInterval(player.checkTimer);
+    player.override = null;
+    player.tried.clear();
+    byId("fallbackNote").hidden = true;
+  }
+  player.primary = primary;
+  const url = player.override?.url || primary;
+  const signature = JSON.stringify({ url, quality: stream.quality || "auto", fps: stream.max_fps || 30 });
+  applyAudio();
+  if (!force && signature === player.signature) return;
+  const switching = player.signature && JSON.parse(player.signature).url !== url;
+  player.signature = signature;
   player.generation += 1;
-  player.stream = stream;
   player.retries = 0;
-  if (!String(stream.url || "").trim()) {
+  player.reconnecting = false;
+  if (!url) {
     stopVideo();
     elements.live.removeAttribute("src");
-    setStreamView({
-      state: "error",
-      full: "Keine Stream-URL konfiguriert",
-      card: { title: "Kein Livestream konfiguriert", text: "Öffne den lokalen Adminmodus und hinterlege eine unterstützte Embed-URL." },
-    });
+    player.url = "";
+    setStreamView("empty", "Kein Livestream eingerichtet");
     return;
   }
-  setStreamView({ state: "loading", full: "Livestream wird vorbereitet", card: null });
-  loadSource(stream, force, player.generation);
+  if (switching) crossfade();
+  setStreamView("loading", "Livestream wird vorbereitet");
+  loadSource(url, force, player.generation);
 }
 
 // Wächter: pausiert der Browser das Video oder bleibt das Bild stehen, holt der Player es zurück.
 function watchPlayer() {
   const video = elements.video;
   if (!player.source || !videoActive()) return;
-  if (video.paused) video.play().catch(() => {});
+  if (video.paused) playVideo();
   if (video.currentTime !== player.lastTime) {
     player.lastTime = video.currentTime;
     player.lastProgress = Date.now();
     return;
   }
   const stalled = Date.now() - player.lastProgress;
-  if (stalled > 8000 && !player.retryTimer) showNotice("Bild hängt · Verbindung wird geprüft");
+  if (stalled > 8000 && !player.retryTimer) {
+    player.reconnecting = true;
+    showReconnect("Bild hängt", "Verbindung wird geprüft · letztes Bild bleibt stehen");
+  }
   if (stalled > 20000) {
     player.lastProgress = Date.now();
     freezeFrame();
-    loadSource(player.stream, true, player.generation);
+    loadSource(player.url, true, player.generation);
   }
 }
 
-function formatMaybe(value, suffix = "") {
-  return value === null || value === undefined ? "–" : `${value}${suffix}`;
+function streamHealth() {
+  if (!player.url) return { state: "warn", text: "Keine Kamera eingerichtet", last: "–", limit: "–" };
+  if (player.reconnecting) return { state: "warn", text: "Letztes Bild, neuer Versuch", last: `Versuch ${player.retries} von ${PLAYER_MAX_RETRIES}`, limit: "8 s ohne neues Bild" };
+  if (player.override) return { state: "warn", text: "Ersatz läuft", last: streamInfo(player.url).title, limit: "8 s ohne neues Bild" };
+  if (player.kind === "embed") return { state: "warn", text: "Eingebettet (YouTube-Fenster)", last: streamInfo(player.url).title, limit: "–" };
+  const video = elements.video;
+  const buffered = video.buffered.length ? Math.max(0, video.buffered.end(video.buffered.length - 1) - video.currentTime) : 0;
+  const size = video.videoHeight ? `${video.videoHeight}p` : "lädt";
+  return { state: "ok", text: `${size} · Puffer ${Math.round(buffered)} s`, last: streamInfo(player.url).channel || streamInfo(player.url).title, limit: "8 s ohne neues Bild" };
 }
 
-function renderSystem(system) {
-  if (!system || system.enabled === false) return;
-  const parts = [`CPU ${formatMaybe(system.cpu, " %")}`];
-  if (!isMinimal()) parts.push(`RAM ${formatMaybe(system.ram, " %")}`);
-  parts.push(`${formatMaybe(system.temp)} °C`);
-  elements.sys.textContent = parts.join(" · ");
+/* Ton der Kamera: aus, an oder leise und aus, solange Musik läuft. */
+function applyAudio() {
+  const mode = runtime?.stream?.audio || "off";
+  const music = lastState?.music;
+  const musicPlaying = !!(music?.enabled && music.playing && !music.paused);
+  const video = elements.video;
+  video.muted = mode === "off" || (mode === "duck" && musicPlaying);
+  video.volume = mode === "duck" ? 0.35 : 1;
 }
 
-function weatherKind(code, isDay = true) {
-  if (code === 0 || code === 1) return isDay ? "sun" : "moon";
-  if (code === 2) return isDay ? "partly" : "partly-night";
-  if (code === 45 || code === 48) return "fog";
-  if (code >= 51 && code <= 67) return "rain";
-  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "snow";
-  if (code >= 80 && code <= 82) return isDay ? "showers" : "showers-night";
-  if (code >= 95 && code <= 99) return "thunder";
-  return "cloudy";
+/* ---------- Stream-Chip und Kamera-Karte ---------- */
+let chipTimer = null;
+function showChip(duration = 8000) {
+  if (!player.url) return;
+  const chip = byId("streamChip");
+  const info = streamInfo(player.url);
+  byId("chipTitle").textContent = info.title;
+  const kind = player.kind === "file" ? "Video in Schleife" : player.kind === "embed" ? "eingebettet" : "live";
+  byId("chipSub").textContent = [info.channel, kind].filter(Boolean).join(" · ");
+  const pill = byId("chipPill");
+  pill.textContent = player.kind === "file" ? "VIDEO" : "LIVE";
+  pill.classList.toggle("is-off", player.kind === "file" || player.reconnecting);
+  chip.classList.remove("is-gone");
+  clearTimeout(chipTimer);
+  chipTimer = setTimeout(() => { if (byId("camCard").hidden) chip.classList.add("is-gone"); }, duration);
 }
 
-function weatherIcon(code, isDay) {
-  const svg = document.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("focusable", "false");
-  svg.innerHTML = WEATHER_ICONS[weatherKind(Number(code), isDay)];
-  return svg;
+function renderCamCard() {
+  const url = player.url;
+  const info = streamInfo(url);
+  byId("camTitle").textContent = info.title;
+  const facts = byId("camFacts");
+  facts.replaceChildren();
+  const add = (key, value) => { if (value) facts.append(el("dt", "", key), el("dd", "", value)); };
+  add("Kanal", info.channel);
+  add("Wiedergabe", player.kind === "file" ? "Video in Schleife, eigener Player" : player.kind === "embed" ? "eingebettet" : "Livestream, eigener Player");
+  add("Bild", elements.video.videoHeight ? `${elements.video.videoHeight}p` : "");
+  if (player.override) add("Hinweis", "Ersatz, die eigentliche Kamera ist offline");
+  const notes = (runtime?.stream?.notes || {})[url] || [];
+  byId("camNotes").replaceChildren(...(notes.length ? notes : ["Noch keine Notizen"]).map((note) => el("li", "", note)));
 }
 
-function capitalize(text) {
-  const value = String(text || "");
-  return value ? value[0].toLocaleUpperCase("de-DE") + value.slice(1) : "";
-}
+/* ---------- Läuft gerade (Songkarte) ---------- */
+const SOURCE_NAME = { radio: "Radio", ytmusic: "YouTube Music", spotify: "Spotify" };
+const SOURCE_ICON = { radio: "i-radio", ytmusic: "t-music", spotify: "i-headphones" };
+let nowPlaying = null;
+let lastSub = "";
+let cardTimer = null;
 
-function rainSummary(weather, forecast) {
-  const minimal = isMinimal();
-  if (weather.stale) {
-    const time = formatTime(weather.updated_at);
-    return time ? `Stand ${time} · offline` : "offline";
-  }
-  const code = Number(weather.code);
-  if (Number(weather.rain) > 0 || RAIN_NOW_CODES.has(code)) {
-    const dry = forecast.find((item) => !item.rainy);
-    if (dry && !minimal) return `Regen jetzt · trocken ab etwa ${hourOf(dry.time)} Uhr`;
-    return "Regen jetzt";
-  }
-  const rainy = forecast.find((item) => item.rainy);
-  if (rainy) {
-    const text = `ab ${hourOf(rainy.time)} Uhr · ${rainy.probability} %`;
-    return minimal ? text : `Regen ${text}`;
-  }
-  if (!forecast.length) return "";
-  const hours = forecast.length === 1 ? "Stunde" : `${forecast.length} Stunden`;
-  return minimal ? `kein Regen · ${forecast.length} h` : `Kein Regen in den nächsten ${hours}`;
-}
-
-function renderRainHours(forecast) {
-  const columns = forecast.slice(0, isMinimal() ? 6 : 8).map((item) => {
-    const column = document.createElement("div");
-    column.className = "rain-col";
-    const track = document.createElement("span");
-    track.className = "rain-track";
-    const bar = document.createElement("span");
-    bar.className = "rain-bar";
-    bar.style.height = `${Math.min(100, Math.max(0, Number(item.probability) || 0))}%`;
-    track.append(bar);
-    const hour = document.createElement("span");
-    hour.className = "rain-hour";
-    hour.textContent = hourOf(item.time);
-    column.append(track, hour);
-    return column;
-  });
-  elements.rainHours.replaceChildren(...columns);
-}
-
-// Tag/Nacht kommt von Open-Meteo; ohne Wetterdaten entscheidet die Ortszeit (7–19 Uhr = Tag).
-function isDaytime(weather) {
-  if (typeof weather?.is_day === "boolean") return weather.is_day;
-  const hour = Number(new Intl.DateTimeFormat("de-DE", { hour: "numeric", hourCycle: "h23", timeZone: runtimeTimezone }).format(new Date()));
-  return hour >= 7 && hour < 19;
-}
-
-// Himmel der Bild-Themes: fest eingestellt oder nach Tag/Nacht. Das Wettersymbol folgt immer dem echten Sonnenstand.
-function applySky(weather) {
-  const mode = runtimeConfig?.ui?.sky || "auto";
-  elements.body.dataset.sky = mode === "auto" ? (isDaytime(weather) ? "day" : "night") : mode;
-}
-
-function renderWeather(weather) {
-  applySky(weather);
-  if (!weather) return;
-  elements.weatherText.textContent = weather.text || "Wetter nicht verfügbar";
-  elements.weather.classList.toggle("provider-error", !weather.ok);
-  const failed = weather.ok === false && !!weather.error;
-  elements.weather.classList.toggle("is-error", failed);
-  if (failed) {
-    elements.weatherError.textContent = weather.error;
-    return;
-  }
-  if (!weather.ok) {
-    elements.weatherIcon.replaceChildren();
-    elements.weatherTemp.textContent = "–°";
-    elements.weatherCondition.textContent = weather.text || "Wetter wird geladen";
-    elements.weatherDetails.textContent = "";
-    elements.rainSummary.textContent = "";
-    elements.rainHours.replaceChildren();
-    return;
-  }
-  elements.weatherIcon.replaceChildren(weatherIcon(weather.code, isDaytime(weather)));
-  elements.weatherTemp.textContent = `${formatMaybe(weather.temp)}°`;
-  elements.weatherCondition.textContent = capitalize(weather.condition) || "Aktuell";
-  const details = [];
-  if (weather.feels != null) details.push(`gefühlt ${weather.feels}°`);
-  if (weather.wind != null) details.push(`Wind ${weather.wind} km/h`);
-  if (weather.hum != null && !isMinimal()) details.push(`${weather.hum} %`);
-  elements.weatherDetails.textContent = details.join(" · ");
-  const forecast = Array.isArray(weather.forecast) ? weather.forecast : [];
-  elements.rainLabel.textContent = isMinimal() ? "Regen" : "Regenwahrscheinlichkeit";
-  elements.rainSummary.textContent = rainSummary(weather, forecast);
-  renderRainHours(forecast);
-}
-
-function parseMinutes(row) {
-  if (Number.isFinite(row.minutes)) return row.minutes;
-  if (row.minutes === null) return null;
-  const text = String(row.mins || "");
-  if (text === "jetzt") return 0;
-  const hours = text.match(/^(\d+)h (\d+)$/);
-  if (hours) return Number(hours[1]) * 60 + Number(hours[2]);
-  const minutes = text.match(/^(\d+) min$/);
-  return minutes ? Number(minutes[1]) : null;
-}
-
-function textElement(tag, className, text) {
-  const element = document.createElement(tag);
-  element.className = className;
-  element.textContent = text;
-  return element;
-}
-
-function departureRow(row, showStation) {
-  const departure = document.createElement("div");
-  departure.className = "departure";
-  const main = document.createElement("span");
-  main.className = "departure-main";
-  main.append(textElement("span", "departure-target", row.target));
-  if (showStation) main.append(textElement("span", "departure-sub", `ab ${row.board}`));
-  const time = document.createElement("span");
-  time.className = "departure-time";
-  const minutes = row.sortMinutes;
-  if (minutes !== null && minutes <= 0) {
-    time.append(textElement("span", "departure-now", "jetzt"));
-  } else if (minutes !== null && minutes < 60) {
-    time.append(textElement("span", "departure-num", String(minutes)), textElement("span", "departure-unit", "min"));
+function artFor(item, className = "", { badge = false, playing = false, paused = false } = {}) {
+  const art = el("span", `art${className ? ` ${className}` : ""}`);
+  const name = item.title || item.name || "";
+  art.style.setProperty("--h", String(hue(name)));
+  if (item.cover) {
+    const image = el("img");
+    image.alt = "";
+    image.loading = "lazy";
+    image.src = item.cover;
+    image.addEventListener("error", () => image.remove());
+    art.append(image);
+  } else if (item.source === "radio" || item.kind === "station") {
+    art.append(document.createTextNode(initials(name)));
   } else {
-    time.append(textElement("span", "departure-num", row.mins || "–"));
+    art.append(icon(item.kind === "song" || item.kind === "track" || item.kind === "video" ? "t-music" : "i-list"));
   }
-  departure.append(textElement("span", "departure-line", row.line), main, time);
-  return departure;
-}
-
-function boardErrorRow(board) {
-  const row = document.createElement("div");
-  row.className = "departure is-error";
-  if (board.error) row.title = board.error;
-  const icon = document.createElement("span");
-  icon.className = "departure-icon";
-  icon.innerHTML = ERROR_ICON;
-  const main = document.createElement("span");
-  main.className = "departure-main";
-  main.append(
-    textElement("span", "departure-error", `${board.title}: VRR antwortet nicht`),
-    textElement("span", "departure-sub", `letzte Abfrage ${formatTime(board.checked_at) || "–"} · neuer Versuch läuft`),
-  );
-  row.append(icon, main);
-  return row;
-}
-
-function boardMessage(title, text = "") {
-  const message = document.createElement("p");
-  message.className = "board-message";
-  message.append(textElement("strong", "", title));
-  if (text) message.append(textElement("span", "", text));
-  return message;
-}
-
-function renderBoards(boards) {
-  elements.boards.replaceChildren();
-  byId("transitStation").textContent = "";
-  const list = Array.isArray(boards) ? boards : [];
-  if (runtimeConfig?.transit_stop_count === 0) {
-    elements.boards.append(boardMessage("Keine Haltestellen eingerichtet", "Im Adminmodus hinzufügen"));
-    return;
+  if (badge && SOURCE_ICON[item.source]) {
+    const mark = el("span", "src-badge");
+    mark.append(icon(SOURCE_ICON[item.source]));
+    art.append(mark);
   }
-  // Fehler zuerst, damit ein ausgefallener Abruf nicht hinter Abfahrten verschwindet.
-  const errors = list.filter((board) => board.ok === false).map(boardErrorRow);
-  const rows = list
-    .filter((board) => board.ok !== false)
-    .flatMap((board) => (board.rows || []).map((row) => ({ ...row, board: board.title, sortMinutes: parseMinutes(row) })))
-    .sort((a, b) => (a.sortMinutes ?? Infinity) - (b.sortMinutes ?? Infinity))
-    .slice(0, isNarrow() ? 2 : 3);
-  // Eine Haltestelle steht neben der Überschrift; nur bei mehreren steht sie an jeder Zeile.
-  const stations = [...new Set(rows.map((row) => row.board))];
-  if (stations.length === 1) byId("transitStation").textContent = `ab ${stations[0]}`;
-  const items = [...errors, ...rows.map((row) => departureRow(row, stations.length > 1))].slice(0, isNarrow() ? 2 : 3);
-  if (!items.length) {
-    elements.boards.append(boardMessage("Keine passenden Abfahrten"));
-    return;
+  if (playing) {
+    const eq = el("span", `eq${paused ? " is-paused" : ""}`);
+    eq.setAttribute("aria-hidden", "true");
+    eq.append(el("i"), el("i"), el("i"), el("i"));
+    art.append(eq);
   }
-  elements.boards.append(...items);
+  return art;
 }
 
-function formatDuration(ms) {
-  const seconds = Math.max(0, Math.floor(ms / 1000));
+function musicTarget(music = nowPlaying) {
+  if (!music?.playing) return "";
+  return music.controls === "pi" || music.controls === "spotify" ? music.controls : "";
+}
+
+function nowItem(music) {
+  if (!music?.playing) return null;
+  if (music.source === "radio") return { source: "radio", kind: "station", id: music.station?.uuid || "", title: music.title, cover: "" };
+  return { source: music.source, kind: "song", id: "", title: music.title, cover: music.cover || "" };
+}
+
+function isCurrent(entry) {
+  const music = nowPlaying;
+  if (!music?.playing) return false;
+  if (entry.source === "radio") return music.source === "radio" && music.station?.uuid === entry.id;
+  return music.source === entry.source && !!entry.title && music.title === entry.title;
+}
+
+function formatDuration(milliseconds) {
+  const seconds = Math.max(0, Math.floor(milliseconds / 1000));
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-function musicLine(music) {
-  if (!music?.enabled) return "Musikanzeige ist aus";
-  if (music.playing) return `${music.title} · ${music.artist}`;
-  return music.error || "Gerade läuft nichts";
+function musicSub(music) {
+  if (music.source === "radio") {
+    if (music.loading) return "Verbinde …";
+    if (music.paused) return "Pausiert";
+    return music.artist ? `Jetzt: ${music.artist}` : music.station?.country || "Radio · live";
+  }
+  return [music.artist, SOURCE_NAME[music.source], music.paused ? "pausiert" : ""].filter(Boolean).join(" · ");
 }
 
-// Wen die Knöpfe steuern: „pi“ (YouTube Music über mpv) oder „spotify“ (Web API); sonst nichts.
-function musicTarget(music = nowPlaying) {
-  return music?.enabled && music.playing && ["pi", "spotify"].includes(music.controls) ? music.controls : "";
+function renderMusic() {
+  const music = lastState?.music;
+  nowPlaying = music;
+  const card = byId("nowPlaying");
+  const show = !!(music?.enabled && music.playing && music.title);
+  const wasHidden = card.hidden;
+  card.hidden = !show;
+  applyAudio();
+  renderBigNow();
+  if (!show) { card.classList.remove("is-open"); return; }
+  const radio = music.source === "radio";
+  card.classList.toggle("is-paused", !!music.paused);
+  card.classList.toggle("is-radio", radio);
+  const item = nowItem(music);
+  const art = artFor(item, "np-art");
+  art.id = "npArt";
+  byId("npArt").replaceWith(art);
+  byId("npTitle").textContent = music.title;
+  const sub = musicSub(music);
+  if (sub !== lastSub) {
+    const node = byId("npSub");
+    node.textContent = sub;
+    node.classList.remove("np-sub-anim");
+    if (lastSub && !reduceMotion) { void node.offsetWidth; node.classList.add("np-sub-anim"); }
+    lastSub = sub;
+  }
+  byId("npProg").hidden = radio || !music.duration_ms;
+  byId("npControls").hidden = !musicTarget(music);
+  $$('[data-mctl="toggle"]').forEach((button) => {
+    button.classList.toggle("is-paused", !!music.paused);
+    button.setAttribute("aria-label", music.paused ? "Abspielen" : "Pause");
+  });
+  $$('[data-mctl="previous"]').forEach((button) => button.setAttribute("aria-label", radio ? "Vorheriger Lieblingssender" : "Vorheriger Titel"));
+  $$('[data-mctl="next"]').forEach((button) => button.setAttribute("aria-label", radio ? "Nächster Lieblingssender" : "Nächster Titel"));
+  updateMusicProgress();
+  if (wasHidden && booted && !reduceMotion) card.animate([{ transform: "scale(.94)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 420, easing: "cubic-bezier(.34,1.56,.64,1)" });
 }
 
-function setPausedLook(button, paused) {
-  button.classList.toggle("is-paused", paused);
-  button.setAttribute("aria-label", paused ? "Abspielen" : "Pause");
-}
-
-// Fortschritt läuft zwischen den Abfragen lokal weiter; fetched_at stammt vom selben Gerät.
+// Fortschritt und Ausschalt-Timer laufen zwischen den Abfragen lokal weiter.
 function updateMusicProgress() {
   const music = nowPlaying;
-  const duration = Number(music?.duration_ms);
-  if (!music?.playing || !Number.isFinite(Number(music.progress_ms)) || !(duration > 0)) {
-    elements.npProgress.classList.add("hidden");
-    return;
-  }
-  const running = music.paused ? 0 : Math.max(0, Date.now() - Number(music.fetched_at || Date.now()));
-  const elapsed = Math.min(duration, Number(music.progress_ms) + running);
-  elements.npBar.style.width = `${(elapsed / duration) * 100}%`;
-  elements.npTime.textContent = `${formatDuration(elapsed)} / ${formatDuration(duration)}`;
-  elements.npProgress.classList.remove("hidden");
+  if (!music?.playing) return;
+  const sleep = byId("npSleep");
+  const left = music.sleep_end ? music.sleep_end - Date.now() : 0;
+  sleep.hidden = left <= 0;
+  if (left > 0) sleep.replaceChildren(icon("i-moon"), document.createTextNode(`aus in ${Math.ceil(left / 60000)} min`));
+  if (music.source === "radio" || !music.duration_ms) return;
+  const elapsed = music.paused ? 0 : Date.now() - Number(music.fetched_at || Date.now());
+  const position = Math.min(music.duration_ms, Number(music.progress_ms || 0) + elapsed);
+  const percent = `${((position / music.duration_ms) * 100).toFixed(2)}%`;
+  byId("npBar").style.width = percent;
+  byId("npLine").style.width = percent;
+  byId("npTime").textContent = `${formatDuration(position)} / ${formatDuration(music.duration_ms)}`;
 }
 
-function renderPlayerNow(music) {
-  const target = musicTarget(music);
-  elements.playerNow.classList.toggle("is-idle", !target);
-  elements.playerTitle.textContent = music?.playing ? (music.title || "Unbekannter Titel") : "Gerade läuft nichts";
-  const where = music?.device === "pi" ? "auf dem Pi" : music?.device ? `auf ${music.device}` : "";
-  elements.playerArtist.textContent = music?.playing
-    ? [music.artist, music.loading ? "wird geladen …" : music.paused ? "pausiert" : "", where].filter(Boolean).join(" · ")
-    : "Suche unten einen Song aus.";
-  if (music?.error && music.controls === "pi") elements.playerArtist.textContent = music.error;
-  elements.playerCover.classList.toggle("hidden", !(music?.playing && music.cover));
-  if (music?.playing && music.cover && elements.playerCover.getAttribute("src") !== music.cover) elements.playerCover.src = music.cover;
-  setPausedLook(elements.playerToggle, !!music?.paused);
-  syncVolume(elements.playerVolume, music);
-}
-
-// Während ein Regler bedient wird, nicht mit dem alten Wert überschreiben.
-function syncVolume(slider, music) {
-  if (music?.volume === null || music?.volume === undefined || !Number.isFinite(Number(music.volume))) return;
-  if (document.activeElement !== slider) slider.value = String(music.volume);
-}
-
-const CARD_EASING = "cubic-bezier(0.2, 0.8, 0.2, 1)";
-
-// Karte und Cover wachsen fließend von der kleinen zur großen Form (und zurück): Anfangs- und Endmaß
-// messen, dann beide Größen animieren; der übrige Inhalt fließt mit, die Bedienung blendet ein.
-function animateCard(open) {
-  const card = elements.nowPlaying;
-  const art = card.querySelector(".np-art");
-  const before = card.getBoundingClientRect();
-  const artBefore = art.getBoundingClientRect();
-  // Eine noch laufende Animation endet hier; ihr aktueller Stand ist der neue Startpunkt.
-  card.getAnimations({ subtree: true }).forEach((animation) => animation.cancel());
-  card.classList.toggle("is-open", open);
-  if (card.classList.contains("hidden") || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const after = card.getBoundingClientRect();
-  const artAfter = art.getBoundingClientRect();
-  const timing = { duration: 380, easing: CARD_EASING };
-  card.animate([
-    { width: `${before.width}px`, height: `${before.height}px` },
-    { width: `${after.width}px`, height: `${after.height}px` },
-  ], timing);
-  art.animate([
-    { width: `${artBefore.width}px`, height: `${artBefore.height}px` },
-    { width: `${artAfter.width}px`, height: `${artAfter.height}px` },
-  ], timing);
-  if (open) {
-    card.querySelectorAll(".np-more").forEach((part) => part.animate(
-      [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }],
-      { duration: 260, delay: 140, easing: "ease-out", fill: "backwards" },
-    ));
-  }
-}
-
-// Die große Karte schließt sich nach einer Weile ohne Berührung wieder.
 function setCardOpen(open) {
-  clearTimeout(npCloseTimer);
-  if (elements.nowPlaying.classList.contains("is-open") !== open) animateCard(open);
-  elements.npOpen.setAttribute("aria-expanded", String(open));
-  elements.npOpen.setAttribute("aria-label", open ? "Song klein anzeigen" : "Song groß anzeigen");
-  if (open) npCloseTimer = setTimeout(() => setCardOpen(false), 20000);
+  const card = byId("nowPlaying");
+  card.classList.toggle("is-open", open);
+  byId("npOpen").setAttribute("aria-expanded", String(open));
+  clearTimeout(cardTimer);
+  if (open) cardTimer = setTimeout(() => setCardOpen(false), 20000);
 }
 
-function renderMusic(music) {
-  nowPlaying = music || null;
-  elements.musicNow.textContent = musicLine(music);
-  renderPlayerNow(music);
-  const playing = !!(music?.enabled && music.playing);
-  elements.nowPlaying.classList.toggle("hidden", !playing);
-  if (!playing) {
-    setCardOpen(false);
-    return;
+async function sendControl(action, value) {
+  const target = musicTarget();
+  if (!target) return;
+  if (action === "toggle" && nowPlaying) {
+    nowPlaying = { ...nowPlaying, paused: !nowPlaying.paused, fetched_at: Date.now() };
+    lastState.music = nowPlaying;
+    renderMusic();
   }
-  const target = musicTarget(music);
-  elements.npControls.classList.toggle("hidden", !target);
-  const hasVolume = !!target && music.volume !== null && music.volume !== undefined;
-  elements.npVolumeRow.classList.toggle("hidden", !hasVolume);
-  syncVolume(elements.npVolume, music);
-  elements.nowPlaying.classList.toggle("is-paused", !!music.paused);
-  setPausedLook(elements.npToggle, !!music.paused);
-  elements.npTitle.textContent = music.title || "Unbekannter Titel";
-  elements.npArtist.textContent = music.artist || "";
-  elements.nowPlaying.dataset.source = music.source || "";
-  if (music.cover) {
-    if (elements.npCover.getAttribute("src") !== music.cover) elements.npCover.src = music.cover;
-    elements.npCover.classList.remove("hidden");
-  } else {
-    elements.npCover.removeAttribute("src");
-    elements.npCover.classList.add("hidden");
+  try {
+    await post("/api/player/control", { target, action, value });
+  } catch (error) {
+    toast(error.message);
   }
-  updateMusicProgress();
+  setTimeout(refreshState, 700);
 }
 
-function renderPanels(state) {
-  renderWeather(state.weather);
-  renderBoards(state.boards);
-  renderSystem(state.system);
-  renderMusic(state.music);
+/* ---------- Zustand vom Server ---------- */
+function applyRuntime(next) {
+  if (!next?.ui) return;
+  const firstRun = !runtime;
+  runtime = next;
+  computeLayout();
+  applyTheme();
+  applyBlocks();
+  configureStream(runtime.stream || {});
+  applyNight();
+  if (firstRun) armCompact();
 }
 
 async function refreshState() {
@@ -856,824 +1444,1286 @@ async function refreshState() {
     lastState = state;
     if (backendDown) {
       backendDown = false;
-      renderStreamView(streamView);
+      setStreamView(player.url ? "playing" : "empty", "Backend wieder erreichbar");
+      if (player.url) configureStream(runtime?.stream || {}, true);
     }
-    applyRuntimeConfig(state.config);
-    renderPanels(state);
-    elements.body.classList.remove("is-loading");
-  } catch (error) {
+    applyRuntime({ ...state.config, ui: state.config.ui });
+    renderWeather();
+    const go = renderBoards();
+    if (go && booted) expandFor(60000);
+    renderWarnings();
+    renderMusic();
+    renderStatus();
+    if (!byId("sheet").hidden) refreshSheetLive();
+    document.body.classList.remove("is-loading");
+  } catch (_error) {
     backendDown = true;
-    const showCard = !!streamView.card || (!elements.live.getAttribute("src") && !videoActive());
-    renderStreamView({
-      state: "error",
-      full: "Lokales Backend nicht erreichbar",
-      card: showCard ? { title: "Lokales Backend nicht erreichbar", text: "Die Anzeige fragt alle 5 Sekunden automatisch erneut an." } : null,
-    });
-    elements.weatherText.textContent = "Wetterdaten nicht erreichbar";
+    if (!videoActive() && !elements.live.getAttribute("src")) setStreamView("down", "Lokales Backend nicht erreichbar");
+    renderStatus();
   }
 }
 
-function openDialog(dialog, trigger) {
-  lastTrigger = trigger || document.activeElement;
-  if (!dialog.open) dialog.showModal();
+/* ---------- Menü (Seitenpanel) ---------- */
+let menuTab = "live";
+async function loadConfig() {
+  const result = await api("/api/config");
+  meta.youtubeKeySet = !!result.youtube_key_set;
+  meta.spotifyConnected = !!result.spotify_connected;
+  meta.ytConnected = !!result.ytmusic_connected;
+  currentConfig = result.config;
+  return currentConfig;
 }
 
-function closeDialog(dialog) {
-  if (dialog.open) dialog.close();
-  if (lastTrigger instanceof HTMLElement) lastTrigger.focus();
+async function adminStatus() {
+  const status = await api("/api/admin/status");
+  meta.remote = !!status.remote;
+  meta.pinLogin = !!status.pin_login;
+  return status;
 }
 
-function trapFocus(dialog, event) {
-  if (event.key !== "Tab") return;
-  const focusable = [...dialog.querySelectorAll("button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])")]
-    .filter((item) => !item.closest(".hidden"));
-  if (!focusable.length) return;
-  const first = focusable[0];
-  const last = focusable.at(-1);
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
-}
-
-async function beginAdmin(trigger, tab = "live") {
+async function beginAdmin(tab = "live") {
   menuTab = tab;
   try {
-    if (token) {
+    const status = await adminStatus();
+    if (status.authenticated) {
       await loadConfig();
-      openMenu(trigger);
+      openSheet(tab);
       return;
     }
-    const status = await api("/api/admin/status");
-    if (status.pin_required === false) {
-      await loadConfig();
-      openMenu(trigger);
-      return;
-    }
-    setupMode = !status.pin_configured;
-    elements.pinTitle.textContent = setupMode ? "Admin-PIN erstmals festlegen" : "Admin-PIN eingeben";
-    elements.pinHelp.textContent = setupMode
-      ? "Die PIN wird nur als sicherer Hash auf diesem Gerät gespeichert."
-      : "Die lokale Admin-Sitzung ist zeitlich begrenzt.";
-    elements.pinConfirmField.classList.toggle("hidden", !setupMode);
-    elements.pinConfirm.required = setupMode;
-    elements.submitPin.textContent = setupMode ? "PIN festlegen" : "Anmelden";
-    elements.pin.value = "";
-    elements.pinConfirm.value = "";
-    setStatus(elements.pinStatus, "");
-    openDialog(elements.pinDialog, trigger);
-    elements.pin.focus();
+    openAuth(status);
   } catch (error) {
-    showToast(`Adminmodus nicht verfügbar: ${error.message}`);
+    toast(`Menü nicht verfügbar: ${error.message}`);
   }
 }
 
-async function authenticate(event) {
-  event.preventDefault();
-  const pin = elements.pin.value.trim();
-  if (setupMode && pin !== elements.pinConfirm.value.trim()) {
-    setStatus(elements.pinStatus, "Die PINs stimmen nicht überein.", "error");
+function flipPlayer(apply) {
+  const box = elements.playerBox;
+  const before = box.getBoundingClientRect();
+  apply();
+  if (window.innerWidth > 760 || reduceMotion) return;
+  const after = box.getBoundingClientRect();
+  if (!after.width || (before.width === after.width && before.left === after.left)) return;
+  box.animate([
+    { transformOrigin: "0 0", transform: `translate(${before.left - after.left}px, ${before.top - after.top}px) scale(${before.width / after.width}, ${before.height / after.height})` },
+    { transformOrigin: "0 0", transform: "none" },
+  ], { duration: 460, easing: "cubic-bezier(.2,.9,.25,1)" });
+}
+
+function openSheet(tab = "live") {
+  closeDetails(true);
+  const sheet = byId("sheet");
+  sheet.getAnimations().forEach((animation) => animation.cancel());
+  flipPlayer(() => { sheet.hidden = false; document.body.classList.add("sheet-open"); });
+  syncSheet();
+  showTab(tab);
+  applyNight();
+}
+
+function closeSheet() {
+  const sheet = byId("sheet");
+  if (sheet.hidden) return;
+  hideKeyboard();
+  stopPanelPolling();
+  const done = () => {
+    flipPlayer(() => { sheet.hidden = true; document.body.classList.remove("sheet-open"); });
+    armCompact();
+    applyNight();
+  };
+  if (reduceMotion) { done(); return; }
+  sheet.animate([{ transform: "none", opacity: 1 }, { transform: "translateX(-28px)", opacity: 0 }], { duration: 200, easing: "cubic-bezier(.4,0,1,1)" }).finished.then(done).catch(done);
+}
+
+function pill(box, selector, className = "seg-pill") {
+  if (!box) return;
+  let marker = $(`:scope > .${className}`, box);
+  const fresh = !marker;
+  if (fresh) {
+    marker = el("span", className);
+    marker.setAttribute("aria-hidden", "true");
+    box.prepend(marker);
+  }
+  const target = $(selector, box);
+  if (!target || !target.offsetWidth) { marker.style.opacity = "0"; return; }
+  const jump = fresh || marker.style.opacity === "0";
+  if (jump) marker.style.transition = "none";
+  marker.style.opacity = "1";
+  marker.style.width = `${target.offsetWidth}px`;
+  marker.style.height = `${target.offsetHeight}px`;
+  marker.style.transform = `translate(${target.offsetLeft}px, ${target.offsetTop}px)`;
+  if (jump) { void marker.offsetWidth; marker.style.transition = ""; }
+}
+
+function refreshPills() {
+  if (byId("sheet").hidden) return;
+  const selected = $(".sheet-tab[aria-selected='true']");
+  pill($(".sheet-tabs"), selected ? `.sheet-tab[data-tab="${selected.dataset.tab}"]` : ".none", "tab-pill");
+  pill(byId("distSeg"), '[aria-pressed="true"]');
+  pill(byId("srcSeg"), '[aria-pressed="true"]');
+}
+
+function stagger(box) {
+  if (reduceMotion || !box) return;
+  [...box.children].forEach((child, index) => {
+    child.style.setProperty("--i", String(Math.min(index, 12)));
+    child.classList.remove("rise");
+    void child.offsetWidth;
+    child.classList.add("rise");
+  });
+}
+
+let panelTimers = [];
+function stopPanelPolling() {
+  panelTimers.forEach(clearTimeout);
+  panelTimers = [];
+}
+
+function showTab(name) {
+  stopPanelPolling();
+  hideKeyboard();
+  $$(".sheet-tab").forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.tab === name)));
+  pill($(".sheet-tabs"), `.sheet-tab[data-tab="${name}"]`, "tab-pill");
+  $$(".panel[data-panel]").forEach((panel) => { panel.hidden = panel.dataset.panel !== name; });
+  byId("sheetBody").scrollTop = 0;
+  if (name === "live") { refreshSheetLive(); if (!liveSearched) searchLive(currentConfig?.youtube?.default_query || "Live Cam"); }
+  if (name === "display") pill(byId("distSeg"), '[aria-pressed="true"]');
+  if (name === "transit") renderStopCards();
+  if (name === "music") openMusicPanel();
+  if (name === "system") { renderDiag(); loadSystemInfo(); }
+  if (name === "phone") startPairing();
+  stagger($(`.panel[data-panel="${name}"]`));
+}
+
+function syncSheet() {
+  const config = currentConfig;
+  if (!config) return;
+  byId("qualSel").value = config.stream.quality === "1080" ? "auto" : config.stream.quality || "auto";
+  byId("fpsSel").value = String(config.stream.max_fps || 30);
+  byId("camAudio").value = config.stream.audio || "off";
+  byId("autoFav").checked = !!config.stream.auto_fallback;
+  byId("cfgStream").value = config.stream.url || "";
+  byId("placeNow").textContent = config.location.label;
+  byId("placeSub").textContent = `${Math.abs(config.location.latitude).toFixed(2).replace(".", ",")}° ${config.location.latitude >= 0 ? "N" : "S"} · ${Math.abs(config.location.longitude).toFixed(2).replace(".", ",")}° ${config.location.longitude >= 0 ? "O" : "W"} · ${config.app.timezone}`;
+  byId("skySel").value = config.ui.sky || "auto";
+  $$("#distSeg button").forEach((button) => button.setAttribute("aria-pressed", String(Number(button.dataset.dist) === Number(config.ui.distance || 2))));
+  $$("[data-block]").forEach((input) => { input.checked = !!config.ui[input.dataset.block]?.enabled; });
+  byId("compactSel").value = String(config.ui.compact_after ?? 120);
+  byId("warnSel").value = config.weather.warnings || "moderate";
+  byId("nightOn").checked = !!config.ui.night?.enabled;
+  byId("nightFrom").value = config.ui.night?.start || "23:00";
+  byId("nightTo").value = config.ui.night?.end || "06:00";
+  byId("nightOff").checked = !!config.ui.night?.screen_off;
+  byId("leaveMode").checked = config.transit.leave_mode !== false;
+  byId("cfgMusicSource").value = config.music.source || "off";
+  byId("cfgSpotifyClient").value = config.music.spotify?.client_id || "";
+  byId("cfgYoutubeQuery").value = config.youtube?.default_query ?? "";
+  byId("youtubeKeyState").textContent = meta.youtubeKeySet
+    ? "Ein Schlüssel ist hinterlegt; die Suche nutzt die offizielle YouTube-API. Zum Ersetzen neuen Schlüssel eintragen."
+    : "Kein Schlüssel nötig: Die Suche liest die öffentliche YouTube-Suche mit dem Filter „Live“.";
+  byId("publicUrl").value = config.server?.public_url || "";
+  byId("lanOn").checked = !!config.server?.lan_access;
+  applyTheme();
+  refreshPills();
+  if (!byId("sheet").hidden) {
+    if ($('.panel[data-panel="live"]').hidden === false) refreshSheetLive();
+    if ($('.panel[data-panel="transit"]').hidden === false) renderStopCards();
+  }
+}
+
+/* Livestream-Bereich */
+let liveSearched = false;
+function stateLabel() {
+  if (!player.url) return ["Keine Kamera", "is-warn"];
+  if (player.reconnecting) return ["Neuer Versuch", "is-warn"];
+  if (player.override) return ["Ersatz", "is-warn"];
+  if (player.kind === "embed") return ["Eingebettet", "is-warn"];
+  if (player.kind === "file") return ["Video", ""];
+  return ["Spielt", ""];
+}
+
+function thumbNode(url, className = "thumb") {
+  const box = el("span", className);
+  const source = thumbnailFor(url);
+  if (source) {
+    const image = el("img");
+    image.alt = "";
+    image.loading = "lazy";
+    image.src = source;
+    box.append(image);
+  }
+  return box;
+}
+
+function refreshSheetLive() {
+  if (!currentConfig) return;
+  const url = player.url || currentConfig.stream.url;
+  const info = streamInfo(url || "");
+  byId("nowTitle").textContent = url ? info.title : "Keine Kamera eingerichtet";
+  byId("nowSub").textContent = url ? [info.channel, player.kind === "file" ? "Video in Schleife" : player.kind === "embed" ? "eingebettet" : "live"].filter(Boolean).join(" · ") : "Unten suchen oder eine Adresse eintragen";
+  const image = byId("nowThumbImg");
+  const source = thumbnailFor(url);
+  image.hidden = !source;
+  if (source && image.getAttribute("src") !== source) image.src = source;
+  const [label, stateClass] = stateLabel();
+  byId("nowState").replaceChildren(el("span", `dot ${stateClass}`.trim()), el("span", "", label));
+  renderFavorites();
+  renderNotes();
+  $$("#liveResults .result").forEach((card) => card.classList.toggle("is-current", card.dataset.url === currentConfig.stream.url));
+}
+
+function renderFavorites() {
+  const favorites = currentConfig.stream.favorites || [];
+  const list = byId("favList");
+  if (!favorites.length) {
+    list.replaceChildren(el("p", "hint", "Noch keine Favoriten. In der Suche unten den Stern antippen."));
     return;
   }
-  elements.submitPin.disabled = true;
-  setStatus(elements.pinStatus, setupMode ? "PIN wird sicher gespeichert …" : "Anmeldung läuft …");
-  try {
-    const result = await api(setupMode ? "/api/admin/setup" : "/api/admin/login", {
-      method: "POST",
-      body: JSON.stringify({ pin }),
-    });
-    token = result.token;
-    sessionStorage.setItem("bi-storchcam-admin-token", token);
-    await loadConfig();
-    closeDialog(elements.pinDialog);
-    openMenu(elements.hotspot);
-  } catch (error) {
-    setStatus(elements.pinStatus, error.message, "error");
-  } finally {
-    elements.submitPin.disabled = false;
+  list.replaceChildren(...favorites.map((favorite, index) => {
+    const row = el("div", "row");
+    const text = el("div");
+    const playing = favorite.url === player.url;
+    text.append(el("strong", "", `${index + 1}. ${favorite.title || streamInfo(favorite.url).title}`), el("span", "sub", playing ? (player.override ? "springt gerade ein" : "spielt gerade") : favorite.channel || "Favorit"));
+    const actions = el("div", "acts");
+    const up = el("button", "icon-button small");
+    up.type = "button";
+    up.append(icon("i-up"));
+    up.setAttribute("aria-label", "Nach oben");
+    up.disabled = index === 0;
+    up.addEventListener("click", () => saveConfig((config) => {
+      const items = config.stream.favorites;
+      items.splice(index - 1, 0, items.splice(index, 1)[0]);
+    }, "Reihenfolge der Favoriten"));
+    const play = el("button", "button button-secondary", favorite.url === currentConfig.stream.url ? "Läuft" : "Abspielen");
+    play.type = "button";
+    play.disabled = favorite.url === currentConfig.stream.url;
+    play.addEventListener("click", () => chooseStream(favorite));
+    const remove = el("button", "icon-button small");
+    remove.type = "button";
+    remove.append(icon("i-trash"));
+    remove.setAttribute("aria-label", "Favorit entfernen");
+    remove.addEventListener("click", () => saveConfig((config) => { config.stream.favorites.splice(index, 1); }, "Favorit entfernt"));
+    actions.append(up, play, remove);
+    row.append(thumbNode(favorite.url), text, actions);
+    return row;
+  }));
+}
+
+function renderNotes() {
+  const url = currentConfig.stream.url;
+  const notes = (currentConfig.stream.notes || {})[url] || [];
+  const list = byId("noteList");
+  if (!url) { list.replaceChildren(el("p", "hint", "Notizen gehören zu einer Kamera; zuerst eine auswählen.")); return; }
+  if (!notes.length) { list.replaceChildren(el("p", "hint", "Noch keine Notizen zu dieser Kamera.")); return; }
+  list.replaceChildren(...notes.map((note, index) => {
+    const row = el("div", "row is-plain");
+    const remove = el("button", "icon-button small");
+    remove.type = "button";
+    remove.append(icon("i-close"));
+    remove.setAttribute("aria-label", "Notiz löschen");
+    remove.addEventListener("click", () => saveConfig((config) => {
+      const items = config.stream.notes[url] || [];
+      items.splice(index, 1);
+      if (!items.length) delete config.stream.notes[url];
+    }, "Notiz gelöscht"));
+    row.append(el("span", "", note), remove);
+    return row;
+  }));
+}
+
+async function addNote() {
+  const input = byId("noteInput");
+  const text = input.value.trim();
+  const url = currentConfig?.stream.url;
+  if (!text || !url) return;
+  hideKeyboard();
+  if (await saveConfig((config) => { config.stream.notes[url] = [...(config.stream.notes[url] || []), text].slice(-10); }, "Notiz hinzugefügt")) input.value = "";
+}
+
+async function chooseStream(video) {
+  const url = video.url || video.embed_url;
+  titles.set(url, { title: video.title, channel: video.channel });
+  player.override = null;
+  player.tried.clear();
+  byId("fallbackNote").hidden = true;
+  await saveConfig((config) => { config.stream.url = url; }, `Spielt jetzt · ${video.title || "neue Kamera"}`);
+  showChip(10000);
+}
+
+function toggleFavorite(video, star) {
+  const url = video.url || video.embed_url;
+  const known = (currentConfig.stream.favorites || []).some((item) => item.url === url);
+  saveConfig((config) => {
+    if (known) config.stream.favorites = config.stream.favorites.filter((item) => item.url !== url);
+    else config.stream.favorites.push({ url, title: video.title || "", channel: video.channel || "" });
+  }, known ? "Favorit entfernt" : "Als Favorit gemerkt").then((saved) => {
+    if (!saved) return;
+    star.classList.toggle("is-on", !known);
+    if (!known) { star.classList.remove("pop"); void star.offsetWidth; star.classList.add("pop"); }
+  });
+}
+
+function liveCard(video, onPick, { star = true } = {}) {
+  const url = video.embed_url;
+  const card = el("div", `result${url === currentConfig?.stream?.url ? " is-current" : ""}`);
+  card.dataset.url = url;
+  card.setAttribute("role", "button");
+  card.tabIndex = 0;
+  if (video.thumbnail) {
+    const image = el("img");
+    image.alt = "";
+    image.loading = "lazy";
+    image.src = video.thumbnail;
+    card.append(image);
+  } else {
+    const fallback = el("span", "thumb-fallback");
+    fallback.append(icon("t-live"));
+    card.append(fallback);
+  }
+  card.append(el("span", "live-pill", "LIVE"));
+  if (star) {
+    const on = (currentConfig?.stream?.favorites || []).some((item) => item.url === url);
+    const button = el("button", `star${on ? " is-on" : ""}`);
+    button.type = "button";
+    button.append(icon("i-star"));
+    button.setAttribute("aria-label", on ? "Aus Favoriten entfernen" : "Als Favorit merken");
+    button.addEventListener("click", (event) => { event.stopPropagation(); toggleFavorite(video, button); });
+    card.append(button);
+  }
+  card.append(el("strong", "", video.title), el("span", "", video.channel));
+  card.addEventListener("click", () => onPick(video, card));
+  card.addEventListener("keydown", (event) => { if (event.key === "Enter") onPick(video, card); });
+  return card;
+}
+
+function skeletons(box, count = 3) {
+  box.replaceChildren(...Array.from({ length: count }, () => el("div", "skel")));
+}
+
+function busyButton(button, on) {
+  if (!button) return;
+  button.disabled = on;
+  if (on) {
+    button.dataset.label = button.dataset.label || button.textContent;
+    const dots = el("span", "dots");
+    dots.append(el("i"), el("i"), el("i"));
+    button.replaceChildren(dots);
+  } else if (button.dataset.label) {
+    button.textContent = button.dataset.label;
   }
 }
 
-function fillForm(config) {
-  byId("cfgStream").value = config.stream.url || "";
-  byId("streamAutoplay").checked = !!config.stream.autoplay;
-  byId("streamMuted").checked = !!config.stream.muted;
-  byId("cfgStreamQuality").value = config.stream.quality === "1080" ? "auto" : (config.stream.quality || "auto");
-  byId("cfgLabel").value = config.location.label || "";
-  byId("cfgLat").value = config.location.latitude;
-  byId("cfgLon").value = config.location.longitude;
-  byId("cfgLayout").value = config.ui.layout_profile;
-  byId("cfgTheme").value = config.ui.theme;
-  byId("cfgSky").value = config.ui.sky || "auto";
-  byId("showClock").checked = !!config.ui.clock.enabled;
-  byId("showWeather").checked = !!config.ui.weather.enabled;
-  byId("showTransit").checked = !!config.ui.transit.enabled;
-  byId("showSystem").checked = !!config.ui.system.enabled;
-  byId("cfgYoutubeKey").value = "";
-  byId("cfgYoutubeQuery").value = config.youtube?.default_query ?? "Storch";
-  elements.youtubeKeyState.textContent = youtubeKeySet
-    ? "Ein Schlüssel ist hinterlegt; die Suche nutzt die offizielle YouTube-API. Zum Ersetzen neuen Schlüssel eintragen und speichern."
-    : "Kein Schlüssel nötig: Die Suche liest die öffentliche YouTube-Suche mit dem Filter „Live“. Ein eigener Schlüssel ist optional.";
-  fillMusicForm(config.music || {});
-  elements.placeCurrent.textContent = `${config.location.label} (${config.app?.timezone || runtimeTimezone})`;
-  elements.liveCurrent.textContent = liveTitle || config.stream.url || "kein Stream";
-  pendingTimezone = "";
-  workingStops = clone(config.transit.stops || []);
-  renderStopEditor();
-  dirty = false;
-  setStatus(elements.saveState, "");
-}
-
-async function loadConfig() {
+async function searchLive(query) {
+  liveSearched = true;
+  byId("liveQuery").value = query;
+  const box = byId("liveResults");
+  const button = byId("liveSearchBtn");
+  busyButton(button, true);
+  skeletons(box, 4);
+  setStatus(byId("liveStatus"), "");
   try {
-    const result = await api("/api/config");
-    youtubeKeySet = !!result.youtube_key_set;
-    spotifyConnected = !!result.spotify_connected;
-    ytConnected = !!result.ytmusic_connected;
-    currentConfig = result.config;
-    fillForm(currentConfig);
-  } catch (error) {
-    if (error.status === 401) {
-      token = "";
-      sessionStorage.removeItem("bi-storchcam-admin-token");
+    const result = await api(`/api/live/search?q=${encodeURIComponent(query)}`);
+    if (!result.results.length) {
+      box.replaceChildren();
+      setStatus(byId("liveStatus"), "Gerade ist dazu nichts live. Anderes Suchwort versuchen.");
+      return;
     }
-    throw error;
+    result.results.forEach((video) => titles.set(video.embed_url, { title: video.title, channel: video.channel }));
+    box.replaceChildren(...result.results.map((video) => liveCard({ ...video, url: video.embed_url }, (picked) => chooseStream(picked))));
+    stagger(box);
+  } catch (error) {
+    box.replaceChildren();
+    setStatus(byId("liveStatus"), error.message, "error");
+  } finally {
+    busyButton(button, false);
   }
 }
 
+/* Ort */
+async function searchPlaces(input, box, status, onPick, button) {
+  const query = input.value.trim();
+  hideKeyboard();
+  if (query.length < 2) { setStatus(status, "Bitte mindestens zwei Zeichen eingeben.", "error"); return; }
+  busyButton(button, true);
+  skeletons(box, 3);
+  setStatus(status, "");
+  try {
+    const result = await api(`/api/location/search?q=${encodeURIComponent(query)}`);
+    if (!result.results.length) { box.replaceChildren(); setStatus(status, "Kein Ort gefunden. Andere Schreibweise versuchen."); return; }
+    box.replaceChildren(...result.results.map((place) => {
+      const pick = el("button", "pick");
+      pick.type = "button";
+      const text = el("div");
+      text.append(el("strong", "", place.name), el("span", "", [place.region, place.timezone].filter(Boolean).join(" · ")));
+      pick.append(text, icon("i-chev"));
+      pick.addEventListener("click", () => onPick(place, pick));
+      return pick;
+    }));
+    stagger(box);
+  } catch (error) {
+    box.replaceChildren();
+    setStatus(status, error.message, "error");
+  } finally {
+    busyButton(button, false);
+  }
+}
+
+async function timezoneFor(place) {
+  if (place.timezone) return place.timezone;
+  try {
+    return (await api(`/api/location/timezone?lat=${place.latitude}&lon=${place.longitude}`)).timezone;
+  } catch (_error) {
+    return "";
+  }
+}
+
+async function choosePlace(place) {
+  const zone = await timezoneFor(place);
+  const saved = await saveConfig((config) => {
+    config.location = { label: place.name, latitude: Number(place.latitude), longitude: Number(place.longitude) };
+    if (zone) config.app.timezone = zone;
+  }, `Ort ${place.name}`);
+  if (saved) byId("placeResults").replaceChildren();
+}
+
+/* Anzeige */
+const THEMES = [
+  { id: "auto", name: "Automatisch" }, { id: "dark", name: "Dunkel" }, { id: "light", name: "Hell" },
+  { id: "high-contrast", name: "Kontrast" }, { id: "y2k", name: "Y2K" }, { id: "dagobert", name: "Dagobert" },
+  { id: "flap", name: "Fallblatt" }, { id: "paper", name: "Papier" }, { id: "plasma", name: "Plasma" },
+];
+function buildThemeGrid() {
+  byId("themeGrid").replaceChildren(...THEMES.map((theme) => {
+    const card = el("button", "theme-card");
+    card.type = "button";
+    card.dataset.theme = theme.id;
+    const mini = el("span", "mini");
+    (theme.id === "auto" ? ["light", "dark"] : [theme.id]).forEach((preview) => {
+      const bar = el("span", "mini-bar");
+      bar.dataset.preview = preview;
+      bar.append(el("span", "", "21:19"), el("b", "", "31"));
+      mini.append(bar);
+    });
+    card.append(mini, el("strong", "", theme.name));
+    card.addEventListener("click", () => {
+      if (currentConfig?.ui.theme === theme.id) return;
+      saveConfig((config) => { config.ui.theme = theme.id; }, `Theme ${theme.name}`);
+    });
+    return card;
+  }));
+}
+
+/* ÖPNV */
+function boardFor(stop) {
+  return (lastState?.boards || []).find((board) => board.station_id && board.station_id === stop.station_id);
+}
+
+function renderStopCards() {
+  if (!currentConfig) return;
+  const stops = currentConfig.transit.stops || [];
+  const box = byId("stopCards");
+  if (!stops.length) { box.replaceChildren(el("p", "hint", "Noch keine Haltestelle. Unten suchen und hinzufügen.")); return; }
+  box.replaceChildren(...stops.map((stop, index) => {
+    const board = boardFor(stop);
+    const card = el("div", "card");
+    const head = el("div", "stop-head");
+    const title = el("div");
+    title.append(el("strong", "", stop.title || board?.title || stop.station_name), el("div", "hint", `${stop.station_name} · VRR`));
+    const state = el("span", "state-pill");
+    const bad = board && !board.ok;
+    state.append(el("span", `dot${bad ? " is-bad" : board ? "" : " is-warn"}`), document.createTextNode(bad ? "keine Antwort" : board ? "Echtzeit" : "wird geladen"));
+    const actions = el("div", "stop-actions");
+    const up = el("button", "icon-button small");
+    up.type = "button";
+    up.append(icon("i-up"));
+    up.setAttribute("aria-label", "Nach oben");
+    up.disabled = index === 0;
+    up.addEventListener("click", () => saveConfig((config) => { const items = config.transit.stops; items.splice(index - 1, 0, items.splice(index, 1)[0]); }, "Reihenfolge der Haltestellen"));
+    const remove = el("button", "icon-button small");
+    remove.type = "button";
+    remove.append(icon("i-trash"));
+    remove.setAttribute("aria-label", "Haltestelle entfernen");
+    remove.addEventListener("click", () => saveConfig((config) => { config.transit.stops.splice(index, 1); }, `${stop.station_name} entfernt`));
+    actions.append(up, remove);
+    head.append(title, state, actions);
+    const walk = el("div", "stop-walk");
+    walk.append(el("span", "hint", "Gehzeit zur Haltestelle"));
+    const stepper = el("div", "stepper");
+    const minus = el("button", "icon-button small", "−");
+    minus.type = "button";
+    minus.setAttribute("aria-label", "Eine Minute weniger");
+    const output = el("output", "", `${stop.walk_minutes || 0} min`);
+    const plus = el("button", "icon-button small", "+");
+    plus.type = "button";
+    plus.setAttribute("aria-label", "Eine Minute mehr");
+    const step = (delta) => {
+      const value = Math.max(0, Math.min(30, (stop.walk_minutes || 0) + delta));
+      if (value !== (stop.walk_minutes || 0)) saveConfig((config) => { config.transit.stops[index].walk_minutes = value; }, `Gehzeit ${stop.station_name} ${value} min`);
+    };
+    minus.addEventListener("click", () => step(-1));
+    plus.addEventListener("click", () => step(1));
+    stepper.append(minus, output, plus);
+    walk.append(stepper);
+    const chips = el("div", "chips");
+    const filter = stop.line_filter || [];
+    const lines = (board?.lines || []).map((item) => item.line);
+    filter.forEach((line) => { if (!lines.includes(line)) lines.push(line); });
+    const all = el("button", "chip", "Alle Linien");
+    all.type = "button";
+    all.setAttribute("aria-pressed", String(!filter.length));
+    all.addEventListener("click", () => { if (filter.length) saveConfig((config) => { config.transit.stops[index].line_filter = []; }, "Alle Linien"); });
+    chips.append(all);
+    lines.forEach((line) => {
+      const chip = el("button", "chip", line);
+      chip.type = "button";
+      chip.setAttribute("aria-pressed", String(filter.includes(line)));
+      chip.addEventListener("click", () => saveConfig((config) => {
+        const current = config.transit.stops[index].line_filter || [];
+        config.transit.stops[index].line_filter = current.includes(line) ? current.filter((item) => item !== line) : [...current, line];
+      }, `Linienfilter ${stop.station_name}`));
+      chips.append(chip);
+    });
+    card.append(head, walk, chips);
+    if (!lines.length) card.append(el("span", "hint", "Linien erscheinen hier, sobald die ersten Abfahrten geladen sind."));
+    return card;
+  }));
+}
+
+async function searchStops(input, box, status, onPick, button) {
+  const query = input.value.trim();
+  hideKeyboard();
+  if (query.length < 2) { setStatus(status, "Bitte mindestens zwei Zeichen eingeben.", "error"); return; }
+  busyButton(button, true);
+  skeletons(box, 3);
+  setStatus(status, "");
+  try {
+    const result = await api(`/api/station/search?q=${encodeURIComponent(query)}`);
+    if (!result.results.length) { box.replaceChildren(); setStatus(status, "Keine VRR-Haltestelle gefunden. Andere Schreibweise versuchen."); return; }
+    box.replaceChildren(...result.results.map((station) => {
+      const pick = el("button", "pick");
+      pick.type = "button";
+      const text = el("div");
+      text.append(el("strong", "", station.station_name), el("span", "", "VRR"));
+      pick.append(text, el("span", "", "hinzufügen"));
+      pick.addEventListener("click", () => onPick(station, pick));
+      return pick;
+    }));
+    stagger(box);
+  } catch (error) {
+    box.replaceChildren();
+    setStatus(status, error.message, "error");
+  } finally {
+    busyButton(button, false);
+  }
+}
+
+function stopFrom(station) {
+  return { title: "", station_name: station.station_name, station_id: station.station_id, line_filter: [], nightbus_only: false, hide_if_empty: true, max_rows: Number(currentConfig?.transit?.default_max_rows || 2), walk_minutes: 0 };
+}
+
+async function addStop(station) {
+  if ((currentConfig.transit.stops || []).some((stop) => stop.station_id === station.station_id)) { toast("Diese Haltestelle ist schon da"); return; }
+  if (await saveConfig((config) => { config.transit.stops.push(stopFrom(station)); config.ui.transit.enabled = true; }, `${station.station_name} hinzugefügt`)) {
+    byId("stopResults").replaceChildren();
+  }
+}
+
+/* ---------- Musik ---------- */
+const music = { src: "radio", filter: "", results: [], playlists: [], recent: [], searched: false };
+const RADIO_FILTERS = [["", "Alle"], ["de", "Deutschland"], ["news", "Nachrichten"], ["pop", "Pop"], ["rock", "Rock"], ["jazz", "Jazz"], ["klassik", "Klassik"]];
+const LIBRARY_FILTERS = [["", "Alle"], ["song", "Songs"], ["album", "Alben"], ["playlist", "Playlists"]];
+const KIND_LABELS = { song: "Song", video: "Video", album: "Album", playlist: "Playlist", track: "Song", station: "Sender" };
+
+function radioItem(station) {
+  return { source: "radio", kind: "station", id: station.uuid, title: station.name, subtitle: [station.country, station.codec && station.bitrate ? `${station.codec} · ${station.bitrate} kbit/s` : station.codec].filter(Boolean).join(" · "), station };
+}
+
+async function openMusicPanel() {
+  renderMusicPanel();
+  loadRecent();
+  if (!music.searched) searchMusic(true);
+  loadBluetooth(false);
+}
+
+function renderBigNow() {
+  const box = byId("npBig");
+  if (!box) return;
+  const current = nowPlaying;
+  const playing = !!(current?.enabled && current.playing && current.title);
+  box.classList.toggle("is-idle", !playing);
+  box.classList.toggle("is-paused", !!current?.paused);
+  const art = playing ? artFor(nowItem(current), "np-big-art") : el("span", "art np-big-art");
+  if (!playing) art.append(icon("t-music"));
+  art.id = "mBigArt";
+  byId("mBigArt").replaceWith(art);
+  byId("mBigSrc").replaceChildren(...(playing ? [icon(SOURCE_ICON[current.source] || "t-music"), document.createTextNode(current.source === "radio" ? "Radio · live" : `${SOURCE_NAME[current.source] || ""}${current.device && current.device !== "pi" ? ` · ${current.device}` : ""}`)] : []));
+  byId("mBigTitle").textContent = playing ? current.title : "Gerade läuft nichts";
+  byId("mBigSub").textContent = playing ? (current.source === "radio" ? musicSub(current).replace(/^Jetzt: /, "") : current.artist || "") : "Sender oder Song unten auswählen";
+  const slider = byId("mVol");
+  if (playing && document.activeElement !== slider && current.volume !== null && current.volume !== undefined) {
+    slider.value = String(current.volume);
+    byId("mVolOut").textContent = String(current.volume);
+  }
+  slider.style.setProperty("--p", `${slider.value}%`);
+  const sleepEnd = current?.sleep_end || 0;
+  $$("#sleepChips .chip").forEach((chip) => chip.setAttribute("aria-pressed", String(!!sleepEnd && chip.dataset.sleep === (current.sleep_label || ""))));
+  $$("#mFavs .tile, #mRecent .rcard, #mResults .mrow").forEach((node) => node.classList.toggle("is-playing", !!node.dataset.key && isCurrent(JSON.parse(node.dataset.key))));
+}
+
+function renderMusicPanel() {
+  $$("#srcSeg button").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.src === music.src)));
+  pill(byId("srcSeg"), `[data-src="${music.src}"]`);
+  byId("mQueryLabel").textContent = music.src === "radio" ? "Sender, Stadt oder Genre suchen" : music.src === "ytmusic" ? "Song, Album, Playlist oder Künstler" : "In Spotify suchen";
+  byId("mQuery").placeholder = music.src === "radio" ? "z. B. WDR 2, Jazz, Köln" : "z. B. Bohemian Rhapsody";
+  const filters = music.src === "radio" ? RADIO_FILTERS : LIBRARY_FILTERS;
+  byId("mFilters").replaceChildren(...filters.map(([key, label]) => {
+    const chip = el("button", "chip", label);
+    chip.type = "button";
+    chip.setAttribute("aria-pressed", String(music.filter === key));
+    chip.addEventListener("click", () => {
+      music.filter = key;
+      if (music.src === "radio") searchMusic(); else { renderMusicPanel(); renderResults(true); }
+    });
+    return chip;
+  }));
+  renderFavoriteTiles();
+  renderRecent();
+  renderResults(false);
+  renderBigNow();
+  renderAccounts();
+}
+
+function entryKey(entry) {
+  return JSON.stringify({ source: entry.source, id: entry.id, title: entry.source === "radio" ? "" : entry.title });
+}
+
+function tile(entry) {
+  const button = el("button", `tile${isCurrent(entry) ? " is-playing" : ""}`);
+  button.type = "button";
+  button.dataset.key = entryKey(entry);
+  button.append(artFor(entry, "", { playing: isCurrent(entry), paused: nowPlaying?.paused }), el("strong", "", entry.title));
+  button.addEventListener("click", () => playEntry(entry));
+  return button;
+}
+
+function renderFavoriteTiles() {
+  const head = byId("mFavHead");
+  const box = byId("mFavs");
+  if (music.src === "radio") {
+    head.firstElementChild.textContent = "Lieblingssender";
+    const stations = currentConfig?.music?.radio?.favorites || [];
+    box.replaceChildren(...stations.map((station) => tile(radioItem(station))));
+    if (!stations.length) box.replaceChildren(el("p", "hint", "Noch keine Lieblingssender. Beim Sender den Stern antippen."));
+    return;
+  }
+  head.firstElementChild.textContent = "Meine Playlists";
+  const connected = music.src === "spotify" ? meta.spotifyConnected : meta.ytConnected;
+  if (!connected) { box.replaceChildren(el("p", "hint", `${SOURCE_NAME[music.src]} ist noch nicht verbunden (unten unter „Konten und Lautsprecher“).`)); return; }
+  box.replaceChildren(...music.playlists.map((item) => tile({ ...item, source: music.src })));
+  if (!music.playlists.length) box.replaceChildren(el("p", "hint", "Playlists werden geladen …"));
+}
+
+function renderRecent() {
+  const box = byId("mRecent");
+  byId("mRecentHead").hidden = !music.recent.length;
+  box.replaceChildren(...music.recent.map((entry) => {
+    const card = el("button", `rcard${isCurrent(entry) ? " is-playing" : ""}`);
+    card.type = "button";
+    card.dataset.key = entryKey(entry);
+    card.append(artFor(entry, "", { badge: true, playing: isCurrent(entry), paused: nowPlaying?.paused }), el("strong", "", entry.title), el("span", "sub", entry.source === "radio" ? "Radio" : entry.subtitle || SOURCE_NAME[entry.source]));
+    card.addEventListener("click", () => playEntry(entry));
+    return card;
+  }));
+}
+
+async function loadRecent() {
+  try {
+    music.recent = (await api("/api/music/recent")).results || [];
+    renderRecent();
+  } catch (_error) { /* Verlauf ist nur ein Komfort */ }
+}
+
+function musicRow(entry) {
+  const row = el("div", `mrow${isCurrent(entry) ? " is-playing" : ""}`);
+  row.setAttribute("role", "button");
+  row.tabIndex = 0;
+  row.dataset.key = entryKey(entry);
+  const text = el("span", "txt");
+  text.append(el("strong", "", entry.title), el("span", "sub", entry.source === "radio" ? entry.subtitle : [KIND_LABELS[entry.kind], entry.subtitle].filter(Boolean).join(" · ")));
+  row.append(artFor(entry, "", { playing: isCurrent(entry), paused: nowPlaying?.paused }), text);
+  if (entry.source === "radio") {
+    const on = (currentConfig?.music?.radio?.favorites || []).some((station) => station.uuid === entry.id);
+    const star = el("button", `fav${on ? " is-on" : ""}`);
+    star.type = "button";
+    star.append(icon("i-star"));
+    star.setAttribute("aria-label", on ? "Aus Lieblingssendern entfernen" : "Als Lieblingssender merken");
+    star.addEventListener("click", (event) => { event.stopPropagation(); toggleStation(entry.station, star); });
+    row.append(star);
+  } else {
+    row.append(el("span"));
+  }
+  row.addEventListener("click", () => playEntry(entry));
+  row.addEventListener("keydown", (event) => { if (event.key === "Enter") playEntry(entry); });
+  return row;
+}
+
+function renderResults(animate) {
+  const box = byId("mResults");
+  const head = byId("mResHead");
+  const items = music.src === "radio" ? music.results : music.results.filter((item) => !music.filter || item.kind === music.filter || (music.filter === "song" && item.kind === "video"));
+  head.firstElementChild.textContent = music.src === "radio" ? "Sender" : "Ergebnisse";
+  $("small", head).textContent = music.searched ? `${items.length} gefunden${music.src === "radio" ? " · Radio Browser" : ""}` : "";
+  head.hidden = !music.searched && !items.length;
+  const nodes = [];
+  if (music.src === "radio") items.forEach((item) => nodes.push(musicRow(item)));
+  else ["song", "video", "album", "playlist"].forEach((kind) => {
+    const group = items.filter((item) => item.kind === kind);
+    if (!group.length) return;
+    nodes.push(el("div", "group-head", { song: "Songs", video: "Videos", album: "Alben", playlist: "Playlists" }[kind]));
+    group.forEach((item) => nodes.push(musicRow(item)));
+  });
+  if (!nodes.length && music.searched) nodes.push(el("p", "hint", "Nichts gefunden. Anderes Suchwort oder den Filter „Alle“ probieren."));
+  box.replaceChildren(...nodes);
+  if (animate) stagger(box);
+}
+
+async function searchMusic(initial = false) {
+  const query = byId("mQuery").value.trim();
+  const status = byId("mStatus");
+  hideKeyboard();
+  setStatus(status, "");
+  if (music.src !== "radio") {
+    const connected = music.src === "spotify" ? meta.spotifyConnected : meta.ytConnected;
+    if (!connected) { music.results = []; renderResults(false); setStatus(status, `${SOURCE_NAME[music.src]} ist noch nicht verbunden.`, "error"); return; }
+    if (!query) { if (!initial) setStatus(status, "Bitte ein Suchwort eingeben."); return; }
+  }
+  const button = byId("mSearch");
+  busyButton(button, true);
+  skeletons(byId("mResults"), 3);
+  try {
+    if (music.src === "radio") {
+      const result = await post("/api/radio/search", { query, filter: music.filter });
+      music.results = result.results.map(radioItem);
+    } else {
+      const result = await post("/api/player/search", { service: music.src, query });
+      music.results = result.results.map((item) => ({ ...item, source: music.src }));
+    }
+    music.searched = true;
+    renderMusicPanel();
+    renderResults(true);
+  } catch (error) {
+    music.results = [];
+    renderResults(false);
+    setStatus(status, error.message, "error");
+  } finally {
+    busyButton(button, false);
+  }
+}
+
+async function loadPlaylists() {
+  if (music.src === "radio") return;
+  const service = music.src;
+  try {
+    const result = await post("/api/player/playlists", { service });
+    if (service === music.src) { music.playlists = result.results || []; renderFavoriteTiles(); }
+  } catch (error) {
+    if (service === music.src) byId("mFavs").replaceChildren(el("p", "hint", error.message));
+  }
+}
+
+async function playEntry(entry) {
+  const status = byId("mStatus");
+  setStatus(status, `Starte „${entry.title}“ …`);
+  try {
+    if (entry.source === "radio") {
+      if (!entry.station?.url) throw new Error("Sender ohne Adresse");
+      await post("/api/radio/play", { station: entry.station });
+    } else {
+      await post("/api/player/play", { service: entry.source, kind: entry.kind, id: entry.id, title: entry.title, subtitle: entry.subtitle, cover: entry.cover });
+    }
+    setStatus(status, "");
+    toast(`Spielt jetzt · ${entry.title}`);
+    setTimeout(loadRecent, 800);
+  } catch (error) {
+    setStatus(status, error.message, "error");
+  }
+  setTimeout(refreshState, 1200);
+}
+
+function toggleStation(station, star) {
+  const known = (currentConfig.music.radio?.favorites || []).some((item) => item.uuid === station.uuid);
+  saveConfig((config) => {
+    const list = config.music.radio.favorites;
+    config.music.radio.favorites = known ? list.filter((item) => item.uuid !== station.uuid) : [...list, { uuid: station.uuid, name: station.name, url: station.url, country: station.country || "", codec: station.codec || "", bitrate: Number(station.bitrate || 0), tags: station.tags || [] }];
+  }, known ? "Aus Lieblingssendern entfernt" : "Als Lieblingssender gemerkt").then((saved) => {
+    if (!saved) return;
+    star.classList.toggle("is-on", !known);
+    if (!known) { star.classList.remove("pop"); void star.offsetWidth; star.classList.add("pop"); }
+    renderFavoriteTiles();
+  });
+}
+
+function nightStartMinutes() {
+  const [hours, minutes] = String(runtime?.ui?.night?.start || "23:00").split(":").map(Number);
+  let delta = hours * 60 + minutes - minutesOfDay();
+  if (delta <= 0) delta += 24 * 60;
+  return delta;
+}
+
+async function setSleep(key) {
+  const active = nowPlaying?.sleep_end && nowPlaying.sleep_label === key;
+  const minutes = active ? 0 : key === "night" ? nightStartMinutes() : Number(key);
+  try {
+    await post("/api/player/sleep", { minutes, label: active ? "" : key });
+    toast(minutes ? `Musik geht aus in ${minutes} min` : "Ausschalt-Timer aus");
+  } catch (error) {
+    toast(error.message);
+  }
+  refreshState();
+}
+
+/* Konten und Lautsprecher */
 function spotifyRedirectUri() {
   return `${window.location.origin}/api/music/spotify/callback`;
 }
 
-function fillMusicForm(music) {
-  byId("cfgMusicSource").value = music.source || "off";
-  byId("cfgSpotifyClient").value = music.spotify?.client_id || "";
-  updateYtState();
-  setStatus(elements.ytStatus, "");
-  stopYtPolling();
-  pollYtLogin(true);
+function renderAccounts(pendingYt = false) {
+  byId("ytState").textContent = pendingYt ? "Anmeldefenster ist offen. Melde dich dort mit deinem Google-Konto an." : meta.ytConnected ? "Verbunden." : "Nicht verbunden.";
+  byId("ytConnect").textContent = meta.ytConnected ? "Neu anmelden" : "Am Bildschirm anmelden";
+  byId("ytConnect").hidden = pendingYt || meta.remote;
+  byId("ytCancel").hidden = !pendingYt;
+  byId("ytDisconnect").hidden = !meta.ytConnected || pendingYt;
+  byId("spotifyState").textContent = meta.spotifyConnected ? "Verbunden. Der Zugang erneuert sich automatisch." : "Nicht verbunden. Die Anmeldung öffnet sich auf diesem Gerät und kehrt danach zurück.";
+  byId("spotifyConnect").textContent = meta.spotifyConnected ? "Neu verbinden" : "Verbinden";
+  byId("spotifyDisconnect").hidden = !meta.spotifyConnected;
   byId("spotifyRedirect").textContent = spotifyRedirectUri();
-  byId("spotifyHostHint").classList.toggle("hidden", window.location.hostname !== "localhost");
-  updateSpotifyState();
-  elements.musicNow.textContent = musicLine(lastState?.music);
-  setStatus(elements.spotifyStatus, "");
+  byId("spotifyHostHint").hidden = window.location.hostname !== "localhost";
 }
 
-function updateYtState(pending = false) {
-  elements.ytState.textContent = pending
-    ? "Anmeldefenster ist offen. Melde dich dort mit deinem Google-Konto an."
-    : ytConnected
-      ? "Verbunden. Neue Songs aus deinem YouTube-Music-Verlauf erscheinen oben rechts."
-      : "Nicht verbunden.";
-  byId("ytConnect").textContent = ytConnected ? "Neu anmelden" : "Am Bildschirm anmelden";
-  byId("ytConnect").classList.toggle("hidden", pending);
-  byId("ytCancel").classList.toggle("hidden", !pending);
-  byId("ytDisconnect").classList.toggle("hidden", !ytConnected || pending);
-}
-
-function stopYtPolling() {
-  clearTimeout(ytPollTimer);
-  ytPollTimer = null;
-}
-
-// quiet: nur nachsehen (Menü geöffnet), alte Fehler nicht erneut anzeigen.
 async function pollYtLogin(quiet = false) {
   try {
     const status = await api("/api/music/ytmusic/login");
-    ytConnected = !!status.connected;
+    meta.ytConnected = !!status.connected;
     if (status.status === "pending") {
-      updateYtState(true);
-      ytPollTimer = setTimeout(pollYtLogin, 2000);
+      renderAccounts(true);
+      panelTimers.push(setTimeout(() => pollYtLogin(), 2000));
       return;
     }
-    updateYtState();
+    renderAccounts();
     if (quiet) return;
-    if (status.status === "connected") {
-      setStatus(elements.ytStatus, `Verbunden. Zuletzt gehört: ${status.latest || "–"}`, "success");
-      showToast("YouTube Music verbunden");
-    } else if (status.status === "error") {
-      setStatus(elements.ytStatus, status.error || "Anmeldung fehlgeschlagen", "error");
-    }
+    if (status.status === "connected") { setStatus(byId("ytStatus"), `Verbunden. Zuletzt gehört: ${status.latest || "–"}`, "success"); toast("YouTube Music verbunden"); }
+    else if (status.status === "error") setStatus(byId("ytStatus"), status.error || "Anmeldung fehlgeschlagen", "error");
   } catch (error) {
-    updateYtState();
-    if (!quiet) setStatus(elements.ytStatus, `Anmeldestatus nicht abrufbar: ${error.message}`, "error");
+    if (!quiet) setStatus(byId("ytStatus"), `Anmeldestatus nicht abrufbar: ${error.message}`, "error");
   }
 }
 
 async function connectYt() {
-  stopYtPolling();
   hideKeyboard();
-  byId("ytConnect").disabled = true;
-  setStatus(elements.ytStatus, "Anmeldefenster wird geöffnet …");
+  setStatus(byId("ytStatus"), "Anmeldefenster wird geöffnet …");
   try {
-    await api("/api/music/ytmusic/login", { method: "POST", body: "{}" });
-    setStatus(elements.ytStatus, "");
-    updateYtState(true);
-    ytPollTimer = setTimeout(pollYtLogin, 2000);
+    await post("/api/music/ytmusic/login");
+    setStatus(byId("ytStatus"), "");
+    renderAccounts(true);
+    panelTimers.push(setTimeout(() => pollYtLogin(), 2000));
   } catch (error) {
-    setStatus(elements.ytStatus, `Anmelden fehlgeschlagen: ${error.message}`, "error");
-  } finally {
-    byId("ytConnect").disabled = false;
+    setStatus(byId("ytStatus"), `Anmelden fehlgeschlagen: ${error.message}`, "error");
   }
-}
-
-async function cancelYt() {
-  stopYtPolling();
-  try {
-    await api("/api/music/ytmusic/cancel", { method: "POST", body: "{}" });
-    setStatus(elements.ytStatus, "Anmeldung abgebrochen");
-  } catch (error) {
-    setStatus(elements.ytStatus, `Abbrechen fehlgeschlagen: ${error.message}`, "error");
-  }
-  updateYtState();
-}
-
-async function disconnectYt() {
-  if (!window.confirm("YouTube Music trennen?")) return;
-  try {
-    await api("/api/music/ytmusic/disconnect", { method: "POST", body: "{}" });
-    stopYtPolling();
-    ytConnected = false;
-    updateYtState();
-    showToast("YouTube Music getrennt");
-  } catch (error) {
-    setStatus(elements.ytStatus, `Trennen fehlgeschlagen: ${error.message}`, "error");
-  }
-}
-
-function updateSpotifyState() {
-  elements.spotifyState.textContent = spotifyConnected
-    ? "Verbunden. Der Zugang erneuert sich automatisch."
-    : "Nicht verbunden. Die Anmeldung öffnet sich hier auf dem Bildschirm und kehrt danach automatisch zurück.";
-  byId("spotifyConnect").textContent = spotifyConnected ? "Neu verbinden" : "Mit Spotify verbinden";
-  byId("spotifyDisconnect").classList.toggle("hidden", !spotifyConnected);
 }
 
 async function connectSpotify() {
   const clientId = byId("cfgSpotifyClient").value.trim();
-  if (!clientId) {
-    setStatus(elements.spotifyStatus, "Bitte zuerst die Client-ID eintragen (Anleitung unten).", "error");
-    return;
-  }
-  // Ungespeicherte Änderungen zuerst sichern, denn die Anmeldung verlässt kurz die Seite.
-  if (dirty) {
-    await saveConfig();
-    if (dirty) return;
-  }
-  byId("spotifyConnect").disabled = true;
-  setStatus(elements.spotifyStatus, "Spotify-Anmeldung wird geöffnet …");
+  if (!clientId) { setStatus(byId("spotifyStatus"), "Bitte zuerst die Client-ID eintragen (Anleitung unten).", "error"); return; }
+  setStatus(byId("spotifyStatus"), "Spotify-Anmeldung wird geöffnet …");
   try {
-    const result = await api("/api/music/spotify/authorize", {
-      method: "POST",
-      body: JSON.stringify({ client_id: clientId, redirect_uri: spotifyRedirectUri() }),
-    });
+    const result = await post("/api/music/spotify/authorize", { client_id: clientId, redirect_uri: spotifyRedirectUri() });
     window.location.assign(result.url);
   } catch (error) {
-    setStatus(elements.spotifyStatus, `Verbinden fehlgeschlagen: ${error.message}`, "error");
-    byId("spotifyConnect").disabled = false;
+    setStatus(byId("spotifyStatus"), `Verbinden fehlgeschlagen: ${error.message}`, "error");
   }
 }
 
-async function disconnectSpotify() {
-  if (!window.confirm("Spotify-Verbindung trennen?")) return;
+async function confirmAndPost(question, path, done) {
+  if (!window.confirm(question)) return;
   try {
-    await api("/api/music/spotify/disconnect", { method: "POST", body: "{}" });
-    spotifyConnected = false;
-    updateSpotifyState();
-    showToast("Spotify getrennt");
+    await post(path);
+    done();
   } catch (error) {
-    setStatus(elements.spotifyStatus, `Trennen fehlgeschlagen: ${error.message}`, "error");
+    toast(error.message);
   }
 }
 
-async function sendControl(action, value) {
-  const target = musicTarget();
-  if (!target) return;
-  if (action === "toggle" && nowPlaying) {
-    nowPlaying = { ...nowPlaying, paused: !nowPlaying.paused, progress_ms: Number(nowPlaying.progress_ms || 0) + (nowPlaying.paused ? 0 : Date.now() - Number(nowPlaying.fetched_at || Date.now())), fetched_at: Date.now() };
-    renderMusic(nowPlaying);
+function renderSpotifyPair(status) {
+  const pairing = status.status === "pairing";
+  byId("spPairState").textContent = status.paired
+    ? status.running ? `Gekoppelt. „${status.name}“ steht in Spotify als Lautsprecher bereit.` : "Gekoppelt, startet gerade …"
+    : pairing ? "Warte auf die Bestätigung in Spotify …" : "Nicht gekoppelt. Damit Spotify auf dem Pi spielt, einmal koppeln.";
+  byId("spPair").textContent = status.paired ? "Neu koppeln" : "Pi als Spotify-Lautsprecher koppeln";
+  byId("spUnpair").hidden = !status.paired;
+  byId("spPairBox").hidden = !(pairing && status.qr);
+  if (pairing && status.qr) {
+    byId("spPairQr").src = status.qr;
+    byId("spPairUrl").textContent = status.url;
+    byId("spPairCode").textContent = status.code || "–";
   }
+  if (status.status === "error" || status.status === "crashed") setStatus(byId("spPairStatus"), status.error || "Der Spotify-Lautsprecher ist abgestürzt", "error");
+}
+
+async function loadSpotifyPair(fromPairing = false) {
   try {
-    await api("/api/player/control", { method: "POST", body: JSON.stringify({ target, action, value }) });
+    const status = await api("/api/music/spotify/pair");
+    renderSpotifyPair(status);
+    if (status.status === "pairing" && !byId("sheet").hidden) panelTimers.push(setTimeout(() => loadSpotifyPair(true), 2000));
+    else if (fromPairing && status.paired) { setStatus(byId("spPairStatus"), "Gekoppelt", "success"); toast("Spotify-Lautsprecher gekoppelt"); }
   } catch (error) {
-    showToast(error.message);
-  }
-  setTimeout(refreshState, 700);
-}
-
-function selectService(service) {
-  playerService = service;
-  document.querySelectorAll(".segment[data-service]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.service === service)));
-  elements.playerResults.replaceChildren();
-  const missing = service === "spotify" ? !spotifyConnected : !ytConnected;
-  setStatus(elements.playerStatus, missing ? `${service === "spotify" ? "Spotify" : "YouTube Music"} ist noch nicht verbunden (Tab „Musik“).` : "", missing ? "error" : "");
-  elements.playerPlaylists.replaceChildren();
-  setStatus(elements.playlistStatus, "");
-  if (!missing) loadPlaylists(service);
-}
-
-function playerCard(item, list) {
-  const card = document.createElement("button");
-  card.type = "button";
-  card.className = "player-card";
-  let art;
-  if (item.cover) {
-    art = document.createElement("img");
-    art.alt = "";
-    art.loading = "lazy";
-    art.src = item.cover;
-  } else {
-    art = textElement("span", "player-noart", "");
-  }
-  const subtitle = [KIND_LABELS[item.kind] || "", item.subtitle].filter(Boolean).join(" · ");
-  card.append(art, textElement("strong", "", item.title), textElement("span", "", subtitle));
-  card.addEventListener("click", () => playItem(item, card, list));
-  return card;
-}
-
-async function loadPlaylists(service) {
-  setStatus(elements.playlistStatus, "Playlists werden geladen …");
-  try {
-    const result = await api("/api/player/playlists", { method: "POST", body: JSON.stringify({ service }) });
-    if (service !== playerService) return;
-    setStatus(elements.playlistStatus, result.results.length ? "" : "Keine eigenen Playlists gefunden.");
-    elements.playerPlaylists.replaceChildren(...result.results.map((item) => playerCard(item, elements.playerPlaylists)));
-  } catch (error) {
-    if (service === playerService) setStatus(elements.playlistStatus, error.message, "error");
-  }
-}
-
-const KIND_LABELS = { song: "Song", video: "Video", album: "Album", playlist: "Playlist", track: "Song" };
-
-async function searchPlayer() {
-  const query = elements.playerQuery.value.trim();
-  if (!query) return;
-  hideKeyboard();
-  elements.playerResults.replaceChildren();
-  byId("playerSearchBtn").disabled = true;
-  setStatus(elements.playerStatus, `Suche „${query}“ …`);
-  try {
-    const result = await api("/api/player/search", { method: "POST", body: JSON.stringify({ service: playerService, query }) });
-    if (!result.results.length) {
-      setStatus(elements.playerStatus, "Nichts gefunden. Anderes Suchwort versuchen.");
-      return;
-    }
-    setStatus(elements.playerStatus, "Zum Abspielen antippen");
-    elements.playerResults.replaceChildren(...result.results.map((item) => playerCard(item, elements.playerResults)));
-  } catch (error) {
-    setStatus(elements.playerStatus, error.message, "error");
-  } finally {
-    byId("playerSearchBtn").disabled = false;
-  }
-}
-
-async function playItem(item, card, list) {
-  const status = list === elements.playerPlaylists ? elements.playlistStatus : elements.playerStatus;
-  const cards = document.querySelectorAll(".player-card");
-  cards.forEach((button) => { button.disabled = true; button.classList.remove("is-current"); });
-  setStatus(status, `Starte „${item.title}“ …`);
-  try {
-    await api("/api/player/play", { method: "POST", body: JSON.stringify({ service: playerService, kind: item.kind, id: item.id }) });
-    setStatus(status, `Läuft: ${item.title}`, "success");
-    card.classList.add("is-current");
-  } catch (error) {
-    setStatus(status, error.message, "error");
-  } finally {
-    cards.forEach((button) => { button.disabled = false; });
-    setTimeout(refreshState, 1500);
+    setStatus(byId("spPairStatus"), `Status nicht abrufbar: ${error.message}`, "error");
   }
 }
 
 const BT_ACTIONS = { scan: "Suche läuft", connect: "Verbinde", disconnect: "Trenne", remove: "Entferne" };
-
-function stopPlayerPolling() {
-  clearTimeout(btPollTimer);
-  clearTimeout(pairPollTimer);
-  btPollTimer = null;
-  pairPollTimer = null;
-}
-
-function bluetoothRow(device, busy) {
-  const row = document.createElement("div");
-  row.className = `bt-device${device.connected ? " is-connected" : ""}`;
-  const text = document.createElement("div");
-  text.append(textElement("strong", "", device.name), textElement("span", "", device.connected ? "Verbunden" : device.paired ? "Gekoppelt" : "Gefunden"));
-  row.append(text);
-  const actions = device.connected
-    ? [["disconnect", "Trennen", "button-secondary"]]
-    : [["connect", "Verbinden", "button-primary"]];
-  if (device.paired) actions.push(["remove", "Entfernen", "button-danger"]);
-  actions.forEach(([action, label, style]) => {
-    const button = textElement("button", `button ${style}`, label);
-    button.type = "button";
-    button.disabled = busy;
-    button.addEventListener("click", () => bluetoothAction(action, device.mac));
-    row.append(button);
-  });
-  return row;
-}
-
 function renderBluetooth(status) {
   byId("btScan").disabled = !status.available || status.busy;
+  const connected = (status.devices || []).filter((device) => device.connected).map((device) => device.name);
+  byId("mOutName").textContent = connected[0] || "Lautsprecher des Pi";
   if (!status.available) {
-    elements.btState.textContent = "";
-    setStatus(elements.btStatus, status.error || "Bluetooth nicht verfügbar", "error");
-    elements.btDevices.replaceChildren();
+    byId("btState").textContent = "";
+    setStatus(byId("btStatus"), status.error || "Bluetooth nicht verfügbar", "error");
+    byId("btDevices").replaceChildren();
     return;
   }
-  const connected = status.devices.filter((device) => device.connected).map((device) => device.name);
-  elements.btState.textContent = connected.length ? `Ton läuft über: ${connected.join(", ")}` : "Kein Lautsprecher verbunden.";
+  byId("btState").textContent = connected.length ? `Ton läuft über: ${connected.join(", ")}` : "Kein Lautsprecher verbunden.";
   if (status.busy) {
     const name = status.devices.find((device) => device.mac === status.mac)?.name || "";
-    setStatus(elements.btStatus, `${BT_ACTIONS[status.action] || "Bitte warten"}${name ? ` mit ${name}` : ""} …`);
+    setStatus(byId("btStatus"), `${BT_ACTIONS[status.action] || "Bitte warten"}${name ? ` mit ${name}` : ""} …`);
   } else if (status.message) {
-    setStatus(elements.btStatus, status.message, status.ok ? "success" : "error");
+    setStatus(byId("btStatus"), status.message, status.ok ? "success" : "error");
   } else {
-    setStatus(elements.btStatus, status.devices.length ? "" : "Noch keine Lautsprecher gefunden. „Lautsprecher suchen“ tippen.");
+    setStatus(byId("btStatus"), status.devices.length ? "" : "Noch keine Lautsprecher gefunden. „Lautsprecher suchen“ tippen.");
   }
-  elements.btDevices.replaceChildren(...status.devices.map((device) => bluetoothRow(device, status.busy)));
+  byId("btDevices").replaceChildren(...status.devices.map((device) => {
+    const row = el("div", "row is-plain bt-row");
+    const text = el("div");
+    text.append(el("strong", "", device.name), el("span", "sub", device.connected ? " · verbunden" : device.paired ? " · gekoppelt" : " · gefunden"));
+    const actions = el("div", "acts");
+    const list = device.connected ? [["disconnect", "Trennen", "button-secondary"]] : [["connect", "Verbinden", "button-primary"]];
+    if (device.paired) list.push(["remove", "Entfernen", "button-danger"]);
+    list.forEach(([action, label, style]) => {
+      const button = el("button", `button ${style}`, label);
+      button.type = "button";
+      button.disabled = status.busy;
+      button.addEventListener("click", () => bluetoothAction(action, device.mac));
+      actions.append(button);
+    });
+    row.append(text, actions);
+    return row;
+  }));
 }
 
-async function loadBluetooth() {
-  clearTimeout(btPollTimer);
+async function loadBluetooth(poll = true) {
   try {
     const status = await api("/api/bluetooth");
     renderBluetooth(status);
-    if (status.busy && elements.settings.open) btPollTimer = setTimeout(loadBluetooth, 1500);
+    if (poll && status.busy && !byId("sheet").hidden) panelTimers.push(setTimeout(() => loadBluetooth(true), 1500));
   } catch (error) {
-    setStatus(elements.btStatus, `Bluetooth-Status nicht abrufbar: ${error.message}`, "error");
+    setStatus(byId("btStatus"), `Bluetooth-Status nicht abrufbar: ${error.message}`, "error");
   }
 }
 
 async function bluetoothAction(action, mac = "") {
   if (action === "remove" && !window.confirm("Lautsprecher entfernen? Danach muss er neu gekoppelt werden.")) return;
   try {
-    await api(`/api/bluetooth/${action}`, { method: "POST", body: JSON.stringify({ mac }) });
+    await post(`/api/bluetooth/${action}`, { mac });
   } catch (error) {
-    setStatus(elements.btStatus, error.message, "error");
+    setStatus(byId("btStatus"), error.message, "error");
     return;
   }
-  loadBluetooth();
+  loadBluetooth(true);
 }
 
-function renderSpotifyPair(status) {
-  const pairing = status.status === "pairing";
-  elements.spPairState.textContent = status.paired
-    ? status.running ? `Gekoppelt. „${status.name}“ steht in Spotify als Lautsprecher bereit.` : "Gekoppelt, startet gerade …"
-    : pairing ? "Warte auf die Bestätigung in Spotify …" : "Nicht gekoppelt. Damit Spotify auf dem Pi (und dem Bluetooth-Lautsprecher) spielt, einmal koppeln.";
-  byId("spPair").textContent = status.paired ? "Neu koppeln" : "Pi als Spotify-Lautsprecher koppeln";
-  byId("spUnpair").classList.toggle("hidden", !status.paired);
-  elements.spPairBox.classList.toggle("hidden", !(pairing && status.qr));
-  if (pairing && status.qr) {
-    byId("spPairQr").src = status.qr;
-    byId("spPairUrl").textContent = status.url;
-    byId("spPairCode").textContent = status.code || "–";
-  }
-  if (status.status === "error" || status.status === "crashed") setStatus(elements.spPairStatus, status.error || "Der Spotify-Lautsprecher ist abgestürzt", "error");
+/* ---------- System ---------- */
+function renderDiag() {
+  byId("diag").tBodies[0].replaceChildren(...sourceStates().map((source) => {
+    const row = el("tr");
+    row.append(el("td", "", source.name), el("td", source.state, `● ${source.text}`), el("td", "", source.last), el("td", "", source.limit));
+    return row;
+  }));
 }
 
-async function loadSpotifyPair(fromPairing = false) {
-  clearTimeout(pairPollTimer);
+async function loadSystemInfo() {
   try {
-    const status = await api("/api/music/spotify/pair");
-    renderSpotifyPair(status);
-    if (status.status === "pairing" && elements.settings.open) pairPollTimer = setTimeout(() => loadSpotifyPair(true), 2000);
-    else if (fromPairing && status.paired) {
-      setStatus(elements.spPairStatus, "Gekoppelt", "success");
-      showToast("Spotify-Lautsprecher gekoppelt");
-    }
+    const info = await api("/api/system/info");
+    meta.backlight = !!info.backlight;
+    const uptime = Math.floor(info.uptime_seconds / 60);
+    byId("sysInfo").textContent = `Version ${info.version} · läuft seit ${Math.floor(uptime / 60)} Std. ${uptime % 60} Min.${info.config_saved ? ` · Konfiguration zuletzt gespeichert ${ago(info.config_saved)}` : ""}`;
+    applyBacklightHint();
   } catch (error) {
-    setStatus(elements.spPairStatus, `Status nicht abrufbar: ${error.message}`, "error");
+    byId("sysInfo").textContent = error.message;
   }
+  panelTimers.push(setTimeout(() => { if (!$('.panel[data-panel="system"]').hidden) { renderDiag(); loadSystemInfo(); } }, 5000));
 }
 
-async function pairSpotify() {
-  byId("spPair").disabled = true;
-  setStatus(elements.spPairStatus, "Kopplungscode wird angefordert …");
+function applyBacklightHint() {
+  const input = byId("nightOff");
+  input.disabled = !meta.backlight && !input.checked;
+  byId("nightOffHint").textContent = meta.backlight ? "über die Hintergrundbeleuchtung des Displays" : "nicht möglich: das Display lässt sich von hier nicht schalten; es wird nur gedimmt";
+}
+
+/* ---------- Am Handy (Kopplung) ---------- */
+let pairEnd = 0;
+async function startPairing(fresh = false) {
   try {
-    renderSpotifyPair(await api("/api/music/spotify/pair", { method: "POST", body: "{}" }));
-    setStatus(elements.spPairStatus, "");
-    pairPollTimer = setTimeout(() => loadSpotifyPair(true), 2000);
+    const status = fresh || !pairEnd || pairEnd < Date.now() ? await post("/api/pair/start") : await api("/api/pair/status");
+    renderPairing(status);
   } catch (error) {
-    setStatus(elements.spPairStatus, error.message, "error");
-  } finally {
-    byId("spPair").disabled = false;
+    byId("qr").replaceChildren(el("span", "hint", error.message));
   }
 }
 
-async function unpairSpotify() {
-  if (!window.confirm("Spotify-Kopplung des Pi entfernen?")) return;
-  try {
-    await api("/api/music/spotify/unpair", { method: "POST", body: "{}" });
-    setStatus(elements.spPairStatus, "Kopplung entfernt");
-  } catch (error) {
-    setStatus(elements.spPairStatus, error.message, "error");
-  }
-  loadSpotifyPair();
-}
-
-function showPlayerTab() {
-  if (!playerService) selectService(!ytConnected && spotifyConnected ? "spotify" : "ytmusic");
-  renderPlayerNow(nowPlaying);
-  setStatus(elements.btStatus, "");
-  setStatus(elements.spPairStatus, "");
-  loadBluetooth();
-  loadSpotifyPair();
-}
-
-// Rücksprung von der Spotify-Anmeldung: Meldung zeigen und den Musik-Tab wieder öffnen.
-function handleMusicReturn() {
-  const params = new URLSearchParams(window.location.search);
-  const outcome = params.get("music");
-  if (!outcome) return;
-  window.history.replaceState(null, "", window.location.pathname);
-  showToast(outcome === "connected" ? "Spotify verbunden" : `Spotify: ${params.get("reason") || "Anmeldung fehlgeschlagen"}`);
-  beginAdmin(elements.hotspot, "music");
-}
-
-function renderStopEditor() {
-  elements.stopEditor.replaceChildren();
-  if (!workingStops.length) {
-    const empty = document.createElement("p");
-    empty.className = "board-message";
-    empty.textContent = "Noch keine Haltestelle konfiguriert. Die ÖPNV-Anzeige bleibt leer.";
-    elements.stopEditor.append(empty);
-    return;
-  }
-  workingStops.forEach((stop, index) => {
-    const card = document.createElement("article");
-    card.className = "stop-card";
-    card.dataset.index = String(index);
-    card.innerHTML = `
-      <header class="stop-card-header">
-        <strong>${escapeHtml(stop.title || stop.station_name || `Haltestelle ${index + 1}`)}</strong>
-        <div class="stop-actions">
-          <button class="button button-secondary" type="button" data-action="up" aria-label="Haltestelle nach oben" ${index === 0 ? "disabled" : ""}>↑</button>
-          <button class="button button-secondary" type="button" data-action="down" aria-label="Haltestelle nach unten" ${index === workingStops.length - 1 ? "disabled" : ""}>↓</button>
-          <button class="button button-danger" type="button" data-action="remove">Löschen</button>
-        </div>
-      </header>
-      <div class="stop-fields">
-        <label class="field wide"><span>Anzeigename</span><input name="title" value="${escapeHtml(stop.title || "")}" maxlength="80" placeholder="automatisch (nur Haltestelle)"></label>
-        <label class="field wide"><span>Haltestellenname</span><input name="station_name" value="${escapeHtml(stop.station_name || "")}" maxlength="160" required></label>
-        <label class="field"><span>Haltestellen-ID</span><input name="station_id" value="${escapeHtml(stop.station_id || "")}" maxlength="80"></label>
-        <label class="field"><span>Linienfilter (Komma)</span><input name="line_filter" value="${escapeHtml((stop.line_filter || []).join(", "))}" maxlength="160"></label>
-        <label class="field"><span>Maximale Zeilen</span><input name="max_rows" type="number" min="1" max="12" value="${Number(stop.max_rows || 2)}"></label>
-        <label class="toggle"><input name="nightbus_only" type="checkbox" ${stop.nightbus_only ? "checked" : ""}><span>Nur Nachtbus</span></label>
-        <label class="toggle"><input name="hide_if_empty" type="checkbox" ${stop.hide_if_empty ? "checked" : ""}><span>Leer ausblenden</span></label>
-      </div>`;
-    elements.stopEditor.append(card);
-  });
-}
-
-function syncStopField(input) {
-  const card = input.closest(".stop-card");
-  if (!card) return;
-  const stop = workingStops[Number(card.dataset.index)];
-  if (!stop) return;
-  if (input.name === "line_filter") {
-    stop.line_filter = input.value.split(",").map((item) => item.trim()).filter(Boolean);
-  } else if (input.name === "max_rows") {
-    stop.max_rows = Number(input.value);
-  } else if (input.type === "checkbox") {
-    stop[input.name] = input.checked;
+function renderPairing(status) {
+  pairEnd = status.active ? Date.now() + status.expires_in * 1000 : 0;
+  const code = status.code || "";
+  byId("pairCode").textContent = code ? `${code.slice(0, 3)} ${code.slice(3)}` : "––– –––";
+  const box = byId("qr");
+  if (status.qr) {
+    const image = el("img");
+    image.alt = "";
+    image.src = status.qr;
+    box.replaceChildren(image);
   } else {
-    stop[input.name] = input.value;
+    box.replaceChildren(el("span", "hint", "Adresse unten eintragen, dann erscheint hier der QR-Code"));
   }
-  dirty = true;
+  byId("pairStepUrl").textContent = status.url ? `QR-Code scannen oder ${status.url} öffnen.` : "QR-Code scannen oder die Adresse des Pi im Browser öffnen.";
+  byId("pairDocker").textContent = status.url ? "" : "Im Docker-Container kennt der Pi seine Adresse im Heimnetz nicht. Trag sie oben ein (z. B. http://fero.local:8080) und gib den Port im Heimnetz frei: in der .env-Datei BI_STORCHCAM_BIND=0.0.0.0 setzen und den Container neu starten.";
+  tickPairing(false);
 }
 
-function stopAction(button) {
-  const card = button.closest(".stop-card");
-  if (!card) return;
-  const index = Number(card.dataset.index);
-  if (button.dataset.action === "remove") workingStops.splice(index, 1);
-  if (button.dataset.action === "up" && index > 0) [workingStops[index - 1], workingStops[index]] = [workingStops[index], workingStops[index - 1]];
-  if (button.dataset.action === "down" && index < workingStops.length - 1) [workingStops[index + 1], workingStops[index]] = [workingStops[index], workingStops[index + 1]];
-  dirty = true;
-  renderStopEditor();
-}
-
-async function searchStations() {
-  const query = byId("stationQuery").value.trim();
-  if (query.length < 2) {
-    setStatus(elements.stationSearchStatus, "Bitte mindestens zwei Zeichen eingeben.", "error");
+function tickPairing(claimed = false) {
+  if ($('.panel[data-panel="phone"]').hidden) return;
+  if (claimed) {
+    pairEnd = 0;
+    byId("pairCode").textContent = "––– –––";
+    byId("pairLeft").textContent = "Handy gekoppelt · für ein weiteres Handy einen neuen Code erzeugen";
+    toast("Handy gekoppelt");
     return;
   }
-  byId("stationSearchBtn").disabled = true;
-  setStatus(elements.stationSearchStatus, "VRR-Haltestellen werden gesucht …");
-  elements.stationResults.replaceChildren();
-  try {
-    const result = await api(`/api/station/search?q=${encodeURIComponent(query)}`);
-    if (!result.results.length) {
-      setStatus(elements.stationSearchStatus, "Keine VRR-Haltestelle gefunden. Andere Schreibweise versuchen.");
-      return;
-    }
-    setStatus(elements.stationSearchStatus, `${result.results.length} Treffer`);
-    result.results.forEach((station) => {
-      const row = document.createElement("div");
-      row.className = "station-result";
-      const name = document.createElement("span");
-      name.textContent = station.station_name;
-      const add = document.createElement("button");
-      add.type = "button";
-      add.className = "button button-secondary";
-      add.textContent = "Hinzufügen";
-      add.addEventListener("click", () => {
-        workingStops.push({
-          title: "",
-          station_name: station.station_name,
-          station_id: station.station_id,
-          line_filter: [],
-          nightbus_only: false,
-          hide_if_empty: true,
-          max_rows: Number(currentConfig.transit.default_max_rows || 2),
-        });
-        byId("showTransit").checked = true;
-        dirty = true;
-        renderStopEditor();
-        showToast("Haltestelle hinzugefügt. Zum Übernehmen noch speichern.");
-      });
-      row.append(name, add);
-      elements.stationResults.append(row);
-    });
-  } catch (error) {
-    setStatus(elements.stationSearchStatus, `Suche fehlgeschlagen: ${error.message}`, "error");
-  } finally {
-    byId("stationSearchBtn").disabled = false;
-  }
-}
-
-function collectConfig() {
-  if (!currentConfig) throw new Error("Konfiguration ist noch nicht geladen");
-  const config = clone(currentConfig);
-  config.stream.url = byId("cfgStream").value.trim();
-  config.stream.autoplay = byId("streamAutoplay").checked;
-  config.stream.muted = byId("streamMuted").checked;
-  config.stream.quality = byId("cfgStreamQuality").value;
-  config.location.label = byId("cfgLabel").value.trim();
-  config.location.latitude = Number(byId("cfgLat").value);
-  config.location.longitude = Number(byId("cfgLon").value);
-  config.ui.layout_profile = byId("cfgLayout").value;
-  config.ui.theme = byId("cfgTheme").value;
-  config.ui.sky = byId("cfgSky").value;
-  config.ui.clock.enabled = byId("showClock").checked;
-  config.ui.weather.enabled = byId("showWeather").checked;
-  config.ui.transit.enabled = byId("showTransit").checked;
-  config.ui.system.enabled = byId("showSystem").checked;
-  config.transit.stops = clone(workingStops);
-  if (config.youtube) {
-    config.youtube.api_key = byId("cfgYoutubeKey").value.trim();
-    config.youtube.default_query = byId("cfgYoutubeQuery").value.trim();
-  }
-  config.music = {
-    source: byId("cfgMusicSource").value,
-    spotify: { client_id: byId("cfgSpotifyClient").value.trim() },
-  };
-  if (pendingTimezone) config.app.timezone = pendingTimezone;
-  if (!config.location.label) throw new Error("Standortname fehlt");
-  if (!Number.isFinite(config.location.latitude) || !Number.isFinite(config.location.longitude)) throw new Error("Koordinaten sind ungültig");
-  config.transit.stops.forEach((stop, index) => {
-    if (!stop.station_id && !stop.station_name) throw new Error(`Haltestelle ${index + 1} benötigt ID oder Namen`);
-    if (!Number.isInteger(stop.max_rows) || stop.max_rows < 1 || stop.max_rows > 12) throw new Error(`Maximale Zeilen bei Haltestelle ${index + 1} sind ungültig`);
-  });
-  return config;
-}
-
-async function saveConfig() {
-  const button = byId("saveConfig");
-  button.disabled = true;
-  setStatus(elements.saveState, "Konfiguration wird validiert und atomar gespeichert …");
-  try {
-    const candidate = collectConfig();
-    const result = await api("/api/config/save", { method: "POST", body: JSON.stringify({ config: candidate }) });
-    if (candidate.youtube?.api_key) youtubeKeySet = true;
-    currentConfig = result.config;
-    fillForm(currentConfig);
-    applyRuntimeConfig({ ...currentConfig, timezone: currentConfig.app?.timezone });
-    setStatus(elements.saveState, "Gespeichert. Providerdaten werden im Hintergrund aktualisiert.", "success");
-    showToast("Konfiguration gespeichert");
-    return true;
-  } catch (error) {
-    setStatus(elements.saveState, `Speichern fehlgeschlagen: ${error.message}`, "error");
-    return false;
-  } finally {
-    button.disabled = false;
-  }
-}
-
-function showTab(name) {
-  document.querySelectorAll(".menu-tab").forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.tab === name)));
-  document.querySelectorAll(".menu-panel").forEach((panel) => { panel.hidden = panel.dataset.panel !== name; });
-  hideKeyboard();
-  if (name === "live" && !liveLoadedOnce) searchLive(byId("cfgYoutubeQuery").value.trim() || "Storch");
-  if (name === "player") showPlayerTab();
-  else stopPlayerPolling();
-}
-
-function openMenu(trigger) {
-  openDialog(elements.settings, trigger);
-  showTab(menuTab);
-  menuTab = "live";
-}
-
-async function searchLive(query) {
-  liveLoadedOnce = true;
-  elements.liveQuery.value = query;
-  elements.liveResults.replaceChildren();
-  byId("liveSearchBtn").disabled = true;
-  setStatus(elements.liveStatus, `Suche Live-Streams zu „${query || "alles"}“ …`);
-  try {
-    const result = await api(`/api/live/search?q=${encodeURIComponent(query)}`);
-    if (!result.results.length) {
-      setStatus(elements.liveStatus, "Gerade ist dazu nichts live. Anderes Suchwort versuchen.");
-      return;
-    }
-    setStatus(elements.liveStatus, `${result.results.length} Live-Streams – zum Abspielen antippen`);
-    const current = byId("cfgStream").value.trim();
-    result.results.forEach((video) => {
-      const card = document.createElement("button");
-      card.type = "button";
-      card.className = `live-card${current === video.embed_url ? " is-current" : ""}`;
-      const image = document.createElement("img");
-      image.alt = "";
-      image.loading = "lazy";
-      image.src = video.thumbnail;
-      card.append(image, textElement("span", "live-badge", "LIVE"), textElement("strong", "", video.title), textElement("span", "", video.channel));
-      card.addEventListener("click", () => chooseLive(video));
-      elements.liveResults.append(card);
-    });
-  } catch (error) {
-    setStatus(elements.liveStatus, error.message, "error");
-  } finally {
-    byId("liveSearchBtn").disabled = false;
-  }
-}
-
-async function chooseLive(video) {
-  byId("cfgStream").value = video.embed_url;
-  liveTitle = video.title;
-  if (await saveConfig()) {
-    showToast(`Stream gewechselt: ${video.title}`);
-    dirty = false;
-    closeDialog(elements.settings);
-  }
-}
-
-async function searchPlaces() {
-  const query = elements.placeQuery.value.trim();
-  hideKeyboard();
-  if (query.length < 2) {
-    setStatus(elements.placeStatus, "Bitte mindestens zwei Zeichen eingeben.", "error");
-    return;
-  }
-  byId("placeSearchBtn").disabled = true;
-  setStatus(elements.placeStatus, "Orte werden gesucht …");
-  elements.placeResults.replaceChildren();
-  try {
-    const result = await api(`/api/location/search?q=${encodeURIComponent(query)}`);
-    if (!result.results.length) {
-      setStatus(elements.placeStatus, "Kein Ort gefunden. Andere Schreibweise versuchen.");
-      return;
-    }
-    setStatus(elements.placeStatus, "Ort antippen, um ihn zu übernehmen");
-    result.results.forEach((place) => {
-      const card = document.createElement("button");
-      card.type = "button";
-      card.className = "place-card";
-      card.append(textElement("strong", "", place.name), textElement("span", "", [place.region, place.timezone].filter(Boolean).join(" · ")));
-      card.addEventListener("click", () => choosePlace(place));
-      elements.placeResults.append(card);
-    });
-  } catch (error) {
-    setStatus(elements.placeStatus, error.message, "error");
-  } finally {
-    byId("placeSearchBtn").disabled = false;
-  }
-}
-
-async function choosePlace(place) {
-  byId("cfgLabel").value = place.name;
-  byId("cfgLat").value = place.latitude;
-  byId("cfgLon").value = place.longitude;
-  pendingTimezone = place.timezone || "";
-  if (!pendingTimezone) {
-    setStatus(elements.placeStatus, "Zeitzone wird ermittelt …");
+  const left = Math.max(0, pairEnd - Date.now()) / 1000;
+  byId("pairLeft").textContent = left ? `gültig noch ${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, "0")}` : "abgelaufen";
+  if (!left) return;
+  panelTimers.push(setTimeout(async () => {
+    if ($('.panel[data-panel="phone"]').hidden) return;
     try {
-      pendingTimezone = (await api(`/api/location/timezone?lat=${place.latitude}&lon=${place.longitude}`)).timezone;
-    } catch (error) {
-      setStatus(elements.placeStatus, `Zeitzone unbekannt, bisherige bleibt: ${error.message}`, "error");
-    }
-  }
-  if (await saveConfig()) {
-    elements.placeResults.replaceChildren();
-    setStatus(elements.placeStatus, `Ort übernommen: ${place.name}. Uhr und Wetter werden aktualisiert.`, "success");
+      if ((await api("/api/pair/status")).claimed) { tickPairing(true); return; }
+    } catch (_error) { /* nächster Versuch */ }
+    tickPairing();
+  }, 1000));
+}
+
+/* ---------- Anmeldung: PIN am Bildschirm, Kopplungscode am Handy ---------- */
+let authMode = "login";
+function openAuth(status) {
+  const dialog = byId("pinDialog");
+  authMode = status.remote && !(status.pin_login && status.pin_configured && status.pin_required) ? "pair" : status.pin_configured ? "login" : "setup";
+  const pin = byId("adminPin");
+  byId("pinEyebrow").textContent = authMode === "pair" ? "Am Handy einstellen" : "Menü";
+  byId("pinTitle").textContent = authMode === "pair" ? "Code vom Bildschirm eingeben" : authMode === "setup" ? "Admin-PIN erstmals festlegen" : "Admin-PIN eingeben";
+  byId("pinHelp").textContent = authMode === "pair" ? "Am Bildschirm: Menü → „Am Handy“ zeigt einen sechsstelligen Code, 10 Minuten gültig." : authMode === "setup" ? "Die PIN wird nur als sicherer Hash auf diesem Gerät gespeichert." : "Die Sitzung endet automatisch nach der eingestellten Zeit.";
+  byId("pinLabel").textContent = authMode === "pair" ? "Kopplungscode" : "PIN";
+  pin.autocomplete = authMode === "pair" ? "one-time-code" : "current-password";
+  pin.type = authMode === "pair" ? "text" : "password";
+  byId("pinConfirmField").hidden = authMode !== "setup";
+  byId("adminPinConfirm").required = authMode === "setup";
+  byId("submitPin").textContent = authMode === "pair" ? "Koppeln" : authMode === "setup" ? "PIN festlegen" : "Anmelden";
+  pin.value = "";
+  byId("adminPinConfirm").value = "";
+  setStatus(byId("pinStatus"), "");
+  if (!dialog.open) dialog.showModal();
+  pin.focus();
+}
+
+async function authenticate(event) {
+  event.preventDefault();
+  const pin = byId("adminPin").value.replace(/\s+/g, "");
+  if (authMode === "setup" && pin !== byId("adminPinConfirm").value.trim()) { setStatus(byId("pinStatus"), "Die PINs stimmen nicht überein.", "error"); return; }
+  const submit = byId("submitPin");
+  submit.disabled = true;
+  setStatus(byId("pinStatus"), authMode === "pair" ? "Wird geprüft …" : "Anmeldung läuft …");
+  try {
+    const path = authMode === "pair" ? "/api/pair/claim" : authMode === "setup" ? "/api/admin/setup" : "/api/admin/login";
+    const result = await post(path, authMode === "pair" ? { code: pin } : { pin });
+    token = result.token;
+    sessionStorage.setItem("bi-storchcam-admin-token", token);
+    await loadConfig();
+    byId("pinDialog").close();
+    hideKeyboard();
+    openSheet(menuTab);
+  } catch (error) {
+    setStatus(byId("pinStatus"), error.message, "error");
+  } finally {
+    submit.disabled = false;
   }
 }
 
+async function claimFromLink() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("koppeln");
+  if (!code) return false;
+  window.history.replaceState(null, "", window.location.pathname);
+  try {
+    const result = await post("/api/pair/claim", { code });
+    token = result.token;
+    sessionStorage.setItem("bi-storchcam-admin-token", token);
+    await adminStatus();
+    await loadConfig();
+    openSheet("live");
+    toast("Gekoppelt · das Menü steht jetzt am Handy zur Verfügung");
+  } catch (error) {
+    await adminStatus().then(openAuth).catch(() => {});
+    setStatus(byId("pinStatus"), error.message, "error");
+  }
+  return true;
+}
+
+/* ---------- Einrichtung beim ersten Start ---------- */
+const wizard = { step: 0, stream: null, place: null, stops: [], results: { live: [], places: [], stops: [] } };
+function openWizard() {
+  wizard.step = 0;
+  renderWizard();
+  if (!byId("wizard").open) byId("wizard").showModal();
+  if (!wizard.results.live.length) wizardSearch();
+}
+
+function wizardSearchRow(id, label, value, placeholder) {
+  const row = el("div", "search-row");
+  const field = el("label", "field");
+  field.htmlFor = id;
+  const input = el("input");
+  input.id = id;
+  input.type = "search";
+  input.value = value;
+  input.placeholder = placeholder;
+  input.dataset.enter = "wzSearchBtn";
+  field.append(el("span", "", label), input);
+  const button = el("button", "button button-secondary", "Suchen");
+  button.type = "button";
+  button.id = "wzSearchBtn";
+  button.addEventListener("click", () => wizardSearch());
+  row.append(field, button);
+  return row;
+}
+
+function renderWizard() {
+  $$("#wzSteps i").forEach((bar, index) => bar.classList.toggle("is-done", index <= wizard.step));
+  const body = byId("wzBody");
+  byId("wzBack").hidden = wizard.step === 0;
+  byId("wzSkip").textContent = wizard.step === 2 ? "Überspringen" : "Später einrichten";
+  byId("wzNext").textContent = wizard.step === 2 ? "Fertig" : "Weiter";
+  byId("wzNext").disabled = wizard.step === 0 && !wizard.stream;
+  if (wizard.step === 0) {
+    byId("wzTitle").textContent = "Welche Kamera soll laufen?";
+    byId("wzText").textContent = "Alles, was gerade auf YouTube live ist. Später kannst du Favoriten als Ersatz festlegen.";
+    const results = el("div", "results");
+    wizard.results.live.forEach((video) => {
+      const card = liveCard({ ...video, url: video.embed_url }, (picked) => { wizard.stream = picked; renderWizard(); }, { star: false });
+      card.classList.toggle("is-current", wizard.stream?.embed_url === video.embed_url);
+      results.append(card);
+    });
+    body.replaceChildren(wizardSearchRow("wzQuery", "Suchbegriff", byId("wzQuery")?.value || "Live Cam", "z. B. Storch, Hafen, Zoo"), el("p", "status-message", ""), results);
+  } else if (wizard.step === 1) {
+    byId("wzTitle").textContent = "Wo steht der Bildschirm?";
+    byId("wzText").textContent = "Für Uhrzeit und Wetter. Die Kamera darf woanders sein.";
+    const picks = wizard.results.places.map((place) => {
+      const pick = el("button", "pick");
+      pick.type = "button";
+      pick.setAttribute("aria-pressed", String(wizard.place?.name === place.name && wizard.place?.latitude === place.latitude));
+      const text = el("div");
+      text.append(el("strong", "", place.name), el("span", "", [place.region, place.timezone].filter(Boolean).join(" · ")));
+      pick.append(text);
+      pick.addEventListener("click", () => { wizard.place = place; renderWizard(); });
+      return pick;
+    });
+    body.replaceChildren(wizardSearchRow("wzPlace", "Ort suchen", wizard.place?.name || runtime?.location?.label || "", "z. B. Bielefeld"), el("p", "status-message", ""), ...picks);
+  } else {
+    byId("wzTitle").textContent = "Abfahrten in der Nähe?";
+    byId("wzText").textContent = "Optional. Derzeit für Haltestellen im VRR (Nordrhein-Westfalen). Die Gehzeit stellst du später im Menü ein.";
+    const picks = wizard.results.stops.map((station) => {
+      const chosen = wizard.stops.some((item) => item.station_id === station.station_id);
+      const pick = el("button", "pick");
+      pick.type = "button";
+      pick.setAttribute("aria-pressed", String(chosen));
+      const text = el("div");
+      text.append(el("strong", "", station.station_name), el("span", "", "VRR"));
+      pick.append(text, el("span", "", chosen ? "hinzugefügt" : "hinzufügen"));
+      pick.addEventListener("click", () => {
+        wizard.stops = chosen ? wizard.stops.filter((item) => item.station_id !== station.station_id) : [...wizard.stops, station];
+        renderWizard();
+      });
+      return pick;
+    });
+    body.replaceChildren(wizardSearchRow("wzStop", "Haltestelle suchen", byId("wzStop")?.value || "", "z. B. Bielefeld Jahnplatz"), el("p", "status-message", ""), ...picks);
+  }
+}
+
+async function wizardSearch() {
+  const button = byId("wzSearchBtn");
+  hideKeyboard();
+  busyButton(button, true);
+  try {
+    if (wizard.step === 0) {
+      const query = byId("wzQuery")?.value.trim() || "Live Cam";
+      wizard.results.live = (await api(`/api/live/search?q=${encodeURIComponent(query)}`)).results;
+      if (!wizard.results.live.length) throw new Error("Gerade ist dazu nichts live. Anderes Suchwort versuchen.");
+    } else if (wizard.step === 1) {
+      const query = byId("wzPlace").value.trim();
+      if (query.length < 2) throw new Error("Bitte mindestens zwei Zeichen eingeben.");
+      wizard.results.places = (await api(`/api/location/search?q=${encodeURIComponent(query)}`)).results;
+      if (!wizard.results.places.length) throw new Error("Kein Ort gefunden.");
+    } else {
+      const query = byId("wzStop").value.trim();
+      if (query.length < 2) throw new Error("Bitte mindestens zwei Zeichen eingeben.");
+      wizard.results.stops = (await api(`/api/station/search?q=${encodeURIComponent(query)}`)).results;
+      if (!wizard.results.stops.length) throw new Error("Keine VRR-Haltestelle gefunden.");
+    }
+    renderWizard();
+    stagger($("#wzBody .results") || byId("wzBody"));
+  } catch (error) {
+    renderWizard();
+    setStatus($("#wzBody .status-message"), error.message, "error");
+  } finally {
+    busyButton(byId("wzSearchBtn"), false);
+  }
+}
+
+async function finishWizard(skipped) {
+  const zone = wizard.place ? await timezoneFor(wizard.place) : "";
+  const saved = await saveConfig((config) => {
+    config.ui.setup_done = true;
+    if (skipped) return;
+    if (wizard.stream) {
+      config.stream.url = wizard.stream.embed_url;
+      if (!config.stream.favorites.some((item) => item.url === wizard.stream.embed_url)) config.stream.favorites.unshift({ url: wizard.stream.embed_url, title: wizard.stream.title, channel: wizard.stream.channel });
+      titles.set(wizard.stream.embed_url, { title: wizard.stream.title, channel: wizard.stream.channel });
+    }
+    if (wizard.place) {
+      config.location = { label: wizard.place.name, latitude: Number(wizard.place.latitude), longitude: Number(wizard.place.longitude) };
+      if (zone) config.app.timezone = zone;
+    }
+    wizard.stops.forEach((station) => {
+      if (!config.transit.stops.some((stop) => stop.station_id === station.station_id)) config.transit.stops.push(stopFrom(station));
+    });
+    if (wizard.stops.length) config.ui.transit.enabled = true;
+  }, skipped ? "Einrichtung später" : "Einrichtung abgeschlossen", { undo: false });
+  if (saved) byId("wizard").close();
+}
+
+async function maybeStartWizard() {
+  if (runtime?.ui?.setup_done || runtime?.stream?.url) return;
+  try {
+    const status = await adminStatus();
+    if (status.remote || !status.authenticated) return;
+    await loadConfig();
+    openWizard();
+  } catch (_error) { /* ohne Menüzugang keine Einrichtung */ }
+}
+
+/* ---------- Bildschirmtastatur (nur am Kiosk selbst) ---------- */
 const OSK_LAYOUTS = {
   letters: [
     ["q", "w", "e", "r", "t", "z", "u", "i", "o", "p", "ü"],
@@ -1693,91 +2743,75 @@ const OSK_ICONS = {
   backspace: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h11v14H9l-6-7z"/><path d="m12.5 9.5 5 5m0-5-5 5"/></svg>',
 };
 const OSK_LABELS = { shift: "Großbuchstabe", backspace: "Löschen", space: "Leerzeichen" };
-let oskLayout = "letters";
-
-// „ß“.toUpperCase() ergibt „SS“; auf der Tastatur soll es einfach ß bleiben.
-function oskUpper(key) {
-  return key === "ß" ? key : key.toLocaleUpperCase("de-DE");
-}
+const osk = { target: null, shift: false, layout: "letters" };
+const oskUpper = (key) => (key === "ß" ? key : key.toLocaleUpperCase("de-DE"));
+const TYPABLE = new Set(["text", "search", "password", "number", "url", "textarea"]);
 
 function buildKeyboard() {
-  const handle = document.createElement("button");
+  const handle = el("button", "osk-close", "Tastatur schließen");
   handle.type = "button";
-  handle.className = "osk-close";
   handle.dataset.key = "hide";
-  handle.textContent = "Tastatur schließen";
-  const rows = OSK_LAYOUTS[oskLayout].map((keys) => {
-    const row = document.createElement("div");
-    row.className = "osk-row";
+  const rows = OSK_LAYOUTS[osk.layout].map((keys) => {
+    const row = el("div", "osk-row");
     keys.forEach((key) => {
-      const button = document.createElement("button");
+      const button = el("button", `osk-key osk-${key.length === 1 ? "char" : key}`);
       button.type = "button";
-      button.className = `osk-key osk-${key.length === 1 ? "char" : key}`;
       button.dataset.key = key;
       if (OSK_ICONS[key]) button.innerHTML = OSK_ICONS[key];
-      else if (key === "mode") button.textContent = oskLayout === "letters" ? "123" : "ABC";
-      else if (key === "enter") button.textContent = oskTarget?.dataset.enter ? "Suchen" : "OK";
+      else if (key === "mode") button.textContent = osk.layout === "letters" ? "123" : "ABC";
+      else if (key === "enter") button.textContent = osk.target?.dataset.enter ? "Los" : "OK";
       else if (key === "space") button.textContent = "Leerzeichen";
-      else button.textContent = oskShift ? oskUpper(key) : key;
+      else button.textContent = osk.shift ? oskUpper(key) : key;
       if (OSK_LABELS[key]) button.setAttribute("aria-label", OSK_LABELS[key]);
-      if (key === "shift") button.setAttribute("aria-pressed", String(oskShift));
+      if (key === "shift") button.setAttribute("aria-pressed", String(osk.shift));
       row.append(button);
     });
     return row;
   });
-  elements.osk.replaceChildren(handle, ...rows);
+  byId("osk").replaceChildren(handle, ...rows);
 }
 
-// Nur Beschriftungen tauschen statt die Tastatur neu aufzubauen; das hält das Tippen flüssig.
 function setShift(value) {
-  oskShift = value;
-  elements.osk.querySelectorAll(".osk-char").forEach((button) => {
-    button.textContent = oskShift ? oskUpper(button.dataset.key) : button.dataset.key;
-  });
-  elements.osk.querySelector(".osk-shift")?.setAttribute("aria-pressed", String(oskShift));
+  osk.shift = value;
+  $$(".osk-char", byId("osk")).forEach((button) => { button.textContent = osk.shift ? oskUpper(button.dataset.key) : button.dataset.key; });
+  $(".osk-shift", byId("osk"))?.setAttribute("aria-pressed", String(osk.shift));
 }
 
 function showKeyboard(input) {
-  const dialog = input.closest("dialog");
-  if (!dialog) return;
-  oskTarget = input;
-  oskLayout = input.type === "number" || input.inputMode === "numeric" ? "numbers" : "letters";
-  // Wie am Handy: im leeren Textfeld beginnt man mit einem Großbuchstaben.
-  oskShift = oskLayout === "letters" && input.type !== "password" && !input.value;
+  if (meta.remote || !TYPABLE.has(input.type)) return;
+  osk.target = input;
+  osk.layout = input.type === "number" || input.inputMode === "numeric" ? "numbers" : "letters";
+  osk.shift = osk.layout === "letters" && input.type !== "password" && input.type !== "url" && !input.value;
   buildKeyboard();
-  const host = dialog.querySelector(".settings-shell, .dialog-card") || dialog;
-  if (elements.osk.parentElement !== host) host.append(elements.osk);
-  elements.osk.classList.remove("hidden");
-  elements.settingsShell.classList.toggle("osk-open", host === elements.settingsShell);
+  const keyboard = byId("osk");
+  const host = input.closest(".dialog-card, .wz") || document.body;
+  if (keyboard.parentElement !== host) host.append(keyboard);
+  keyboard.hidden = false;
+  byId("sheet").classList.toggle("osk-open", host === document.body);
   input.scrollIntoView({ block: "center", behavior: "auto" });
 }
 
 function hideKeyboard() {
-  oskTarget = null;
-  elements.osk.classList.add("hidden");
-  elements.settingsShell.classList.remove("osk-open");
+  osk.target = null;
+  byId("osk").hidden = true;
+  byId("sheet").classList.remove("osk-open");
 }
 
 function typeKey(key) {
-  const input = oskTarget;
+  const input = osk.target;
   if (!input) return;
   if (key === "hide") { hideKeyboard(); return; }
-  if (key === "shift") { setShift(!oskShift); return; }
-  if (key === "mode") {
-    oskLayout = oskLayout === "letters" ? "numbers" : "letters";
-    oskShift = false;
-    buildKeyboard();
-    return;
-  }
+  if (key === "shift") { setShift(!osk.shift); return; }
+  if (key === "mode") { osk.layout = osk.layout === "letters" ? "numbers" : "letters"; osk.shift = false; buildKeyboard(); return; }
   if (key === "enter") {
     const target = input.dataset.enter && byId(input.dataset.enter);
     hideKeyboard();
     if (target) target.click();
+    else if (input.form) input.form.requestSubmit();
     return;
   }
-  const character = key === "space" ? " " : (oskShift ? oskUpper(key) : key);
-  // number-Felder kennen keine Cursorposition; dort wird am Ende angehängt bzw. gelöscht.
-  const caret = input.type !== "number" && typeof input.selectionStart === "number";
+  const character = key === "space" ? " " : osk.shift ? oskUpper(key) : key;
+  const caret = input.type !== "number" && input.type !== "url" && typeof input.selectionStart === "number";
   if (key === "backspace") {
     if (caret && input.selectionStart !== input.selectionEnd) input.setRangeText("", input.selectionStart, input.selectionEnd, "end");
     else if (caret && input.selectionStart > 0) input.setRangeText("", input.selectionStart - 1, input.selectionStart, "end");
@@ -1787,191 +2821,289 @@ function typeKey(key) {
   } else {
     input.value += character;
   }
-  if (oskShift && key !== "backspace") setShift(false);
+  if (osk.shift && key !== "backspace") setShift(false);
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-const RIPPLE_TARGETS = ".button, .icon-button, .menu-button, .menu-tab, .live-card, .place-card, .player-card, .segment, .toggle, .osk-key, .osk-close";
-
-function ripple(event) {
-  const target = event.target.closest(RIPPLE_TARGETS);
-  if (!target || target.disabled || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+/* ---------- Bedienung ---------- */
+const RIPPLE = ".button, .round-btn, .result, .tile, .rcard, .mrow, .pick, .chip, .sheet-tab, .seg button, .pill-btn, .icon-button, .menu-button, .theme-card, .osk-key";
+document.addEventListener("pointerdown", (event) => {
+  const target = event.target.closest(RIPPLE);
+  if (!target || reduceMotion || target.disabled) return;
   const rect = target.getBoundingClientRect();
   const size = Math.max(rect.width, rect.height) * 2;
-  const wave = document.createElement("span");
-  wave.className = "ripple";
+  const wave = el("span", "ripple");
   wave.style.width = `${size}px`;
   wave.style.height = `${size}px`;
   wave.style.left = `${event.clientX - rect.left - size / 2}px`;
   wave.style.top = `${event.clientY - rect.top - size / 2}px`;
-  wave.addEventListener("animationend", () => wave.remove());
   target.append(wave);
-}
+  setTimeout(() => wave.remove(), 650);
+}, { passive: true });
 
-function requestSettingsClose() {
-  if (dirty && !window.confirm("Ungespeicherte Änderungen verwerfen?")) return;
-  dirty = false;
-  closeDialog(elements.settings);
+let idleTimer = null;
+function wake() {
+  byId("menuBtn").classList.remove("is-idle");
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => byId("menuBtn").classList.add("is-idle"), 8000);
+  armCompact();
 }
+["pointermove", "pointerdown", "keydown"].forEach((name) => window.addEventListener(name, wake, { passive: true }));
 
-elements.live.addEventListener("load", () => {
-  if (!elements.live.getAttribute("src") || elements.live.src === "about:blank") return;
-  setStreamView({ state: "loaded", full: "Stream-Seite geladen · Wiedergabe nicht verifizierbar", card: null });
+let swipe = null;
+let swallowUntil = 0;
+byId("dock").addEventListener("pointerdown", (event) => { swipe = { y: event.clientY, x: event.clientX }; });
+byId("dock").addEventListener("pointerup", (event) => {
+  if (!swipe) return;
+  const dy = event.clientY - swipe.y;
+  const dx = Math.abs(event.clientX - swipe.x);
+  swipe = null;
+  if (Math.abs(dy) < 40 || dx > Math.abs(dy)) return;
+  swallowUntil = Date.now() + 350;
+  if (dy > 0) {
+    setBar(barMode === "full" ? "compact" : "hidden");
+    toast(barMode === "hidden" ? "Leiste ausgeblendet · unten antippen zum Zurückholen" : "Leiste verkleinert");
+  } else if (barMode !== "full") {
+    setBar("full");
+  } else {
+    openDetail("depart");
+  }
 });
-elements.live.addEventListener("error", () => {
-  setStreamView({
-    state: "error",
-    full: "Stream-Einbettung möglicherweise blockiert",
-    card: { title: "Stream nicht erreichbar", text: "Die Stream-Seite meldet einen Fehler. Die Einbettung ist möglicherweise blockiert." },
-  });
+const tapOk = () => Date.now() > swallowUntil;
+byId("minibar").addEventListener("click", () => { if (tapOk()) { setBar("full"); armCompact(); } });
+byId("barPeek").addEventListener("click", () => { setBar("full"); armCompact(); });
+byId("barHandle").addEventListener("click", (event) => { event.stopPropagation(); if (tapOk()) setBar("compact"); });
+[["transitBlock", "depart"], ["weatherBlock", "weather"]].forEach(([id, kind]) => {
+  byId(id).addEventListener("click", () => { if (tapOk()) openDetail(kind); });
+  byId(id).addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openDetail(kind); } });
 });
+byId("warning").addEventListener("click", () => openDetail("warning"));
+$$("[data-close]").forEach((button) => button.addEventListener("click", () => closeDetails()));
+elements.playerBox.addEventListener("click", () => {
+  if (!byId("sheet").hidden && window.innerWidth <= 760) { closeSheet(); return; }
+  closeDetails();
+  if (!byId("camCard").hidden) byId("streamChip").click();
+  else showChip(6000);
+});
+byId("night").addEventListener("click", wakeFromNight);
+byId("streamReload").addEventListener("click", () => { refreshState(); if (runtime?.stream) configureStream(runtime.stream, true); });
+
+byId("streamChip").addEventListener("click", (event) => {
+  event.stopPropagation();
+  const card = byId("camCard");
+  const open = card.hidden;
+  if (open) renderCamCard();
+  card.hidden = !open;
+  byId("streamChip").setAttribute("aria-expanded", String(open));
+  if (!open) showChip(4000);
+});
+
+byId("npOpen").addEventListener("click", () => setCardOpen(!byId("nowPlaying").classList.contains("is-open")));
+$$("[data-mctl]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); sendControl(button.dataset.mctl); }));
+
 elements.video.addEventListener("playing", () => {
   player.retries = 0;
   clearTimeout(player.retryTimer);
   player.retryTimer = null;
+  const was = player.reconnecting;
+  player.reconnecting = false;
   releaseFrame();
-  hideNotice();
+  if (was) { showReconnect("Wieder stabil", "Kein Bild verpasst · der Puffer füllt sich", true); setTimeout(hideReconnect, 3500); }
+  else hideReconnect();
   const title = player.source?.title;
-  const what = player.source?.kind === "file" ? "Video läuft in Schleife" : "Livestream läuft im eigenen Player";
-  setStreamView({ state: "playing", full: `${what}${title ? `: ${title}` : ""}`, card: null });
+  setStreamView("playing", `${player.source?.kind === "file" ? "Video läuft in Schleife" : "Livestream läuft im eigenen Player"}${title ? `: ${title}` : ""}`);
+  showChip();
 });
 elements.video.addEventListener("error", () => {
   if (player.source?.kind === "file") onPlayerError({ fatal: true, type: "file" }, player.generation);
 });
 // Niemand soll das Kamerabild anhalten können; pausiert es trotzdem, läuft es sofort weiter.
-elements.video.addEventListener("pause", () => {
-  if (videoActive() && player.source) elements.video.play().catch(() => {});
+elements.video.addEventListener("pause", () => { if (videoActive() && player.source) playVideo(); });
+elements.live.addEventListener("load", () => {
+  if (elements.live.getAttribute("src") && elements.live.src !== "about:blank") setStreamView("embedded", "Stream-Seite geladen");
 });
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden || !player.hls) return;
-  elements.video.play().catch(() => {});
-  const live = player.hls.liveSyncPosition;
+  if (document.hidden || !player.source) return;
+  playVideo();
+  const live = player.hls?.liveSyncPosition;
   if (Number.isFinite(live) && elements.video.currentTime < live - 15) elements.video.currentTime = live;
 });
-byId("streamReload").addEventListener("click", () => {
-  if (runtimeConfig?.stream) configureStream(runtimeConfig.stream, true);
-  refreshState();
-});
-byId("reloadStreamPanel").addEventListener("click", () => configureStream(collectConfig().stream, true));
 
-elements.hotspot.addEventListener("click", () => beginAdmin(elements.hotspot));
-document.querySelectorAll(".menu-tab").forEach((tab) => tab.addEventListener("click", () => showTab(tab.dataset.tab)));
-byId("liveSearchBtn").addEventListener("click", () => { hideKeyboard(); searchLive(elements.liveQuery.value.trim()); });
-byId("placeSearchBtn").addEventListener("click", searchPlaces);
-elements.liveQuery.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") { event.preventDefault(); byId("liveSearchBtn").click(); }
+/* Menü */
+byId("menuBtn").addEventListener("click", () => beginAdmin("live"));
+byId("sheetClose").addEventListener("click", closeSheet);
+byId("phoneBtn").addEventListener("click", () => showTab("phone"));
+$("[data-tab-back]").addEventListener("click", () => showTab("system"));
+$$(".sheet-tab").forEach((tab) => tab.addEventListener("click", () => showTab(tab.dataset.tab)));
+window.addEventListener("keydown", (event) => {
+  if (event.ctrlKey && event.altKey && event.key.toLowerCase() === "s") { event.preventDefault(); beginAdmin("live"); }
+  if (event.key === "Escape") { if (!byId("osk").hidden) hideKeyboard(); else if (!byId("sheet").hidden) closeSheet(); closeDetails(); }
+  if (event.key === "Enter" && event.target.dataset?.enter) { event.preventDefault(); byId(event.target.dataset.enter)?.click(); }
 });
-elements.placeQuery.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") { event.preventDefault(); searchPlaces(); }
+byId("qualSel").addEventListener("change", (event) => { const value = event.target.value; saveConfig((config) => { config.stream.quality = value; }, `Bildqualität ${event.target.selectedOptions[0].textContent}`); });
+byId("fpsSel").addEventListener("change", (event) => { const value = Number(event.target.value); saveConfig((config) => { config.stream.max_fps = value; }, `Bildrate ${value} Bilder/s`); });
+byId("camAudio").addEventListener("change", (event) => { const value = event.target.value; saveConfig((config) => { config.stream.audio = value; }, `Ton der Kamera: ${event.target.selectedOptions[0].textContent}`); });
+byId("autoFav").addEventListener("change", (event) => { const value = event.target.checked; saveConfig((config) => { config.stream.auto_fallback = value; }, value ? "Automatischer Wechsel an" : "Automatischer Wechsel aus"); });
+byId("noteAdd").addEventListener("click", addNote);
+byId("liveSearchBtn").addEventListener("click", () => searchLive(byId("liveQuery").value.trim()));
+byId("streamUrlSave").addEventListener("click", () => {
+  const url = byId("cfgStream").value.trim();
+  hideKeyboard();
+  player.override = null;
+  saveConfig((config) => { config.stream.url = url; }, url ? "Eigene Adresse" : "Stream entfernt");
 });
-// Getippt wird schon beim Berühren (pointerdown), nicht erst beim Loslassen; preventDefault verhindert
-// den Fokuswechsel, damit das Eingabefeld Fokus und Cursor behält.
-elements.osk.addEventListener("pointerdown", (event) => {
-  event.preventDefault();
-  const button = event.target.closest("[data-key]");
-  if (button && event.button === 0) typeKey(button.dataset.key);
+byId("reloadStreamPanel").addEventListener("click", () => { if (runtime?.stream) configureStream(runtime.stream, true); toast("Stream wird neu geladen"); });
+byId("placeSearchBtn").addEventListener("click", () => searchPlaces(byId("placeQuery"), byId("placeResults"), byId("placeStatus"), choosePlace, byId("placeSearchBtn")));
+byId("skySel").addEventListener("change", (event) => { const value = event.target.value; saveConfig((config) => { config.ui.sky = value; }, "Tag/Nacht"); });
+byId("distSeg").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-dist]");
+  if (!button || Number(button.dataset.dist) === Number(currentConfig?.ui.distance)) return;
+  const value = Number(button.dataset.dist);
+  saveConfig((config) => { config.ui.distance = value; }, `Leseabstand ${button.textContent}`);
 });
-elements.osk.addEventListener("mousedown", (event) => event.preventDefault());
-// Bedienung per Hardwaretastatur (Enter/Leertaste auf einer Taste) löst nur click ohne pointerdown aus.
-elements.osk.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-key]");
-  if (button && event.detail === 0) typeKey(button.dataset.key);
+$$("[data-block]").forEach((input) => input.addEventListener("change", () => {
+  const key = input.dataset.block;
+  const value = input.checked;
+  saveConfig((config) => { config.ui[key].enabled = value; }, `${input.parentElement.firstChild.textContent.trim()} ${value ? "an" : "aus"}`);
+}));
+byId("compactSel").addEventListener("change", (event) => { const value = Number(event.target.value); saveConfig((config) => { config.ui.compact_after = value; }, "Leiste verkleinern"); });
+byId("warnSel").addEventListener("change", (event) => { const value = event.target.value; saveConfig((config) => { config.weather.warnings = value; }, `Unwetterwarnungen: ${event.target.selectedOptions[0].textContent}`); });
+byId("nightOn").addEventListener("change", (event) => { const value = event.target.checked; saveConfig((config) => { config.ui.night.enabled = value; }, value ? "Nachtmodus an" : "Nachtmodus aus"); });
+byId("nightOff").addEventListener("change", (event) => { const value = event.target.checked; saveConfig((config) => { config.ui.night.screen_off = value; }, value ? "Nachts ganz aus" : "Nachts gedimmt"); });
+[["nightFrom", "start", "Beginn"], ["nightTo", "end", "Ende"]].forEach(([id, key, label]) => byId(id).addEventListener("change", (event) => {
+  const value = event.target.value;
+  if (/^\d\d:\d\d$/.test(value)) saveConfig((config) => { config.ui.night[key] = value; }, `Nachtmodus ${label} ${value}`);
+}));
+byId("leaveMode").addEventListener("change", (event) => { const value = event.target.checked; saveConfig((config) => { config.transit.leave_mode = value; }, value ? "Losgeh-Zeit an" : "Losgeh-Zeit aus"); });
+byId("stopSearchBtn").addEventListener("click", () => searchStops(byId("stopQuery"), byId("stopResults"), byId("stopStatus"), addStop, byId("stopSearchBtn")));
+
+byId("srcSeg").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-src]");
+  if (!button || button.dataset.src === music.src) return;
+  music.src = button.dataset.src;
+  music.filter = "";
+  music.results = [];
+  music.playlists = [];
+  music.searched = false;
+  byId("mQuery").value = "";
+  setStatus(byId("mStatus"), "");
+  renderMusicPanel();
+  if (music.src === "radio") searchMusic(true); else loadPlaylists();
+  stagger(byId("mFavs"));
 });
-document.addEventListener("pointerdown", ripple);
+byId("mSearch").addEventListener("click", () => searchMusic());
+byId("mVol").addEventListener("input", (event) => { event.target.style.setProperty("--p", `${event.target.value}%`); byId("mVolOut").textContent = event.target.value; });
+byId("mVol").addEventListener("change", (event) => sendControl("volume", Number(event.target.value)));
+byId("mOut").addEventListener("click", () => {
+  const details = byId("accounts");
+  details.open = true;
+  byId("btScan").scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
+  loadBluetooth(true);
+  loadSpotifyPair();
+  pollYtLogin(true);
+});
+byId("accounts").addEventListener("toggle", () => { if (byId("accounts").open) { loadBluetooth(true); loadSpotifyPair(); pollYtLogin(true); } });
+byId("sleepChips").addEventListener("click", (event) => { const chip = event.target.closest(".chip"); if (chip) setSleep(chip.dataset.sleep); });
+byId("cfgMusicSource").addEventListener("change", (event) => { const value = event.target.value; saveConfig((config) => { config.music.source = value; }, "Songkarte"); });
+byId("ytConnect").addEventListener("click", connectYt);
+byId("ytCancel").addEventListener("click", async () => { try { await post("/api/music/ytmusic/cancel"); } catch (_error) { /* egal */ } renderAccounts(); });
+byId("ytDisconnect").addEventListener("click", () => confirmAndPost("YouTube Music trennen?", "/api/music/ytmusic/disconnect", () => { meta.ytConnected = false; renderAccounts(); toast("YouTube Music getrennt"); }));
+byId("spotifyConnect").addEventListener("click", connectSpotify);
+byId("spotifyDisconnect").addEventListener("click", () => confirmAndPost("Spotify-Verbindung trennen?", "/api/music/spotify/disconnect", () => { meta.spotifyConnected = false; renderAccounts(); toast("Spotify getrennt"); }));
+byId("spPair").addEventListener("click", async () => {
+  setStatus(byId("spPairStatus"), "Kopplungscode wird angefordert …");
+  try { renderSpotifyPair(await post("/api/music/spotify/pair")); setStatus(byId("spPairStatus"), ""); panelTimers.push(setTimeout(() => loadSpotifyPair(true), 2000)); }
+  catch (error) { setStatus(byId("spPairStatus"), error.message, "error"); }
+});
+byId("spUnpair").addEventListener("click", () => confirmAndPost("Spotify-Kopplung des Pi entfernen?", "/api/music/spotify/unpair", () => loadSpotifyPair()));
+byId("btScan").addEventListener("click", () => bluetoothAction("scan"));
+
+byId("sysSave").addEventListener("click", () => {
+  const key = byId("cfgYoutubeKey").value.trim();
+  const query = byId("cfgYoutubeQuery").value.trim();
+  hideKeyboard();
+  saveConfig((config) => { config.youtube.api_key = key; config.youtube.default_query = query; }, key ? "YouTube-Schlüssel" : "Suchwort").then((saved) => {
+    if (saved && key) { meta.youtubeKeySet = true; byId("cfgYoutubeKey").value = ""; syncSheet(); }
+  });
+});
+byId("wizardAgain").addEventListener("click", () => { closeSheet(); openWizard(); });
+byId("pairNew").addEventListener("click", () => { startPairing(true); toast("Neuer Kopplungscode erzeugt"); });
+byId("publicUrlSave").addEventListener("click", () => {
+  const value = byId("publicUrl").value.trim();
+  hideKeyboard();
+  saveConfig((config) => { config.server.public_url = value; }, "Adresse im Heimnetz").then((saved) => { if (saved) startPairing(true); });
+});
+byId("lanOn").addEventListener("change", (event) => { const value = event.target.checked; saveConfig((config) => { config.server.lan_access = value; }, value ? "PIN-Anmeldung im Heimnetz an" : "PIN-Anmeldung im Heimnetz aus"); });
+
+byId("wzNext").addEventListener("click", () => { if (wizard.step < 2) { wizard.step += 1; renderWizard(); } else finishWizard(false); });
+byId("wzBack").addEventListener("click", () => { wizard.step = Math.max(0, wizard.step - 1); renderWizard(); });
+byId("wzSkip").addEventListener("click", () => { if (wizard.step === 2) { wizard.stops = []; finishWizard(false); } else finishWizard(true); });
+byId("wizard").addEventListener("cancel", (event) => event.preventDefault());
+
+byId("pinForm").addEventListener("submit", authenticate);
+byId("cancelPin").addEventListener("click", () => { hideKeyboard(); byId("pinDialog").close(); });
+byId("pinDialog").addEventListener("close", hideKeyboard);
 document.addEventListener("focusin", (event) => {
   const input = event.target;
-  if (input instanceof HTMLInputElement && ["text", "search", "password", "number"].includes(input.type) && input.closest("dialog")) showKeyboard(input);
-  else if (input instanceof HTMLTextAreaElement && input.closest("dialog")) showKeyboard(input);
+  if ((input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) && input.closest(".sheet, .wz, .dialog-card")) showKeyboard(input);
 });
-elements.settings.addEventListener("close", () => { hideKeyboard(); stopYtPolling(); stopPlayerPolling(); });
-elements.pinDialog.addEventListener("close", hideKeyboard);
-document.addEventListener("keydown", (event) => {
-  if (event.ctrlKey && event.altKey && event.key.toLowerCase() === "s") {
-    event.preventDefault();
-    beginAdmin(document.activeElement);
-  }
+byId("osk").addEventListener("pointerdown", (event) => {
+  const key = event.target.closest("[data-key]");
+  if (!key) return;
+  event.preventDefault();
+  typeKey(key.dataset.key);
+});
+byId("osk").addEventListener("mousedown", (event) => event.preventDefault());
+byId("osk").addEventListener("click", (event) => {
+  const key = event.target.closest("[data-key]");
+  if (key && event.detail === 0) typeKey(key.dataset.key);
 });
 
-elements.pinForm.addEventListener("submit", authenticate);
-byId("cancelPin").addEventListener("click", () => closeDialog(elements.pinDialog));
-elements.pinDialog.addEventListener("keydown", (event) => trapFocus(elements.pinDialog, event));
-elements.settings.addEventListener("keydown", (event) => {
-  trapFocus(elements.settings, event);
-  if (event.key === "Escape") {
-    event.preventDefault();
-    requestSettingsClose();
-  }
-});
-elements.settings.addEventListener("cancel", (event) => { event.preventDefault(); requestSettingsClose(); });
-byId("closeSettings").addEventListener("click", requestSettingsClose);
-byId("saveConfig").addEventListener("click", saveConfig);
-byId("reloadConfig").addEventListener("click", async () => {
-  try {
-    await loadConfig();
-    showToast("Konfiguration neu geladen");
-  } catch (error) {
-    setStatus(elements.saveState, `Laden fehlgeschlagen: ${error.message}`, "error");
-  }
-});
-elements.settingsForm.addEventListener("input", () => { dirty = true; });
-elements.stopEditor.addEventListener("input", (event) => syncStopField(event.target));
-elements.stopEditor.addEventListener("change", (event) => syncStopField(event.target));
-elements.stopEditor.addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-action]");
-  if (button) stopAction(button);
-});
-byId("stationSearchBtn").addEventListener("click", searchStations);
-byId("spotifyConnect").addEventListener("click", connectSpotify);
-byId("spotifyDisconnect").addEventListener("click", disconnectSpotify);
-byId("ytConnect").addEventListener("click", connectYt);
-byId("ytCancel").addEventListener("click", cancelYt);
-byId("ytDisconnect").addEventListener("click", disconnectYt);
-elements.npOpen.addEventListener("click", () => setCardOpen(!elements.nowPlaying.classList.contains("is-open")));
-elements.npControls.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-control]");
-  if (!button) return;
-  setCardOpen(true);
-  sendControl(button.dataset.control);
-});
-elements.npVolume.addEventListener("input", () => setCardOpen(true));
-elements.npVolume.addEventListener("change", () => {
-  sendControl("volume", Number(elements.npVolume.value));
-  elements.npVolume.blur();
-});
-document.querySelectorAll("[data-player]").forEach((button) => button.addEventListener("click", () => sendControl(button.dataset.player)));
-// Die Lautstärke gehört nicht zur gespeicherten Konfiguration, darum nicht als „ungespeichert“ zählen.
-elements.playerVolume.addEventListener("input", (event) => event.stopPropagation());
-elements.playerVolume.addEventListener("change", (event) => {
-  event.stopPropagation();
-  sendControl("volume", Number(elements.playerVolume.value));
-});
-document.querySelectorAll(".segment[data-service]").forEach((button) => button.addEventListener("click", () => selectService(button.dataset.service)));
-byId("playerSearchBtn").addEventListener("click", searchPlayer);
-elements.playerQuery.addEventListener("input", (event) => event.stopPropagation());
-elements.playerQuery.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") { event.preventDefault(); searchPlayer(); }
-});
-byId("btScan").addEventListener("click", () => bluetoothAction("scan"));
-byId("spPair").addEventListener("click", pairSpotify);
-byId("spUnpair").addEventListener("click", unpairSpotify);
-byId("stationQuery").addEventListener("keydown", (event) => {
-  if (event.key === "Enter") { event.preventDefault(); searchStations(); }
-});
+// Rücksprung von der Spotify-Anmeldung: Meldung zeigen und die Musik wieder öffnen.
+function handleMusicReturn() {
+  const params = new URLSearchParams(window.location.search);
+  const outcome = params.get("music");
+  if (!outcome) return false;
+  window.history.replaceState(null, "", window.location.pathname);
+  toast(outcome === "connected" ? "Spotify verbunden" : `Spotify: ${params.get("reason") || "Anmeldung fehlgeschlagen"}`);
+  beginAdmin("music");
+  return true;
+}
+
+/* ---------- Start ---------- */
+let resizeTimer = null;
 window.addEventListener("resize", () => {
-  const requested = currentConfig?.ui?.layout_profile || runtimeConfig?.ui?.layout_profile || "auto";
-  elements.body.dataset.layout = resolveLayout(requested);
-  updateInfobar();
-  updateClock();
-  if (lastState) renderPanels(lastState);
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    computeLayout();
+    applyBlocks();
+    renderWeather();
+    renderBoards();
+    refreshPills();
+    if (!byId("detailWeather").hidden) renderWeatherChart();
+  }, 140);
 });
-window.addEventListener("beforeunload", (event) => {
-  if (dirty) { event.preventDefault(); event.returnValue = ""; }
-});
+new ResizeObserver(() => { if (booted && lastState?.weather?.ok) renderStrip(lastState.weather); }).observe(byId("weatherBlock"));
 
-applySky(null);
-updateClock();
-setInterval(() => { updateClock(); updateMusicProgress(); }, 1000);
-refreshState();
-setInterval(refreshState, 5000);
-setInterval(watchPlayer, 2000);
-handleMusicReturn();
+(async function start() {
+  buildThemeGrid();
+  setBar("full", true);
+  renderClock();
+  await refreshState();
+  try { await adminStatus(); } catch (_error) { /* Status kommt beim nächsten Menüaufruf */ }
+  booted = true;
+  wake();
+  if (!(await claimFromLink()) && !handleMusicReturn()) maybeStartWizard();
+  setInterval(refreshState, 5000);
+  setInterval(() => { renderClock(); updateMusicProgress(); applyNight(); applyTheme(); }, 1000);
+  setInterval(watchPlayer, 2000);
+  setInterval(() => { const go = renderBoards(); if (go) expandFor(60000); }, 15000);
+  // Einbrennschutz: die Leiste wandert alle 3 Minuten um einen Pixel.
+  let shift = 0;
+  setInterval(() => {
+    shift = (shift + 1) % 4;
+    const [x, y] = [[0, 0], [1, 0], [1, 1], [0, 1]][shift];
+    byId("dock").style.transform = `translate(${x}px, ${y}px)`;
+  }, 180000);
+  if (document.fonts?.ready) document.fonts.ready.then(() => { applyBlocks(); renderWeather(); });
+})();

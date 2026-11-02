@@ -2,340 +2,404 @@
 <html lang="de">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark light">
   <title>BI-StorchCam</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="style.css">
 </head>
-<body class="is-loading" data-theme="dark" data-layout="standard">
-  <a class="skip-link" href="#stage">Zum Livestream springen</a>
-  <button id="adminHotspot" class="menu-button" type="button" aria-label="Menü öffnen" title="Menü">
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-  </button>
+<body class="is-loading" data-theme="dark" data-layout="landscape" data-bar="full">
+  <a class="skip-link" href="#sheet">Zum Menü springen</a>
+  <svg class="symbols" width="0" height="0" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+      <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+      <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3.5 2.8 19.5h18.4z"/><path d="M12 10v4.2M12 17h.01"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M12 7v6.2M12 16.8h.01"/></symbol>
+      <symbol id="i-swap" viewBox="0 0 24 24"><path d="M4 8h13l-3-3M20 16H7l3 3"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+      <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></symbol>
+      <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z"/></symbol>
+      <symbol id="i-up" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></symbol>
+      <symbol id="i-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+      <symbol id="i-bus" viewBox="0 0 24 24"><rect x="5" y="3.5" width="14" height="14" rx="3"/><path d="M5 11h14M8 21l1-3.5M16 21l-1-3.5"/></symbol>
+      <symbol id="i-tram" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.5"/><path d="M9 2.5h6M12 2.5V6M8.5 21l1.5-3M15.5 21l-1.5-3M6 12h12"/></symbol>
+      <symbol id="i-train" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="15" rx="4"/><path d="M5 11h14M9 15h.01M15 15h.01M8 21l2-3M16 21l-2-3"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M19 14.6A7.5 7.5 0 1 1 9.4 5a6 6 0 0 0 9.6 9.6z"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></symbol>
+      <symbol id="t-live" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2"/></symbol>
+      <symbol id="t-place" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></symbol>
+      <symbol id="t-display" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8 20h8M12 16.5V20"/></symbol>
+      <symbol id="t-music" viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></symbol>
+      <symbol id="t-system" viewBox="0 0 24 24"><path d="M4 15a8 8 0 1 1 16 0"/><path d="M12 15l4-5"/><path d="M4 19h16"/></symbol>
+      <symbol id="i-radio" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="12.5" rx="2.5"/><path d="M7 8l9.5-4.5"/><circle cx="15.5" cy="14.2" r="2.7"/><path d="M6.5 12.5h4M6.5 15.8h4"/></symbol>
+      <symbol id="i-vol" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"/></symbol>
+      <symbol id="i-speaker" viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><circle cx="12" cy="14.5" r="3.5"/><path d="M12 7h.01"/></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24"><path d="M4 6h12M4 11h12M4 16h7"/><path d="M18 12v7.5"/><circle cx="16.3" cy="19.5" r="1.9"/></symbol>
+      <symbol id="i-headphones" viewBox="0 0 24 24"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="5" height="7" rx="1.6"/><rect x="16" y="14" width="5" height="7" rx="1.6"/></symbol>
+      <symbol id="i-cam-off" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M8.5 6H14a2 2 0 0 1 2 2v2.5l5-3v9l-1.6-.96"/><path d="M16 16v.1A1.9 1.9 0 0 1 14.1 18H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h.5"/></symbol>
+    </defs>
+  </svg>
 
-  <main class="screen" aria-label="BI-StorchCam Infoscreen">
-    <section id="stage" class="stage" aria-label="Livestream" tabindex="-1">
-      <iframe id="live" class="live" title="Konfigurierter Livestream" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
-      <video id="liveVideo" class="live live-video" muted playsinline autoplay disablepictureinpicture disableremoteplayback aria-hidden="true"></video>
+  <div class="kiosk" id="kiosk">
+    <div class="player" id="player">
+      <iframe id="live" class="live-embed" title="Konfigurierter Livestream" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+      <video id="liveVideo" class="live-video" muted playsinline autoplay disablepictureinpicture disableremoteplayback aria-hidden="true"></video>
       <canvas id="streamFreeze" class="stream-freeze" aria-hidden="true"></canvas>
-      <div class="stream-shade" aria-hidden="true"></div>
-      <div id="streamNotice" class="stream-notice hidden" role="status" aria-live="polite"><span class="stream-notice-ring" aria-hidden="true"></span><span id="streamNoticeText"></span></div>
-      <div id="streamEmpty" class="stream-empty has-stream" role="alert">
-        <div class="empty-card">
-          <svg class="empty-icon" viewBox="0 0 24 24" width="44" height="44" aria-hidden="true" focusable="false">
-            <path d="M3 3l18 18"/>
-            <path d="M8.5 6H14a2 2 0 0 1 2 2v2.5l5-3v9l-1.6-.96"/>
-            <path d="M16 16v.1A1.9 1.9 0 0 1 14.1 18H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h.5"/>
-          </svg>
-          <strong id="streamEmptyTitle">Kein Livestream konfiguriert</strong>
-          <span id="streamEmptyText">Öffne den lokalen Adminmodus und hinterlege eine unterstützte Embed-URL.</span>
-          <button id="streamReload" class="button button-primary empty-action" type="button">Jetzt neu laden</button>
-        </div>
+      <canvas id="fade" class="stream-fade" aria-hidden="true"></canvas>
+      <span class="pip-back">Antippen: zurück zur Kamera</span>
+    </div>
+    <div class="stream-shade" aria-hidden="true"></div>
+    <div class="signal-lost" id="streamEmpty" hidden>
+      <div class="signal-card">
+        <span class="spinner" id="streamSpinner" aria-hidden="true"></span>
+        <svg class="i empty-icon" id="streamEmptyIcon" aria-hidden="true" hidden><use href="#i-cam-off"/></svg>
+        <strong id="streamEmptyTitle">Livestream wird vorbereitet</strong>
+        <span id="streamEmptyText"></span>
+        <button class="button button-primary" type="button" id="streamReload" hidden>Jetzt neu laden</button>
       </div>
-      <div id="streamStatus" class="sr-only" role="status" aria-live="polite">
-        <span id="streamStatusText">Lokales Backend wird geladen</span>
+    </div>
+
+    <button class="menu-button" id="menuBtn" type="button" aria-label="Menü öffnen" title="Menü">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+
+    <div class="top-left">
+      <button class="stream-chip is-gone" id="streamChip" type="button" aria-expanded="false" aria-controls="camCard">
+        <span class="live-pill" id="chipPill">LIVE</span>
+        <span class="chip-text"><strong id="chipTitle"></strong><span id="chipSub"></span></span>
+        <svg class="i" aria-hidden="true"><use href="#i-info"/></svg>
+      </button>
+      <section class="cam-card" id="camCard" hidden aria-label="Kamera-Informationen">
+        <h3 id="camTitle"></h3>
+        <dl class="cam-facts" id="camFacts"></dl>
+        <ul class="cam-notes" id="camNotes"></ul>
+        <small>Notizen pflegst du im Menü unter Livestream.</small>
+      </section>
+      <div class="fallback-note" id="fallbackNote" role="status" hidden>
+        <svg class="i" aria-hidden="true"><use href="#i-swap"/></svg>
+        <div><strong id="fbTitle"></strong><span id="fbSub"></span></div>
       </div>
-    </section>
+      <div class="reconnect" id="signalLost" role="status" hidden><span class="ring" aria-hidden="true"></span><div><strong id="signalText"></strong><span id="signalSub"></span></div></div>
+    </div>
 
-    <section id="infobar" class="infobar" aria-label="Zusatzinformationen">
-      <section id="clockbar" class="ib-block ib-clock" aria-label="Uhrzeit und Systemstatus">
-        <div id="clockMain" class="clock-main">
-          <strong id="clock" class="clock-time">--:--</strong>
-          <span id="date" class="clock-date">--</span>
-        </div>
-        <div id="sysbar" class="clock-sys" aria-label="Systemstatus">
-          <span id="sys">Systemstatus nicht verfügbar</span>
-        </div>
-      </section>
-
-      <span class="ib-sep" aria-hidden="true"></span>
-      <section id="weather" class="ib-block ib-weather" aria-label="Wetter">
-        <span id="weatherText" class="sr-only">Wetter wird geladen</span>
-        <div class="weather-head" aria-hidden="true">
-          <span id="weatherIcon" class="weather-icon"></span>
-          <span id="weatherTemp" class="weather-temp">–°</span>
-          <div class="weather-desc">
-            <strong id="weatherCondition" class="weather-condition">Wetter wird geladen</strong>
-            <span id="weatherDetails" class="weather-details"></span>
-          </div>
-        </div>
-        <div class="rain-strip" aria-hidden="true">
-          <div class="rain-head">
-            <span id="rainLabel" class="rain-label">Regenwahrscheinlichkeit</span>
-            <span id="rainSummary" class="rain-summary"></span>
-          </div>
-          <div id="rainHours" class="rain-hours"></div>
-        </div>
-        <div class="weather-error" aria-hidden="true">
-          <strong>Wetter nicht verfügbar</strong>
-          <span id="weatherError"></span>
-        </div>
-      </section>
-
-      <span class="ib-sep" aria-hidden="true"></span>
-      <section id="transitPanel" class="ib-block ib-transit" aria-label="ÖPNV-Abfahrten">
-        <header class="block-head transit-head"><span>Abfahrten</span><span id="transitStation" class="transit-station"></span></header>
-        <div id="boards" class="boards" aria-live="polite"></div>
-      </section>
-    </section>
-
-    <aside id="nowPlaying" class="now-playing hidden" aria-label="Läuft gerade" aria-live="polite">
-      <button id="npOpen" class="np-open" type="button" aria-expanded="false" aria-label="Song groß anzeigen">
-        <span class="np-art"><img id="npCover" class="np-cover hidden" alt=""></span>
-        <span class="np-head">
-          <strong id="npTitle" class="np-title"></strong>
-          <span id="npArtist" class="np-artist np-more"></span>
-        </span>
+    <aside class="now-playing" id="nowPlaying" aria-label="Läuft gerade" aria-live="polite" hidden>
+      <button class="np-open" id="npOpen" type="button" aria-expanded="false" aria-label="Läuft gerade, antippen für Bedienung">
+        <span class="np-art art" id="npArt"></span>
+        <span class="np-head"><strong id="npTitle"></strong><span id="npSub"></span></span>
+        <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
       </button>
       <div class="np-more">
-        <div id="npProgress" class="np-progress hidden" aria-hidden="true">
-          <span class="np-track"><span id="npBar" class="np-bar"></span></span>
-          <span id="npTime" class="np-time"></span>
+        <div class="np-progress" id="npProg"><span class="np-track"><i id="npBar"></i></span><span class="np-time" id="npTime"></span></div>
+        <div class="np-controls" id="npControls">
+          <button class="round-btn" type="button" data-mctl="previous" aria-label="Zurück"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+          <button class="round-btn is-main" type="button" data-mctl="toggle" aria-label="Pause"><svg viewBox="0 0 24 24"><path class="ic-pause" d="M7 5h4v14H7zM13 5h4v14h-4z"/><path class="ic-play" d="M8 5v14l11-7z"/></svg></button>
+          <button class="round-btn" type="button" data-mctl="next" aria-label="Vor"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
         </div>
-        <div id="npControls" class="np-controls hidden">
-          <button class="np-button" type="button" data-control="previous" aria-label="Zurück"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
-          <button id="npToggle" class="np-button np-toggle" type="button" data-control="toggle" aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path class="icon-pause" d="M7 5h4v14H7zM13 5h4v14h-4z"/><path class="icon-play" d="M8 5v14l11-7z"/></svg></button>
-          <button class="np-button" type="button" data-control="next" aria-label="Vor"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
-          <button class="np-button" type="button" data-control="stop" aria-label="Stopp"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6h12v12H6z"/></svg></button>
-        </div>
-        <label id="npVolumeRow" class="np-volume hidden" for="npVolume">
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 9h4l5-4v14l-5-4H4zM16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"/></svg>
-          <span class="sr-only">Lautstärke</span>
-          <input id="npVolume" type="range" min="0" max="100" step="5" value="100">
-        </label>
+        <span class="np-sleep" id="npSleep" hidden></span>
       </div>
+      <span class="np-line" aria-hidden="true"><i id="npLine"></i></span>
     </aside>
-  </main>
+
+    <div class="dock" id="dock">
+      <button class="warning" id="warning" type="button" hidden>
+        <svg class="i" aria-hidden="true"><use href="#i-warn"/></svg>
+        <span id="warningText"></span>
+      </button>
+      <section class="infobar" id="infobar" aria-label="Zusatzinformationen">
+        <button class="bar-handle" id="barHandle" type="button" aria-label="Leiste verkleinern"></button>
+        <section class="ib-block ib-clock" id="clockBlock" aria-label="Uhrzeit">
+          <strong class="clock-time" id="clock">--:--</strong>
+          <span class="clock-date" id="date">--</span>
+          <span class="clock-sys" id="sys"><span class="dot" id="sysDot"></span><span id="sysText">Wird geladen</span></span>
+        </section>
+        <span class="ib-sep" aria-hidden="true"></span>
+        <section class="ib-block ib-weather tap" id="weatherBlock" role="button" tabindex="0" aria-label="Wetter, antippen für 24 Stunden">
+          <div class="weather-head">
+            <span class="weather-icon" id="weatherIcon"></span>
+            <span class="weather-temp" id="weatherTemp">–°</span>
+            <div class="weather-desc">
+              <div class="weather-row1"><strong class="weather-condition" id="weatherCond">Wetter wird geladen</strong><span class="more-hint">24 h<svg class="i" aria-hidden="true"><use href="#i-chev"/></svg></span></div>
+              <span class="weather-details" id="weatherDetails"></span>
+            </div>
+          </div>
+          <div class="strip-head"><span class="strip-label" id="stripLabel">Nächste Stunden</span><span class="strip-summary" id="stripSummary"></span></div>
+          <svg class="strip" id="strip" aria-hidden="true"></svg>
+        </section>
+        <span class="ib-sep" aria-hidden="true"></span>
+        <section class="ib-block ib-transit tap" id="transitBlock" role="button" tabindex="0" aria-label="Abfahrten, antippen für alle Haltestellen">
+          <header class="tr-head"><span id="trTitle">Abfahrten</span><span class="station" id="trStation"></span><span class="more-hint">alle<svg class="i" aria-hidden="true"><use href="#i-chev"/></svg></span></header>
+          <div class="boards" id="boards" aria-live="polite"></div>
+        </section>
+      </section>
+      <button class="minibar" id="minibar" type="button" hidden aria-label="Infoleiste vergrößern">
+        <span class="mb-clock" id="mbClock"></span>
+        <span class="mb-weather" id="mbWeather"></span>
+        <span class="mb-dep" id="mbDep"></span>
+        <span class="dot" id="mbDot"></span>
+      </button>
+      <button class="bar-peek" id="barPeek" type="button" hidden><svg class="i" aria-hidden="true"><use href="#i-up"/></svg>Infos</button>
+    </div>
+
+    <section class="detail" id="detailDepart" hidden aria-label="Alle Abfahrten">
+      <header class="detail-head"><div><h2>Abfahrten · alle Haltestellen</h2><small>schließt sich nach 20 Sekunden</small></div>
+        <button class="icon-button small" type="button" data-close aria-label="Schließen"><svg class="i"><use href="#i-close"/></svg></button><i class="detail-timer"></i></header>
+      <div class="detail-body"><div class="table-wrap"><table class="board" id="boardTable"></table></div>
+        <div class="legend"><span><span class="line-badge t-tram">4</span>Stadtbahn</span><span><span class="line-badge">31</span>Bus</span><span><span class="line-badge t-night">N2</span>Nachtbus</span><span id="legendLeave">Losgehen = Abfahrt minus Gehzeit zur Haltestelle</span></div>
+      </div>
+    </section>
+    <section class="detail" id="detailWeather" hidden aria-label="Wetter 24 Stunden">
+      <header class="detail-head"><div><h2 id="dwTitle">Wetter · nächste 24 Stunden</h2><small id="dwSub">Temperatur, Regenwahrscheinlichkeit, Wind · schließt sich nach 20 Sekunden</small></div>
+        <button class="icon-button small" type="button" data-close aria-label="Schließen"><svg class="i"><use href="#i-close"/></svg></button><i class="detail-timer"></i></header>
+      <div class="detail-body"><svg class="wchart" id="wchart" role="img" aria-label="Wetterverlauf der nächsten 24 Stunden"></svg></div>
+    </section>
+    <section class="detail" id="detailWarning" hidden aria-label="Amtliche Warnung">
+      <header class="detail-head"><div><h2 id="dwarnTitle">Amtliche Warnung</h2><small id="dwarnSub">Deutscher Wetterdienst · schließt sich nach 20 Sekunden</small></div>
+        <button class="icon-button small" type="button" data-close aria-label="Schließen"><svg class="i"><use href="#i-close"/></svg></button><i class="detail-timer"></i></header>
+      <div class="detail-body" id="dwarnBody"></div>
+    </section>
+
+    <button class="night" id="night" type="button" hidden aria-label="Bildschirm aufwecken">
+      <div><div class="night-clock" id="nightClock"></div><p id="nightText">Nachtmodus · antippen weckt den Bildschirm für 5 Minuten</p></div>
+    </button>
+  </div>
+
+  <div id="streamStatus" class="sr-only" role="status" aria-live="polite"><span id="streamStatusText">Lokales Backend wird geladen</span></div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden><svg class="tcheck" id="toastCheck" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span id="toastText"></span><button type="button" id="toastUndo" hidden>Rückgängig</button><i id="toastBar"></i></div>
+
+  <aside class="sheet" id="sheet" role="dialog" aria-modal="false" aria-labelledby="sheetTitle" hidden>
+    <header class="sheet-head">
+      <h1 id="sheetTitle">Menü</h1>
+      <button class="button button-secondary" type="button" id="phoneBtn"><svg class="i"><use href="#i-phone"/></svg>Am Handy</button>
+      <button class="icon-button" type="button" id="sheetClose" aria-label="Menü schließen"><svg class="i"><use href="#i-close"/></svg></button>
+    </header>
+    <nav class="sheet-tabs" role="tablist" aria-label="Menübereiche">
+      <button class="sheet-tab" role="tab" type="button" data-tab="live" aria-selected="true"><svg class="i"><use href="#t-live"/></svg>Livestream</button>
+      <button class="sheet-tab" role="tab" type="button" data-tab="place" aria-selected="false"><svg class="i"><use href="#t-place"/></svg>Ort</button>
+      <button class="sheet-tab" role="tab" type="button" data-tab="display" aria-selected="false"><svg class="i"><use href="#t-display"/></svg>Anzeige</button>
+      <button class="sheet-tab" role="tab" type="button" data-tab="transit" aria-selected="false"><svg class="i"><use href="#i-bus"/></svg>ÖPNV</button>
+      <button class="sheet-tab" role="tab" type="button" data-tab="music" aria-selected="false"><svg class="i"><use href="#t-music"/></svg>Musik</button>
+      <button class="sheet-tab" role="tab" type="button" data-tab="system" aria-selected="false"><svg class="i"><use href="#t-system"/></svg>System</button>
+    </nav>
+    <div class="sheet-body" id="sheetBody">
+
+      <section class="panel" data-panel="live" role="tabpanel">
+        <div class="card now-card">
+          <span class="thumb" id="nowThumb"><img id="nowThumbImg" alt="" hidden></span>
+          <div class="now-text"><strong id="nowTitle">–</strong><span id="nowSub"></span></div>
+          <span class="state-pill" id="nowState"><span class="dot"></span><span>–</span></span>
+        </div>
+        <h2 class="sec">Wiedergabe <small>eigener Player, kein YouTube-Fenster</small></h2>
+        <div class="grid-2">
+          <label class="field" for="qualSel"><span>Bildqualität</span><select id="qualSel"><option value="auto">Automatisch, bis 1080p</option><option value="720">720p, schont den Pi</option><option value="480">480p, langsames Netz</option></select></label>
+          <label class="field" for="fpsSel"><span>Bildrate</span><select id="fpsSel"><option value="30">30 Bilder/s, schont den Pi</option><option value="60">60 Bilder/s, flüssiger</option></select></label>
+          <label class="field" for="camAudio"><span>Ton der Kamera</span><select id="camAudio"><option value="off">Aus</option><option value="duck">Leise, aus bei Musik</option><option value="on">An</option></select></label>
+        </div>
+        <p class="hint">Antippen pausiert das Bild nie. Das Video läuft weiter, während Menü, Details oder Musik offen sind.</p>
+        <h2 class="sec">Favoriten <small>Reihenfolge = Ersatz bei Ausfall</small></h2>
+        <div class="list" id="favList"></div>
+        <label class="switch" for="autoFav"><span>Bei Ausfall zum nächsten Favoriten wechseln<small>Wechselt zurück, sobald die Kamera wieder läuft</small></span><input id="autoFav" type="checkbox"></label>
+        <h2 class="sec">Notizen zu dieser Kamera</h2>
+        <div class="list" id="noteList"></div>
+        <div class="search-row"><label class="field" for="noteInput"><span>Neue Notiz</span><input id="noteInput" type="text" maxlength="90" data-enter="noteAdd" placeholder="z. B. Störche füttern meist morgens"></label><button class="button button-secondary" type="button" id="noteAdd">Hinzufügen</button></div>
+        <h2 class="sec">Live-Streams suchen</h2>
+        <div class="search-row"><label class="field" for="liveQuery"><span>Suchbegriff auf YouTube</span><input id="liveQuery" type="search" data-enter="liveSearchBtn" placeholder="z. B. Storch, Hafen, Zoo"></label><button class="button button-primary" type="button" id="liveSearchBtn">Suchen</button></div>
+        <p class="hint">Antippen spielt den Stream sofort ab. Der Stern legt ihn als Favorit ab.</p>
+        <div class="status-message" id="liveStatus" role="status" aria-live="polite"></div>
+        <div class="results" id="liveResults"></div>
+        <details class="more">
+          <summary>Eigene Adresse</summary>
+          <div class="list">
+            <label class="field" for="cfgStream"><span>YouTube-Link, HLS-Adresse (.m3u8) oder Webseite zum Einbetten</span><textarea id="cfgStream" rows="2" spellcheck="false" placeholder="https://www.youtube.com/watch?v=…"></textarea></label>
+            <div class="button-row"><button class="button button-primary" type="button" id="streamUrlSave">Übernehmen</button><button class="button button-secondary" type="button" id="reloadStreamPanel"><svg class="i"><use href="#i-refresh"/></svg>Neu laden</button></div>
+          </div>
+        </details>
+      </section>
+
+      <section class="panel" data-panel="place" role="tabpanel" hidden>
+        <div class="card"><strong id="placeNow">–</strong><span class="hint" id="placeSub"></span></div>
+        <div class="search-row"><label class="field" for="placeQuery"><span>Adresse oder Ort, weltweit</span><input id="placeQuery" type="search" data-enter="placeSearchBtn" placeholder="z. B. Musterstraße 1 Berlin, Wien, Tokio"></label><button class="button button-primary" type="button" id="placeSearchBtn">Suchen</button></div>
+        <p class="hint">Uhr und Wetter folgen der Zeitzone des Orts. Die Kamera darf woanders sein.</p>
+        <div class="status-message" id="placeStatus" role="status" aria-live="polite"></div>
+        <div class="list" id="placeResults"></div>
+      </section>
+
+      <section class="panel" data-panel="display" role="tabpanel" hidden>
+        <h2 class="sec">Theme <small>wirkt sofort auf die Anzeige</small></h2>
+        <div class="theme-grid" id="themeGrid"></div>
+        <label class="field" for="skySel"><span>Tag/Nacht für Y2K und Dagobert</span><select id="skySel"><option value="auto">Nach Sonnenstand</option><option value="day">Immer Tag</option><option value="night">Immer Nacht</option></select></label>
+        <div class="field"><span>Leseabstand zum Bildschirm</span>
+          <div class="seg slide" id="distSeg" role="group" aria-label="Leseabstand"><button type="button" data-dist="1" aria-pressed="false">etwa 1 m</button><button type="button" data-dist="2" aria-pressed="true">etwa 2 m</button><button type="button" data-dist="3" aria-pressed="false">3 m und mehr</button></div>
+        </div>
+        <h2 class="sec">Infoleiste</h2>
+        <div class="grid-2">
+          <label class="switch" for="blkClock">Uhr<input id="blkClock" type="checkbox" data-block="clock"></label>
+          <label class="switch" for="blkWeather">Wetter<input id="blkWeather" type="checkbox" data-block="weather"></label>
+          <label class="switch" for="blkTransit">Abfahrten<input id="blkTransit" type="checkbox" data-block="transit"></label>
+          <label class="switch" for="blkSystem">Statuszeile<input id="blkSystem" type="checkbox" data-block="system"></label>
+        </div>
+        <label class="field" for="compactSel"><span>Leiste verkleinern ohne Berührung nach</span><select id="compactSel"><option value="0">Nie</option><option value="60">1 Minute</option><option value="120">2 Minuten</option><option value="300">5 Minuten</option></select></label>
+        <label class="field" for="warnSel"><span>Amtliche Unwetterwarnungen (DWD, nur Deutschland)</span><select id="warnSel"><option value="off">Aus</option><option value="minor">Alle, auch Stufe 1</option><option value="moderate">Ab markantem Wetter (Stufe 2)</option><option value="severe">Nur Unwetter (ab Stufe 3)</option></select></label>
+        <h2 class="sec">Nachtmodus</h2>
+        <label class="switch" for="nightOn"><span>Bildschirm nachts dimmen<small>antippen weckt ihn für 5 Minuten</small></span><input id="nightOn" type="checkbox"></label>
+        <div class="grid-2">
+          <label class="field" for="nightFrom"><span>Von</span><input id="nightFrom" type="time" value="23:00"></label>
+          <label class="field" for="nightTo"><span>Bis</span><input id="nightTo" type="time" value="06:00"></label>
+        </div>
+        <label class="switch" for="nightOff"><span>Ganz ausschalten statt dimmen<small id="nightOffHint">über die Hintergrundbeleuchtung des Displays</small></span><input id="nightOff" type="checkbox"></label>
+      </section>
+
+      <section class="panel" data-panel="transit" role="tabpanel" hidden>
+        <label class="switch" for="leaveMode"><span>Losgeh-Zeit statt Abfahrtszeit<small>Abfahrt minus Gehzeit zur Haltestelle</small></span><input id="leaveMode" type="checkbox"></label>
+        <div class="list" id="stopCards"></div>
+        <div class="search-row"><label class="field" for="stopQuery"><span>Haltestelle hinzufügen (VRR, Nordrhein-Westfalen)</span><input id="stopQuery" type="search" data-enter="stopSearchBtn" placeholder="z. B. Bielefeld Jahnplatz"></label><button class="button button-primary" type="button" id="stopSearchBtn">Suchen</button></div>
+        <div class="status-message" id="stopStatus" role="status" aria-live="polite"></div>
+        <div class="list" id="stopResults"></div>
+      </section>
+
+      <section class="panel" data-panel="music" role="tabpanel" hidden>
+        <div class="np-big is-idle" id="npBig">
+          <span class="art np-big-art" id="mBigArt"></span>
+          <div class="np-big-text"><span class="np-src" id="mBigSrc"></span><strong id="mBigTitle">Gerade läuft nichts</strong><span id="mBigSub">Sender oder Song unten auswählen</span></div>
+          <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          <div class="np-big-ctrl">
+            <button class="round-btn" type="button" data-mctl="previous" aria-label="Zurück"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+            <button class="round-btn is-main" type="button" data-mctl="toggle" aria-label="Pause"><svg viewBox="0 0 24 24"><path class="ic-pause" d="M7 5h4v14H7zM13 5h4v14h-4z"/><path class="ic-play" d="M8 5v14l11-7z"/></svg></button>
+            <button class="round-btn" type="button" data-mctl="next" aria-label="Vor"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+            <button class="round-btn" type="button" data-mctl="stop" aria-label="Stopp"><svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg></button>
+          </div>
+          <label class="vol" for="mVol"><svg class="i" aria-hidden="true"><use href="#i-vol"/></svg><span class="sr-only">Lautstärke</span><input class="slider" id="mVol" type="range" min="0" max="100" step="5" value="60"><output id="mVolOut">60</output></label>
+          <div class="np-big-row">
+            <button class="pill-btn" type="button" id="mOut"><svg class="i" aria-hidden="true"><use href="#i-speaker"/></svg><span id="mOutName">Lautsprecher des Pi</span></button>
+            <div class="sleep" id="sleepChips" role="group" aria-label="Musik ausschalten nach"><span class="hint">Aus nach</span><button type="button" class="chip" data-sleep="15" aria-pressed="false">15 min</button><button type="button" class="chip" data-sleep="30" aria-pressed="false">30 min</button><button type="button" class="chip" data-sleep="60" aria-pressed="false">60 min</button><button type="button" class="chip" data-sleep="night" aria-pressed="false">Nachtmodus</button></div>
+          </div>
+        </div>
+        <div class="seg slide" id="srcSeg" role="group" aria-label="Quelle">
+          <button type="button" data-src="radio" aria-pressed="true"><svg class="i" aria-hidden="true"><use href="#i-radio"/></svg>Radio</button>
+          <button type="button" data-src="ytmusic" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#t-music"/></svg>YouTube Music</button>
+          <button type="button" data-src="spotify" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-headphones"/></svg>Spotify</button>
+        </div>
+        <div class="search-row"><label class="field" for="mQuery"><span id="mQueryLabel">Sender, Stadt oder Genre suchen</span><input id="mQuery" type="search" data-enter="mSearch" maxlength="80"></label><button class="button button-primary" type="button" id="mSearch">Suchen</button></div>
+        <div class="chips" id="mFilters" role="group" aria-label="Filter"></div>
+        <div class="status-message" id="mStatus" role="status" aria-live="polite"></div>
+        <h2 class="sec" id="mRecentHead">Weiterhören <small>zuletzt gehört, alle Quellen</small></h2>
+        <div class="recent" id="mRecent"></div>
+        <h2 class="sec" id="mFavHead"><span>Lieblingssender</span> <small>antippen spielt sofort</small></h2>
+        <div class="tiles" id="mFavs"></div>
+        <h2 class="sec" id="mResHead"><span>Sender</span> <small></small></h2>
+        <div class="list" id="mResults"></div>
+        <details class="more" id="accounts">
+          <summary>Konten und Lautsprecher</summary>
+          <div class="list">
+            <label class="field" for="cfgMusicSource"><span>Songkarte zeigt auch, was auf anderen Geräten läuft</span><select id="cfgMusicSource"><option value="off">Nur was der Pi abspielt</option><option value="auto">Alles, was verbunden ist</option><option value="ytmusic">Auch YouTube Music</option><option value="spotify">Auch Spotify</option></select></label>
+            <div class="card">
+              <strong>YouTube Music</strong>
+              <span class="hint" id="ytState"></span>
+              <div class="button-row"><button class="button button-primary" type="button" id="ytConnect">Am Bildschirm anmelden</button><button class="button button-secondary" type="button" id="ytCancel" hidden>Anmeldung abbrechen</button><button class="button button-danger" type="button" id="ytDisconnect" hidden>Trennen</button></div>
+              <div class="status-message" id="ytStatus" role="status" aria-live="polite"></div>
+              <ol class="steps"><li>„Am Bildschirm anmelden“ tippen; es öffnet sich die normale Google-Anmeldung.</li><li>E-Mail und Passwort eingeben, eine Bestätigung auf dem Handy mit „Ja“ beantworten.</li><li>Sobald YouTube Music geladen ist, schließt sich das Fenster von selbst.</li></ol>
+            </div>
+            <div class="card">
+              <strong>Spotify</strong>
+              <span class="hint" id="spotifyState"></span>
+              <div class="search-row"><label class="field" for="cfgSpotifyClient"><span>Client-ID deiner Spotify-App (am besten am Handy eintragen)</span><input id="cfgSpotifyClient" type="text" spellcheck="false" maxlength="64" data-enter="spotifyConnect" placeholder="32 Zeichen"></label><button class="button button-primary" type="button" id="spotifyConnect">Verbinden</button></div>
+              <button class="button button-danger" type="button" id="spotifyDisconnect" hidden>Spotify trennen</button>
+              <div class="status-message" id="spotifyStatus" role="status" aria-live="polite"></div>
+              <details class="more"><summary>So bekommst du eine Client-ID</summary>
+                <ol class="steps"><li>Auf <strong>developer.spotify.com/dashboard</strong> anmelden und „Create app“ wählen.</li><li>Als <strong>Redirect URI</strong> genau diese Adresse eintragen: <code id="spotifyRedirect"></code></li><li>„Web API“ ankreuzen, speichern und die <strong>Client ID</strong> oben eintragen.</li></ol>
+                <p class="status-message error" id="spotifyHostHint" hidden>Spotify erlaubt als Rücksprung nur 127.0.0.1, nicht „localhost“. Bitte die Anzeige über http://127.0.0.1 öffnen.</p>
+              </details>
+            </div>
+            <div class="card">
+              <strong>Spotify auf dem Pi</strong>
+              <span class="hint" id="spPairState"></span>
+              <div class="button-row"><button class="button button-primary" type="button" id="spPair">Pi als Spotify-Lautsprecher koppeln</button><button class="button button-danger" type="button" id="spUnpair" hidden>Kopplung entfernen</button></div>
+              <div class="status-message" id="spPairStatus" role="status" aria-live="polite"></div>
+              <div class="qr-box" id="spPairBox" hidden><img class="qr-img" id="spPairQr" alt="QR-Code zur Spotify-Kopplung"><ol class="steps"><li>QR-Code scannen oder <strong id="spPairUrl"></strong> öffnen und anmelden.</li><li>Falls gefragt, diesen Code eingeben: <strong id="spPairCode"></strong></li></ol></div>
+            </div>
+            <div class="card">
+              <strong>Bluetooth-Lautsprecher</strong>
+              <span class="hint" id="btState">Wird geprüft …</span>
+              <div class="button-row"><button class="button button-primary" type="button" id="btScan">Lautsprecher suchen</button></div>
+              <div class="status-message" id="btStatus" role="status" aria-live="polite"></div>
+              <div class="list" id="btDevices"></div>
+              <p class="hint">Lautsprecher vorher in den Kopplungsmodus schalten. Ein verbundener Lautsprecher spielt den Ton des Pi automatisch ab.</p>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <section class="panel" data-panel="system" role="tabpanel" hidden>
+        <h2 class="sec">Zustand der Datenquellen</h2>
+        <div class="table-wrap"><table class="diag" id="diag"><thead><tr><th>Quelle</th><th>Zustand</th><th>Letzte Antwort</th><th>Abfrage alle</th></tr></thead><tbody></tbody></table></div>
+        <p class="hint" id="sysInfo"></p>
+        <label class="field" for="cfgYoutubeKey"><span>YouTube-API-Schlüssel (optional, am besten am Handy eintragen)</span><input id="cfgYoutubeKey" type="password" spellcheck="false" maxlength="200" placeholder="AIza…" autocomplete="off"></label>
+        <p class="hint" id="youtubeKeyState"></p>
+        <label class="field" for="cfgYoutubeQuery"><span>Suchwort beim Öffnen der Livestream-Suche</span><input id="cfgYoutubeQuery" type="text" maxlength="100"></label>
+        <div class="button-row"><button class="button button-primary" type="button" id="sysSave">Übernehmen</button><button class="button button-secondary" type="button" id="wizardAgain">Einrichtung erneut starten</button></div>
+      </section>
+
+      <section class="panel" data-panel="phone" role="tabpanel" hidden>
+        <h2 class="sec">Am Handy einstellen</h2>
+        <div class="qr-box">
+          <div class="qr" id="qr" aria-label="QR-Code mit Kopplungsadresse"></div>
+          <div class="pair-side">
+            <span class="hint">Kopplungscode</span>
+            <span class="pair-code" id="pairCode">––– –––</span>
+            <span class="hint" id="pairLeft"></span>
+            <button class="button button-secondary" type="button" id="pairNew">Neuen Code erzeugen</button>
+          </div>
+        </div>
+        <ol class="steps">
+          <li>Handy ins selbe WLAN wie den Bildschirm.</li>
+          <li id="pairStepUrl">QR-Code scannen oder die Adresse des Pi öffnen.</li>
+          <li>Code eingeben. Danach steht das ganze Menü am Handy zur Verfügung, bis die Sitzung abläuft.</li>
+        </ol>
+        <label class="field" for="publicUrl"><span>Adresse des Pi im Heimnetz (für den QR-Code)</span><input id="publicUrl" type="url" spellcheck="false" maxlength="200" data-enter="publicUrlSave" placeholder="z. B. http://fero.local:8080"></label>
+        <div class="button-row"><button class="button button-secondary" type="button" id="publicUrlSave">Adresse übernehmen</button></div>
+        <label class="switch" for="lanOn"><span>Anmeldung mit PIN aus dem Heimnetz erlauben<small id="lanHint">nur mit PIN, sonst braucht jedes Handy einen neuen Code</small></span><input id="lanOn" type="checkbox"></label>
+        <p class="hint" id="pairDocker"></p>
+        <button class="button button-ghost" type="button" data-tab-back>Zurück zum Menü</button>
+      </section>
+    </div>
+    <footer class="sheet-foot"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg><span id="saveFoot">Änderungen werden sofort gespeichert</span></footer>
+  </aside>
+
+  <dialog class="wizard" id="wizard" aria-labelledby="wzTitle">
+    <div class="wz">
+      <header class="wz-head"><div class="wz-steps" id="wzSteps"><i></i><i></i><i></i></div><h2 id="wzTitle"></h2><p id="wzText"></p></header>
+      <div class="wz-body" id="wzBody"></div>
+      <footer class="wz-foot"><button class="button button-ghost" type="button" id="wzSkip">Später einrichten</button><div class="button-row"><button class="button button-secondary" type="button" id="wzBack">Zurück</button><button class="button button-primary" type="button" id="wzNext">Weiter</button></div></footer>
+    </div>
+  </dialog>
 
   <dialog id="pinDialog" class="auth-dialog" aria-labelledby="pinTitle">
     <form id="pinForm" class="dialog-card">
       <header>
-        <span class="eyebrow">Lokaler Adminmodus</span>
+        <span class="eyebrow" id="pinEyebrow">Menü</span>
         <h1 id="pinTitle">Admin-PIN eingeben</h1>
-        <p id="pinHelp">Die Sitzung endet automatisch nach der konfigurierten Zeit.</p>
+        <p id="pinHelp">Die Sitzung endet automatisch nach der eingestellten Zeit.</p>
       </header>
       <label class="field" for="adminPin">
-        <span>PIN</span>
-        <input id="adminPin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,12}" minlength="4" maxlength="12" autocomplete="current-password" required>
+        <span id="pinLabel">PIN</span>
+        <input id="adminPin" name="pin" type="password" inputmode="numeric" pattern="[0-9 ]{4,14}" minlength="4" maxlength="14" autocomplete="current-password" required>
       </label>
-      <label id="pinConfirmField" class="field hidden" for="adminPinConfirm">
+      <label id="pinConfirmField" class="field" for="adminPinConfirm" hidden>
         <span>PIN wiederholen</span>
         <input id="adminPinConfirm" type="password" inputmode="numeric" pattern="[0-9]{4,12}" minlength="4" maxlength="12" autocomplete="new-password">
       </label>
       <div id="pinStatus" class="status-message" role="status" aria-live="polite"></div>
-      <footer class="dialog-actions">
+      <footer class="button-row end">
         <button id="cancelPin" class="button button-secondary" type="button">Abbrechen</button>
         <button id="submitPin" class="button button-primary" type="submit">Anmelden</button>
       </footer>
     </form>
   </dialog>
 
-  <dialog id="settingsDialog" class="settings-dialog" aria-labelledby="settingsTitle">
-    <div class="settings-shell">
-      <header class="settings-header">
-        <h1 id="settingsTitle">Menü</h1>
-        <nav class="menu-tabs" role="tablist" aria-label="Menübereiche">
-          <button class="menu-tab" type="button" role="tab" data-tab="live" aria-selected="true">Livestream</button>
-          <button class="menu-tab" type="button" role="tab" data-tab="place" aria-selected="false">Ort</button>
-          <button class="menu-tab" type="button" role="tab" data-tab="display" aria-selected="false">Anzeige</button>
-          <button class="menu-tab" type="button" role="tab" data-tab="transit" aria-selected="false">ÖPNV</button>
-          <button class="menu-tab" type="button" role="tab" data-tab="music" aria-selected="false">Musik</button>
-          <button class="menu-tab" type="button" role="tab" data-tab="player" aria-selected="false">Abspielen</button>
-          <button class="menu-tab" type="button" role="tab" data-tab="system" aria-selected="false">System</button>
-        </nav>
-        <button id="closeSettings" class="icon-button" type="button" aria-label="Menü schließen">×</button>
-      </header>
-
-      <form id="settingsForm" class="settings-content" autocomplete="off">
-        <section class="menu-panel" data-panel="live" role="tabpanel" aria-labelledby="streamSettingsTitle">
-          <h2 id="streamSettingsTitle" class="sr-only">Livestream auswählen</h2>
-          <p class="current-line">Läuft gerade: <strong id="liveCurrent">–</strong></p>
-          <div class="search-row">
-            <label class="field" for="liveQuery"><span>Live-Streams auf YouTube suchen</span><input id="liveQuery" type="search" data-enter="liveSearchBtn" placeholder="z. B. Storch, Hafen, Zoo"></label>
-            <button id="liveSearchBtn" class="button button-primary" type="button">Suchen</button>
-          </div>
-          <div id="liveStatus" class="status-message" role="status" aria-live="polite"></div>
-          <div id="liveResults" class="live-results"></div>
-          <details class="advanced">
-            <summary>Eigene Adresse und Wiedergabe</summary>
-            <label class="field field-wide" for="cfgStream"><span>Embed-URL (YouTube-Links werden automatisch umgewandelt)</span><textarea id="cfgStream" rows="2" spellcheck="false" placeholder="https://www.youtube.com/embed/…"></textarea></label>
-            <div class="toggle-grid">
-              <label class="toggle" for="streamAutoplay"><input id="streamAutoplay" type="checkbox"><span>Autoplay</span></label>
-              <label class="toggle" for="streamMuted"><input id="streamMuted" type="checkbox"><span>Stumm starten</span></label>
-            </div>
-            <label class="field" for="cfgStreamQuality"><span>Bildqualität im eigenen Player</span><select id="cfgStreamQuality"><option value="auto">Automatisch, bis 1080p</option><option value="720">720p, schont den Pi</option><option value="480">480p, für langsames Netz</option></select></label>
-            <button id="reloadStreamPanel" class="button button-secondary" type="button">Stream manuell neu laden</button>
-          </details>
-        </section>
-
-        <section class="menu-panel" data-panel="place" role="tabpanel" aria-labelledby="locationSettingsTitle" hidden>
-          <h2 id="locationSettingsTitle" class="sr-only">Ort wählen</h2>
-          <p class="current-line">Aktueller Ort: <strong id="placeCurrent">–</strong></p>
-          <div class="search-row">
-            <label class="field" for="placeQuery"><span>Adresse, Straße oder Ort suchen, weltweit</span><input id="placeQuery" type="search" data-enter="placeSearchBtn" placeholder="z. B. Musterstraße 1 Berlin, Wien, Tokio"></label>
-            <button id="placeSearchBtn" class="button button-primary" type="button">Suchen</button>
-          </div>
-          <div id="placeStatus" class="status-message" role="status" aria-live="polite"></div>
-          <div id="placeResults" class="place-results"></div>
-          <details class="advanced">
-            <summary>Name und Koordinaten von Hand</summary>
-            <div class="form-grid three-columns">
-              <label class="field" for="cfgLabel"><span>Standortname</span><input id="cfgLabel" type="text" maxlength="120" required></label>
-              <label class="field" for="cfgLat"><span>Breitengrad</span><input id="cfgLat" type="number" min="-90" max="90" step="0.0001" required></label>
-              <label class="field" for="cfgLon"><span>Längengrad</span><input id="cfgLon" type="number" min="-180" max="180" step="0.0001" required></label>
-            </div>
-          </details>
-        </section>
-
-        <section class="menu-panel" data-panel="display" role="tabpanel" aria-labelledby="layoutSettingsTitle" hidden>
-          <h2 id="layoutSettingsTitle" class="sr-only">Anzeige</h2>
-          <div class="form-grid">
-            <label class="field" for="cfgLayout"><span>Layoutprofil</span><select id="cfgLayout"><option value="auto">Automatisch</option><option value="minimal">Minimal</option><option value="standard">Standard</option><option value="information">Information</option></select></label>
-            <label class="field" for="cfgTheme"><span>Theme</span><select id="cfgTheme"><option value="dark">Dunkel</option><option value="light">Hell</option><option value="high-contrast">Hoher Kontrast</option><option value="y2k">Y2K – Wolken &amp; Sterne</option><option value="dagobert">Dagobert – Geldspeicher</option></select></label>
-            <label class="field" for="cfgSky"><span>Tag/Nacht (Y2K und Dagobert)</span><select id="cfgSky"><option value="auto">Automatisch nach Sonnenstand</option><option value="day">Immer Tag (hell)</option><option value="night">Immer Nacht (dunkel)</option></select></label>
-          </div>
-          <div class="toggle-grid" aria-label="Sichtbare Elemente">
-            <label class="toggle" for="showClock"><input id="showClock" type="checkbox"><span>Uhr</span></label>
-            <label class="toggle" for="showWeather"><input id="showWeather" type="checkbox"><span>Wetter</span></label>
-            <label class="toggle" for="showTransit"><input id="showTransit" type="checkbox"><span>ÖPNV</span></label>
-            <label class="toggle" for="showSystem"><input id="showSystem" type="checkbox"><span>Systemstatus</span></label>
-          </div>
-        </section>
-
-        <section class="menu-panel" data-panel="transit" role="tabpanel" aria-labelledby="transitSettingsTitle" hidden>
-          <h2 id="transitSettingsTitle" class="sr-only">Haltestellen verwalten</h2>
-          <p class="current-line">Abfahrten gibt es derzeit nur für Haltestellen im VRR (Nordrhein-Westfalen).</p>
-          <div class="search-row station-search">
-            <label class="field" for="stationQuery"><span>Haltestelle suchen</span><input id="stationQuery" type="search" data-enter="stationSearchBtn" placeholder="z. B. Bielefeld Jahnplatz"></label>
-            <button id="stationSearchBtn" class="button button-primary" type="button">Suchen</button>
-          </div>
-          <div id="stationSearchStatus" class="status-message" role="status" aria-live="polite"></div>
-          <div id="stationResults" class="station-results"></div>
-          <div id="stopEditor" class="stop-editor" aria-label="Konfigurierte Haltestellen"></div>
-        </section>
-
-        <section class="menu-panel" data-panel="music" role="tabpanel" aria-labelledby="musicSettingsTitle" hidden>
-          <h2 id="musicSettingsTitle" class="sr-only">Musik</h2>
-          <p class="current-line">Oben rechts erscheint der Song, der gerade läuft. Jetzt: <strong id="musicNow">–</strong></p>
-          <div class="form-grid">
-            <label class="field" for="cfgMusicSource"><span>Quelle</span><select id="cfgMusicSource"><option value="off">Aus</option><option value="auto">Automatisch: was gerade verbunden ist</option><option value="ytmusic">Nur YouTube Music</option><option value="spotify">Nur Spotify</option></select></label>
-          </div>
-
-          <h3 class="settings-subhead">YouTube Music</h3>
-          <p id="ytState" class="current-line"></p>
-          <div class="music-actions">
-            <button id="ytConnect" class="button button-primary" type="button">Am Bildschirm anmelden</button>
-            <button id="ytCancel" class="button hidden" type="button">Anmeldung abbrechen</button>
-            <button id="ytDisconnect" class="button button-danger hidden" type="button">YouTube Music trennen</button>
-          </div>
-          <div id="ytStatus" class="status-message" role="status" aria-live="polite"></div>
-          <ol class="help-steps">
-            <li>„Am Bildschirm anmelden“ tippen. Über der StorchCam öffnet sich ein Fenster mit der normalen Google-Anmeldung, die Bildschirmtastatur erscheint beim Tippen ins Feld.</li>
-            <li>E-Mail und Passwort eingeben. Fragt Google nach einer Bestätigung, auf dem iPhone in der Google- oder YouTube-App „Ja“ tippen.</li>
-            <li>Sobald YouTube Music geladen ist, schließt sich das Fenster von selbst. Das kann bis zu einer halben Minute dauern; du kannst es auch selbst schließen.</li>
-          </ol>
-          <p class="current-line">YouTube Music verrät nicht direkt, was gerade läuft. Die Anzeige nimmt den neuesten Song aus deinem Verlauf und zeigt ihn so lange, wie er dauert. Pausen erkennt sie nicht, und ein neuer Song kann einige Sekunden später erscheinen.</p>
-
-          <h3 class="settings-subhead">Spotify</h3>
-          <p id="spotifyState" class="current-line"></p>
-          <div class="search-row">
-            <label class="field" for="cfgSpotifyClient"><span>Client-ID deiner Spotify-App</span><input id="cfgSpotifyClient" type="text" spellcheck="false" maxlength="64" data-enter="spotifyConnect" placeholder="32 Zeichen, z. B. 1a2b3c…"></label>
-            <button id="spotifyConnect" class="button button-primary" type="button">Mit Spotify verbinden</button>
-          </div>
-          <button id="spotifyDisconnect" class="button button-danger hidden" type="button">Spotify trennen</button>
-          <div id="spotifyStatus" class="status-message" role="status" aria-live="polite"></div>
-          <details class="advanced">
-            <summary>So bekommst du eine Spotify-Client-ID</summary>
-            <ol class="help-steps">
-              <li>Auf <strong>developer.spotify.com/dashboard</strong> mit deinem Spotify-Konto anmelden und „Create app“ wählen.</li>
-              <li>Name und Beschreibung beliebig. Als <strong>Redirect URI</strong> genau diese Adresse eintragen: <code id="spotifyRedirect"></code></li>
-              <li>Bei „Which API/SDKs are you planning to use?“ <strong>Web API</strong> ankreuzen und speichern.</li>
-              <li>Die <strong>Client ID</strong> kopieren, oben eintragen und „Mit Spotify verbinden“ tippen. Ein Client-Secret ist nicht nötig.</li>
-            </ol>
-            <p id="spotifyHostHint" class="status-message error hidden">Spotify erlaubt als Rücksprung nur 127.0.0.1, nicht „localhost“. Bitte die Anzeige über http://127.0.0.1 öffnen.</p>
-          </details>
-        </section>
-
-        <section class="menu-panel" data-panel="player" role="tabpanel" aria-labelledby="playerSettingsTitle" hidden>
-          <h2 id="playerSettingsTitle" class="sr-only">Musik abspielen</h2>
-          <div class="player-now">
-            <img id="playerCover" class="player-cover hidden" alt="">
-            <div class="player-now-text">
-              <strong id="playerTitle">Gerade läuft nichts</strong>
-              <span id="playerArtist"></span>
-            </div>
-            <div class="player-transport">
-              <button class="icon-button" type="button" data-player="previous" aria-label="Vorheriger Titel"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
-              <button id="playerToggle" class="icon-button player-toggle" type="button" data-player="toggle" aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path class="icon-pause" d="M7 5h4v14H7zM13 5h4v14h-4z"/><path class="icon-play" d="M8 5v14l11-7z"/></svg></button>
-              <button class="icon-button" type="button" data-player="next" aria-label="Nächster Titel"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
-              <button class="icon-button" type="button" data-player="stop" aria-label="Stopp"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6h12v12H6z"/></svg></button>
-            </div>
-            <label class="player-volume" for="playerVolume"><span>Lautstärke</span><input id="playerVolume" type="range" min="0" max="100" step="5" value="60"></label>
-          </div>
-
-          <div class="segmented" role="group" aria-label="Musikdienst">
-            <button class="segment" type="button" data-service="ytmusic" aria-pressed="true">YouTube Music</button>
-            <button class="segment" type="button" data-service="spotify" aria-pressed="false">Spotify</button>
-          </div>
-          <div class="search-row">
-            <label class="field" for="playerQuery"><span>Song, Album, Playlist oder Künstler</span><input id="playerQuery" type="search" data-enter="playerSearchBtn" maxlength="120" placeholder="z. B. Bohemian Rhapsody"></label>
-            <button id="playerSearchBtn" class="button button-primary" type="button">Suchen</button>
-          </div>
-          <div id="playerStatus" class="status-message" role="status" aria-live="polite"></div>
-          <div id="playerResults" class="player-results"></div>
-
-          <h3 class="settings-subhead">Meine Playlists</h3>
-          <div id="playlistStatus" class="status-message" role="status" aria-live="polite"></div>
-          <div id="playerPlaylists" class="player-results"></div>
-
-          <h3 class="settings-subhead">Bluetooth-Lautsprecher</h3>
-          <p id="btState" class="current-line">Wird geprüft …</p>
-          <div class="music-actions">
-            <button id="btScan" class="button button-primary" type="button">Lautsprecher suchen</button>
-          </div>
-          <div id="btStatus" class="status-message" role="status" aria-live="polite"></div>
-          <div id="btDevices" class="bt-devices"></div>
-          <p class="current-line">Lautsprecher vorher in den Kopplungsmodus schalten (meist die Bluetooth-Taste lange drücken). Ein verbundener Lautsprecher spielt den Ton des Pi automatisch ab.</p>
-
-          <h3 class="settings-subhead">Spotify auf dem Pi</h3>
-          <p id="spPairState" class="current-line"></p>
-          <div class="music-actions">
-            <button id="spPair" class="button button-primary" type="button">Pi als Spotify-Lautsprecher koppeln</button>
-            <button id="spUnpair" class="button button-danger hidden" type="button">Kopplung entfernen</button>
-          </div>
-          <div id="spPairStatus" class="status-message" role="status" aria-live="polite"></div>
-          <div id="spPairBox" class="pair-box hidden">
-            <img id="spPairQr" class="pair-qr" alt="QR-Code zur Spotify-Kopplung">
-            <ol class="help-steps">
-              <li>QR-Code mit dem Handy scannen (oder <strong id="spPairUrl"></strong> öffnen) und mit deinem Spotify-Konto anmelden.</li>
-              <li>Falls gefragt, diesen Code eingeben: <strong id="spPairCode"></strong></li>
-              <li>Danach erscheint „StorchCam“ in Spotify als Lautsprecher, und die Suche oben kann Spotify hier abspielen.</li>
-            </ol>
-          </div>
-        </section>
-
-        <section class="menu-panel" data-panel="system" role="tabpanel" aria-labelledby="systemSettingsTitle" hidden>
-          <h2 id="systemSettingsTitle" class="sr-only">System</h2>
-          <div class="form-grid">
-            <label class="field" for="cfgYoutubeKey"><span>YouTube-API-Schlüssel (optional)</span><input id="cfgYoutubeKey" type="password" spellcheck="false" maxlength="200" placeholder="AIza…"></label>
-            <label class="field" for="cfgYoutubeQuery"><span>Suchwort beim Öffnen der Livestream-Auswahl</span><input id="cfgYoutubeQuery" type="text" maxlength="100"></label>
-          </div>
-          <p id="youtubeKeyState" class="current-line"></p>
-        </section>
-      </form>
-
-      <footer class="settings-footer">
-        <div id="saveState" class="status-message" role="status" aria-live="polite"></div>
-        <div class="dialog-actions">
-          <button id="reloadConfig" class="button button-secondary" type="button">Verwerfen</button>
-          <button id="saveConfig" class="button button-primary" type="button">Speichern</button>
-        </div>
-      </footer>
-    </div>
-  </dialog>
-
-  <div id="osk" class="osk hidden" aria-label="Bildschirmtastatur"></div>
-  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+  <div id="osk" class="osk" hidden aria-label="Bildschirmtastatur"></div>
   <script src="vendor/hls.light.min.js"></script>
   <script src="app.js"></script>
 </body>
