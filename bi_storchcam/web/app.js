@@ -308,8 +308,9 @@ function setStreamView(view) {
   if (!backendDown) renderStreamView(view);
 }
 
-// Eigener Player: YouTube- und HLS-Quellen laufen in einem video-Element ohne Bedienelemente über den
-// lokalen Proxy; alles andere bleibt eingebettet. Antippen, Menü und Dialoge halten das Video nie an.
+// Eigener Player: YouTube-Livestreams und HLS-Quellen laufen über hls.js, normale YouTube-Videos als
+// Videodatei in Schleife, beides in einem video-Element ohne Bedienelemente über den lokalen Proxy;
+// alles andere bleibt eingebettet. Antippen, Menü und Dialoge halten das Video nie an.
 const player = { hls: null, stream: null, source: null, generation: 0, retries: 0, retryTimer: null, refreshTimer: null, lastTime: -1, lastProgress: Date.now() };
 const PLAYER_MAX_RETRIES = 5;
 
@@ -377,6 +378,8 @@ async function loadSource(stream, refresh, generation) {
   if (generation !== player.generation) return;
   if (source.kind === "hls" && window.Hls?.isSupported()) {
     playHls(source, stream, generation);
+  } else if (source.kind === "file") {
+    playFile(source, stream, generation);
   } else {
     playEmbed(stream);
   }
@@ -390,6 +393,7 @@ function playHls(source, stream, generation) {
   elements.stage.classList.add("has-video");
   const video = elements.video;
   video.muted = !!stream.muted;
+  video.loop = false;
   const hls = new Hls({
     liveSyncDurationCount: 3,
     liveMaxLatencyDurationCount: 10,
@@ -407,15 +411,37 @@ function playHls(source, stream, generation) {
   hls.on(Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}); });
   hls.on(Hls.Events.ERROR, (_event, data) => onPlayerError(data, generation));
   hls.attachMedia(video);
-  clearTimeout(player.refreshTimer);
-  // YouTube-Adressen laufen nach einigen Stunden ab; rechtzeitig eine frische holen.
-  if (source.expires_in) player.refreshTimer = setTimeout(() => loadSource(stream, true, generation), source.expires_in * 1000);
+  scheduleRefresh(source, stream, generation);
   if (!video.currentTime) setStreamView({ state: "loading", full: `Livestream wird geladen${source.title ? `: ${source.title}` : ""}`, card: null });
 }
 
+// Normales Video (kein Livestream): läuft stumm in Schleife, damit der Bildschirm nie stehen bleibt.
+function playFile(source, stream, generation) {
+  freezeFrame();
+  if (player.hls) player.hls.destroy();
+  player.hls = null;
+  elements.live.removeAttribute("src");
+  elements.stage.classList.add("has-video");
+  const video = elements.video;
+  video.muted = !!stream.muted;
+  video.loop = true;
+  player.source = source;
+  player.lastProgress = Date.now();
+  video.src = source.url;
+  video.play().catch(() => {});
+  scheduleRefresh(source, stream, generation);
+  setStreamView({ state: "loading", full: `Video wird geladen${source.title ? `: ${source.title}` : ""}`, card: null });
+}
+
+function scheduleRefresh(source, stream, generation) {
+  clearTimeout(player.refreshTimer);
+  // YouTube-Adressen laufen nach einigen Stunden ab; rechtzeitig eine frische holen.
+  if (source.expires_in) player.refreshTimer = setTimeout(() => loadSource(stream, true, generation), source.expires_in * 1000);
+}
+
 function onPlayerError(data, generation) {
-  if (!data.fatal || generation !== player.generation || !player.hls) return;
-  if (data.type === window.Hls.ErrorTypes.MEDIA_ERROR && player.retries < 2) {
+  if (!data.fatal || generation !== player.generation || !player.source) return;
+  if (player.hls && data.type === window.Hls.ErrorTypes.MEDIA_ERROR && player.retries < 2) {
     player.retries += 1;
     player.hls.recoverMediaError();
     return;
@@ -459,7 +485,7 @@ function configureStream(stream, force = false) {
 // Wächter: pausiert der Browser das Video oder bleibt das Bild stehen, holt der Player es zurück.
 function watchPlayer() {
   const video = elements.video;
-  if (!player.hls || !videoActive()) return;
+  if (!player.source || !videoActive()) return;
   if (video.paused) video.play().catch(() => {});
   if (video.currentTime !== player.lastTime) {
     player.lastTime = video.currentTime;
@@ -1806,11 +1832,15 @@ elements.video.addEventListener("playing", () => {
   releaseFrame();
   hideNotice();
   const title = player.source?.title;
-  setStreamView({ state: "playing", full: `Livestream läuft im eigenen Player${title ? `: ${title}` : ""}`, card: null });
+  const what = player.source?.kind === "file" ? "Video läuft in Schleife" : "Livestream läuft im eigenen Player";
+  setStreamView({ state: "playing", full: `${what}${title ? `: ${title}` : ""}`, card: null });
+});
+elements.video.addEventListener("error", () => {
+  if (player.source?.kind === "file") onPlayerError({ fatal: true, type: "file" }, player.generation);
 });
 // Niemand soll das Kamerabild anhalten können; pausiert es trotzdem, läuft es sofort weiter.
 elements.video.addEventListener("pause", () => {
-  if (videoActive() && player.hls) elements.video.play().catch(() => {});
+  if (videoActive() && player.source) elements.video.play().catch(() => {});
 });
 document.addEventListener("visibilitychange", () => {
   if (document.hidden || !player.hls) return;

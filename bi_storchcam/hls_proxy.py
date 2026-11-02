@@ -4,6 +4,7 @@ The kiosk only talks to the local server, so the CSP can stay at ``'self'`` and 
 stream host do not matter. Every upstream address inside a playlist is replaced by a local address
 with an HMAC signature; the endpoints therefore only fetch what a resolved playlist pointed to.
 Master playlists are thinned out to variants the Pi decodes comfortably (height and frame rate).
+Single video files (ordinary YouTube videos) go through the segment endpoint with ``Range`` support.
 """
 
 from __future__ import annotations
@@ -23,6 +24,9 @@ SEGMENT_PATH = "/api/stream/hls/segment"
 MAX_PLAYLIST_BYTES = 2 * 1024 * 1024
 MAX_FPS = 30
 CHUNK_BYTES = 64 * 1024
+# Wie yt-dlp: große Videodateien in 10-MB-Stücken holen, sonst bremst googlevideo die Verbindung.
+RANGE_BYTES = 10 * 1024 * 1024
+RANGE = re.compile(r"bytes=(\d+)-(\d*)")
 USER_AGENT = "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
 URI_ATTRIBUTE = re.compile(r'URI="([^"]+)"')
 ATTRIBUTE = re.compile(r'([A-Z0-9-]+)=("[^"]*"|[^,]*)')
@@ -117,8 +121,23 @@ def rewrite_playlist(text: str, base_url: str, max_height: int = 1080) -> str:
     return "\n".join(output).rstrip("\n") + "\n"
 
 
-def open_upstream(url: str, timeout: float = 15) -> Any:
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "*/*"})
+def bounded_range(header: str) -> str:
+    """``Range`` des Players weiterreichen, offene Bereiche aber auf ein Stück begrenzen."""
+    match = RANGE.fullmatch(header.strip())
+    if not match:
+        return ""
+    start = int(match.group(1))
+    end = start + RANGE_BYTES - 1
+    if match.group(2):
+        end = min(end, int(match.group(2)))
+    return f"bytes={start}-{end}" if end >= start else ""
+
+
+def open_upstream(url: str, timeout: float = 15, *, byte_range: str = "") -> Any:
+    headers = {"User-Agent": USER_AGENT, "Accept": "*/*"}
+    if byte_range:
+        headers["Range"] = byte_range
+    request = urllib.request.Request(url, headers=headers)
     try:
         return urllib.request.urlopen(request, timeout=timeout)
     except urllib.error.HTTPError as exc:

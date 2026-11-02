@@ -95,3 +95,10 @@ def test_media_playlist_segments_keys_and_init_are_segments() -> None:
     assert decoded(key.split('URI="')[1].split('"')[0]) == (hls_proxy.SEGMENT_PATH, "https://keys.example.org/k1")
     assert decoded(init.split('URI="')[1].split('"')[0]) == (hls_proxy.SEGMENT_PATH, "https://cdn.example.org/hd30/init.mp4")
     assert "#EXT-X-MEDIA-SEQUENCE:812" in text and text.count("#EXTINF:5.0,") == 2
+
+
+def test_open_ranges_are_cut_into_pieces() -> None:
+    assert hls_proxy.bounded_range("bytes=0-") == f"bytes=0-{hls_proxy.RANGE_BYTES - 1}"
+    assert hls_proxy.bounded_range("bytes=500-999") == "bytes=500-999"
+    assert hls_proxy.bounded_range("bytes=5-") == f"bytes=5-{hls_proxy.RANGE_BYTES + 4}"
+    assert hls_proxy.bounded_range("") == "" and hls_proxy.bounded_range("bytes=-500") == "" and hls_proxy.bounded_range("items=1-2") == ""

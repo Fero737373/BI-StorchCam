@@ -1,8 +1,9 @@
 """Resolve the configured live stream for the kiosk's own video player.
 
-YouTube addresses become an HLS playlist through yt-dlp, direct ``.m3u8`` addresses are used as they
-are, and everything else stays an embedded web page as before. Resolved YouTube playlists expire after
-a few hours; the cache drops them ten minutes early so the player never asks for a dead address.
+YouTube live streams become an HLS playlist through yt-dlp, ordinary YouTube videos a single video file
+that loops, direct ``.m3u8`` addresses are used as they are, and everything else stays an embedded web
+page as before. Resolved YouTube addresses expire after a few hours; the cache drops them ten minutes
+early so the player never asks for a dead address.
 """
 
 from __future__ import annotations
@@ -21,6 +22,9 @@ DEFAULT_LIFETIME = 3 * 3600
 REFRESH_MARGIN = 600
 QUALITIES = {"auto": 1080, "1080": 1080, "720": 720, "480": 480}
 YOUTUBE_HOSTS = {"youtube.com", "youtube-nocookie.com", "music.youtube.com"}
+# H.264 zuerst (überall flott), VP9 als Ausweg; AV1 ist für den Pi in Software zu schwer.
+FILE_CODECS = {"avc1": 2, "vp09": 1, "vp9": 1}
+MAX_FILE_FPS = 30.5
 
 _cache: dict[str, dict[str, Any]] = {}
 _cache_lock = threading.Lock()
@@ -67,22 +71,66 @@ def expires_at(url: str, now: float) -> float:
         return now + DEFAULT_LIFETIME
 
 
-def _hls_address(info: dict[str, Any]) -> str:
-    # Die Master-Playlist enthält alle Qualitäten; hls.js wählt daraus passend zur Leitung.
-    if info.get("manifest_url"):
-        return str(info["manifest_url"])
-    if str(info.get("protocol", "")).startswith("m3u8") and info.get("url"):
-        return str(info["url"])
-    for fmt in info.get("formats") or []:
-        if isinstance(fmt, dict) and str(fmt.get("protocol", "")).startswith("m3u8"):
-            return str(fmt.get("manifest_url") or fmt.get("url") or "")
-    return ""
+def _usable(fmt: Any) -> bool:
+    return isinstance(fmt, dict) and bool(fmt.get("url")) and "MISSING POT" not in str(fmt.get("format_note") or "")
 
 
-def _youtube_playlist(video_id: str) -> dict[str, Any]:
+def _has_video(fmt: dict[str, Any]) -> bool:
+    return str(fmt.get("vcodec") or "none") != "none"
+
+
+def _hls_address(formats: list[dict[str, Any]]) -> str:
+    """Master-Playlist der besten HLS-Variante; hls.js wählt daraus passend zur Leitung."""
+    hls = [fmt for fmt in formats if str(fmt.get("protocol", "")).startswith("m3u8")]
+    hls = [fmt for fmt in hls if _has_video(fmt)] or hls
+    if not hls:
+        return ""
+    best = hls[-1]  # yt-dlp sortiert aufsteigend nach Qualität
+    return str(best.get("manifest_url") or best.get("url") or "")
+
+
+def _file_format(formats: list[dict[str, Any]], height_limit: int) -> dict[str, Any] | None:
+    """Für Videos ohne HLS: die beste einzelne Videodatei, die der Pi flüssig abspielt (stumm, Ton ist egal)."""
+    candidates = []
+    for fmt in formats:
+        codec = str(fmt.get("vcodec") or "")
+        rank = next((score for prefix, score in FILE_CODECS.items() if codec.startswith(prefix)), 0)
+        height = int(fmt.get("height") or 0)
+        fps = float(fmt.get("fps") or 0)
+        if (
+            rank
+            and fmt.get("protocol") in {"https", "http"}
+            and fmt.get("ext") in {"mp4", "webm"}
+            and 0 < height <= height_limit
+            and fps <= MAX_FILE_FPS
+        ):
+            candidates.append((rank, height, float(fmt.get("tbr") or 0), fmt))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: item[:3])[3]
+
+
+def _describe(live_status: str) -> str:
+    return {
+        "is_upcoming": "Der Livestream hat noch nicht begonnen",
+        "is_live": "YouTube liefert für diesen Livestream gerade keine HLS-Adresse",
+        "post_live": "Der Livestream ist gerade zu Ende gegangen",
+    }.get(live_status, "YouTube liefert für dieses Video keine abspielbare Datei")
+
+
+def _youtube_source(video_id: str, height_limit: int) -> dict[str, Any]:
     import yt_dlp  # type: ignore[import-untyped]  # erst hier laden: groß und nur für YouTube nötig
 
-    options = {"quiet": True, "no_warnings": True, "noplaylist": True, "skip_download": True, "format": "best[protocol^=m3u8]/best"}
+    options = {
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "skip_download": True,
+        "format": "best[protocol^=m3u8]/best",
+        # Ohne passendes Kombi-Format (Video ohne Ton reicht dem stummen Kiosk) nicht abbrechen,
+        # sondern die Formatliste selbst durchsehen.
+        "ignore_no_formats_error": True,
+    }
     try:
         with yt_dlp.YoutubeDL(options) as downloader:
             info = downloader.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
@@ -90,19 +138,28 @@ def _youtube_playlist(video_id: str) -> dict[str, Any]:
         raise StreamError(f"YouTube liefert keinen Stream: {str(exc)[:160]}") from exc
     if not isinstance(info, dict):
         raise StreamError("YouTube liefert keine Streamdaten")
-    playlist = _hls_address(info)
-    if not playlist:
-        raise StreamError("Kein HLS-Livestream; das Video läuft eingebettet")
-    return {
-        "upstream": playlist,
+    formats = [fmt for fmt in info.get("formats") or [] if _usable(fmt)]
+    live_status = str(info.get("live_status") or ("is_live" if info.get("is_live") else "not_live"))
+    details = {
         "title": str(info.get("title") or ""),
         "channel": str(info.get("channel") or info.get("uploader") or ""),
-        "live": bool(info.get("is_live")),
+        "live": live_status == "is_live",
     }
+    playlist = _hls_address(formats)
+    if playlist:
+        return {"kind": "hls", "upstream": playlist, **details}
+    if live_status not in {"is_live", "is_upcoming"}:
+        chosen = _file_format(formats, height_limit)
+        if chosen:
+            return {"kind": "file", "upstream": str(chosen["url"]), **details}
+    raise StreamError(f"{_describe(live_status)} ({len(formats)} Formate gefunden)")
 
 
-def resolve(url: str, *, refresh: bool = False, now: float | None = None) -> dict[str, Any]:
-    """``{"kind": "hls", "upstream", "expires", ...}``, ``{"kind": "embed", "reason"}`` oder ``{"kind": "none"}``."""
+def resolve(url: str, *, refresh: bool = False, now: float | None = None, height_limit: int = 1080) -> dict[str, Any]:
+    """``{"kind": "hls"|"file", "upstream", "expires", ...}``, ``{"kind": "embed", "reason"}`` oder ``{"kind": "none"}``.
+
+    ``file`` ist ein normales Video ohne HLS (kein Livestream); der Kiosk spielt es als Schleife.
+    """
     clean = url.strip()
     if not clean:
         return {"kind": "none"}
@@ -112,20 +169,26 @@ def resolve(url: str, *, refresh: bool = False, now: float | None = None) -> dic
     video_id = youtube_id(clean)
     if not video_id:
         return {"kind": "embed", "reason": "Diese Adresse ist weder YouTube noch HLS und wird eingebettet"}
+    key = f"{video_id}:{height_limit}"
     with _resolve_lock:
         with _cache_lock:
-            cached = _cache.get(video_id)
+            cached = _cache.get(key)
         if cached and not refresh and cached["expires"] - REFRESH_MARGIN > current:
             return dict(cached)
         try:
-            result: dict[str, Any] = {"kind": "hls", **_youtube_playlist(video_id)}
+            result: dict[str, Any] = _youtube_source(video_id, height_limit)
         except StreamError as exc:
             LOGGER.warning("Stream %s läuft eingebettet: %s", video_id, exc)
             return {"kind": "embed", "reason": str(exc)}
         result["expires"] = expires_at(result["upstream"], current)
         with _cache_lock:
-            _cache[video_id] = dict(result)
-    LOGGER.info("Stream %s im eigenen Player, gültig bis %s", video_id, time.strftime("%H:%M", time.localtime(result["expires"])))
+            _cache[key] = dict(result)
+    LOGGER.info(
+        "Stream %s im eigenen Player (%s), gültig bis %s",
+        video_id,
+        "Livestream" if result["kind"] == "hls" else "Video in Schleife",
+        time.strftime("%H:%M", time.localtime(result["expires"])),
+    )
     return result
 
 

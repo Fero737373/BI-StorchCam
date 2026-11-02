@@ -277,7 +277,7 @@ class StorchHandler(BaseHTTPRequestHandler):
         }
 
     def _get_stream_source(self, params: QueryParams) -> dict[str, Any]:
-        """Wie der Kiosk den Stream abspielt: eigener Player (HLS über den lokalen Proxy) oder eingebettet."""
+        """Wie der Kiosk den Stream abspielt: eigener Player (HLS oder Videodatei über den lokalen Proxy) oder eingebettet."""
         configured = str(self._config().get("stream", {}).get("url", ""))
         url = _query_value(params, "url").strip() or configured
         if url != configured:
@@ -285,12 +285,15 @@ class StorchHandler(BaseHTTPRequestHandler):
             self._guard_admin()
             if urlparse(url).scheme not in {"http", "https"}:
                 raise RequestError(HTTPStatus.BAD_REQUEST, "Stream-URL muss mit http:// oder https:// beginnen")
-        source = stream_source.resolve(url, refresh=_query_value(params, "refresh") == "1")
-        if source["kind"] != "hls":
+        quality = self._config().get("stream", {}).get("quality", "auto")
+        source = stream_source.resolve(
+            url, refresh=_query_value(params, "refresh") == "1", height_limit=stream_source.max_height(quality)
+        )
+        if source["kind"] not in {"hls", "file"}:
             return source
         return {
-            "kind": "hls",
-            "url": hls_proxy.local_address(source["upstream"], playlist=True),
+            "kind": source["kind"],
+            "url": hls_proxy.local_address(source["upstream"], playlist=source["kind"] == "hls"),
             "title": source.get("title", ""),
             "channel": source.get("channel", ""),
             "live": bool(source.get("live", True)),
@@ -622,15 +625,18 @@ class StorchHandler(BaseHTTPRequestHandler):
                 body = hls_proxy.fetch_playlist(url, stream_source.max_height(quality))
                 self._send_body(body, "application/vnd.apple.mpegurl", HTTPStatus.OK, head_only=head_only)
                 return
-            upstream = hls_proxy.open_upstream(url)
+            upstream = hls_proxy.open_upstream(url, byte_range=hls_proxy.bounded_range(self.headers.get("Range", "")))
         except hls_proxy.ProxyError as exc:
             raise RequestError(exc.status, str(exc)) from exc
         with upstream:
-            self.send_response(HTTPStatus.OK)
+            # Videodateien kommen in Stücken (206); so kann der Player springen und die Schleife neu starten.
+            partial = upstream.status == HTTPStatus.PARTIAL_CONTENT
+            self.send_response(HTTPStatus.PARTIAL_CONTENT if partial else HTTPStatus.OK)
             self.send_header("Content-Type", upstream.headers.get("Content-Type") or "video/mp2t")
-            length = upstream.headers.get("Content-Length")
-            if length:
-                self.send_header("Content-Length", length)
+            for name in ("Content-Length", "Content-Range", "Accept-Ranges"):
+                value = upstream.headers.get(name)
+                if value:
+                    self.send_header(name, value)
             self.send_header("Cache-Control", "no-store")
             self._security_headers()
             self.end_headers()
