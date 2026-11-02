@@ -631,8 +631,7 @@ class StorchHandler(BaseHTTPRequestHandler):
         except (music.MusicError, player.PlayerError, ytmusic.YTMusicError) as exc:
             raise RequestError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
         player.full_output_volume()
-        self.context.state.refresh_soon("music")
-        return {"ok": True}
+        return self._fresh_music(self._service(body) == "ytmusic")
 
     def _post_player_control(self, body: dict[str, Any]) -> dict[str, Any]:
         # Die Knöpfe auf der Songkarte gehen am Pi-Bildschirm selbst auch ohne Admin-Anmeldung.
@@ -651,6 +650,12 @@ class StorchHandler(BaseHTTPRequestHandler):
                 raise RequestError(HTTPStatus.BAD_REQUEST, "Unbekanntes Ziel")
         except (music.MusicError, player.PlayerError) as exc:
             raise RequestError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
+        return self._fresh_music(target == "pi")
+
+    def _fresh_music(self, local: bool) -> dict[str, Any]:
+        """Der Pi-Player kennt seinen neuen Zustand sofort; Spotify braucht einen Moment und kommt mit der nächsten Runde."""
+        if local:
+            return {"ok": True, "music": self.context.state.refresh_now("music")}
         self.context.state.refresh_soon("music")
         return {"ok": True}
 
@@ -690,8 +695,7 @@ class StorchHandler(BaseHTTPRequestHandler):
         radio.count_click(station["uuid"])
         listening.remember({"source": "radio", "kind": "station", "id": station["uuid"], "title": station["name"], "subtitle": station["country"], "station": station})
         player.full_output_volume()
-        self.context.state.refresh_soon("music")
-        return {"ok": True, "station": station}
+        return {**self._fresh_music(True), "station": station}
 
     def _post_player_sleep(self, body: dict[str, Any]) -> dict[str, Any]:
         if not self._loopback_client():

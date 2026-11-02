@@ -8,13 +8,13 @@ Wie die Oberfläche aussieht und sich bedienen lässt, zeigt die klickbare Vorsc
 
 ## Screenshots
 
-Die automatisierten UI-Tests prüfen die Anzeige bei 800×480, 1024×600, 1280×720, 1920×1080 und im Hochformat und speichern bei Fehlern Screenshots. Produktive Referenzscreenshots werden nach dem ersten bestandenen Pi-Hardwaretest ergänzt.
+Die automatisierten UI-Tests prüfen die Anzeige bei 800×480, 1024×600, 1280×720, 1920×1080 und im Hochformat, dazu Musik-Seiten, Player-Reiter und Gesten, und speichern bei Fehlern Screenshots. Produktive Referenzscreenshots werden nach dem ersten bestandenen Pi-Hardwaretest ergänzt.
 
 ## Funktionen
 
 - eine einzige Web-Kiosk-Architektur und ein zentraler Einstiegspunkt
 - vollflächiger Livestream im eigenen Player: YouTube-Livestreams und HLS-Quellen laufen über hls.js, normale YouTube-Videos als stumme Schleife, beides in einem video-Element ohne YouTube-Bedienelemente. Antippen, Menü und Dialoge halten das Bild nicht an, bei Aussetzern bleibt das letzte Bild stehen und der Player verbindet sich selbst neu. Andere Seiten werden wie bisher eingebettet
-- Kamera-Favoriten: Die Reihenfolge bestimmt den Ersatz, wenn eine Kamera ausfällt; die App wechselt zurück, sobald die erste wieder läuft. Notizen je Kamera erscheinen in der Kamera-Karte (Antippen auf den Kamera-Hinweis oben links)
+- Kamera-Favoriten: Die Reihenfolge bestimmt den Ersatz, wenn eine Kamera ausfällt; die App wechselt zurück, sobald die erste wieder läuft
 - Infoleiste unten: Uhr mit Datum und Statuszeile, Wetter mit Streifen für die nächsten Stunden (Temperaturkurve, Regenbalken, Regenschwelle, Sonnenauf- und -untergang) und die nächsten Abfahrten als Losgeh-Zeit (Abfahrt minus Gehzeit) mit Verspätung und Linienform nach Verkehrsmittel. Antippen öffnet Wetter für 24 Stunden bzw. alle Abfahrten. Nach einer einstellbaren Zeit ohne Berührung wird die Leiste zur schmalen Kompaktleiste; Wischen nach unten verkleinert oder blendet sie aus, nach oben holt sie zurück
 - amtliche Unwetterwarnungen des Deutschen Wetterdienstes über Bright Sky, ab einstellbarer Stufe
 - Leseabstand (etwa 1 m, 2 m, 3 m und mehr) statt Layoutprofilen; die Anzeige passt sich außerdem Hoch- und Querformat an
@@ -27,7 +27,8 @@ Die automatisierten UI-Tests prüfen die Anzeige bei 800×480, 1024×600, 1280×
 - Menü-Knopf oben links (oder `Ctrl+Alt+S`) mit Touch-Oberfläche und Bildschirmtastatur
 - Livestream-Auswahl aus allem, was gerade auf YouTube live ist, ohne API-Schlüssel
 - weltweite Ortssuche; Uhr und Wetter folgen der Zeitzone des Orts
-- Musik auf einer Seite: Internetradio (Sendersuche über die freie Radio-Browser-Datenbank, Wiedergabe über mpv, aktueller Titel aus dem Stream), YouTube Music und Spotify. Oben läuft, was spielt, mit Lautstärke, Ausgabe und Ausschalt-Timer (15, 30, 60 Minuten oder bis zum Nachtmodus); darunter „Weiterhören“ über alle Quellen, Lieblingssender bzw. Playlists und eine Suche mit Filtern. Vor und Zurück wechseln beim Radio den Lieblingssender
+- Musik wie in einer App: Internetradio (Sendersuche über die freie Radio-Browser-Datenbank, Wiedergabe über mpv), YouTube Music und Spotify mit „Weiterhören“ über alle Quellen, Lieblingssendern bzw. Playlists und einer Suche nach Songs, Künstlern, Alben und Playlists. Ein Song spielt nur sich selbst; Album, Playlist und Künstler öffnen eine eigene Seite mit allen Titeln, „Abspielen“ und „Zufall“, Antippen eines Titels spielt die Liste ab dort. Zurück über den Knopf oder mit einem Wisch vom linken Rand
+- Player-Reiter: großes Cover mit bewegtem Equalizer, Zeitleiste zum Spulen, Zufall, Wiederholen (alle, einen), Gefällt mir, Zu Playlist hinzufügen, Lautstärke, Ausgabe, Ausschalt-Timer (15, 30, 60 Minuten oder bis zum Nachtmodus) und die Warteschlange zum Springen, Entfernen und Verschieben. Ein Klangregler mit sechs Bändern und Voreinstellungen (Mehr Bass, Pop, Rock, Klassik, Sprache, Akustik, Nachts leise) wirkt auf alles, was der Pi über mpv spielt. Beim Radio zeigt der Player den laufenden Song aus dem Stream mit Cover (iTunes-Suche) und „Zuletzt im Radio“; Vor und Zurück wechseln den Lieblingssender. Spotify: Warteschlange nur zum Ansehen, kein Klangregler
 - Songkarte oben rechts: klein nur Bild und Titel, antippen für groß mit Bedienung; beim Radio Sendername, „Jetzt: Künstler – Titel“ und Equalizer statt Fortschritt. YouTube Music und Spotify brauchen Premium; Ton über Bluetooth-Lautsprecher (Suchen, Koppeln, Trennen im Menü)
 - Einrichtung beim ersten Start in drei Schritten: Kamera, Ort, Haltestellen
 - am Handy einstellen: Menü → „Am Handy“ zeigt QR-Code und sechsstelligen Code (10 Minuten gültig, einmalig); danach steht das ganze Menü am Handy zur Verfügung
@@ -102,13 +103,14 @@ Ohne Docker: `python -m pip install -e .` und `python -m bi_storchcam --no-brows
 
 ## Menü
 
-Der Knopf oben links (oder `Ctrl+Alt+S`) öffnet das Menü als Seitenpanel; die Kamera bleibt daneben sichtbar und läuft weiter, auf schmalen Bildschirmen als kleines Bild in der Ecke. Jede Änderung wirkt und speichert sofort; ein Hinweis zeigt zehn Sekunden lang „Rückgängig“. Texteingaben laufen am Bildschirm über die eingebaute Bildschirmtastatur.
+Der Knopf oben links (oder `Ctrl+Alt+S`) öffnet das Menü als Seitenpanel über etwa zwei Drittel der Breite; die Kamera bleibt daneben sichtbar und läuft weiter, auf schmalen Bildschirmen als kleines Bild in der Ecke. Jede Änderung wirkt und speichert sofort; ein Hinweis zeigt zehn Sekunden lang „Rückgängig“. Texteingaben laufen am Bildschirm über die eingebaute Bildschirmtastatur. Ein Wisch nach links schließt das Menü, Hinweise verschwinden beim Antippen.
 
-- **Livestream:** was gerade läuft, Bildqualität, Bildrate (30 oder 60 Bilder pro Sekunde), Ton der Kamera (aus, leise und aus bei Musik, an), Favoriten mit Reihenfolge und automatischem Ersatz, Notizen zur Kamera und die Suche nach Streams, die gerade auf YouTube live sind. Antippen spielt sofort, der Stern merkt den Stream als Favorit. Unter „Eigene Adresse“ lassen sich YouTube-Links, HLS-Adressen oder Webseiten eintragen.
+- **Livestream:** was gerade läuft, Bildqualität, Bildrate (30 oder 60 Bilder pro Sekunde), Ton der Kamera (aus, leise und aus bei Musik, an), Favoriten mit Reihenfolge und automatischem Ersatz und die Suche nach Streams, die gerade auf YouTube live sind. Antippen spielt sofort, der Stern merkt den Stream als Favorit. Unter „Eigene Adresse“ lassen sich YouTube-Links, HLS-Adressen oder Webseiten eintragen.
 - **Ort:** weltweite Suche nach Adresse, Straße oder Ort (Nominatim/OpenStreetMap, Rückfall auf Open-Meteo). Antippen übernimmt Name, Koordinaten und Zeitzone; Uhr und Wetter folgen.
 - **Anzeige:** Theme mit Vorschau, Tag/Nacht für Y2K und Dagobert, Leseabstand, Blöcke der Infoleiste, Zeit bis zur Kompaktleiste, Unwetterwarnungen und Nachtmodus.
 - **ÖPNV:** Losgeh-Zeit an oder aus, je Haltestelle Gehzeit und Linienfilter; Haltestellen derzeit nur im VRR (Nordrhein-Westfalen).
-- **Musik:** Wiedergabe, Radio, YouTube Music und Spotify; unter „Konten und Lautsprecher“ Anmeldungen, Spotify auf dem Pi und Bluetooth.
+- **Player:** was gerade läuft, mit Klangregler und Warteschlange.
+- **Musik:** Radio, YouTube Music und Spotify mit Seiten für Alben, Playlists und Künstler; unten ein Mini-Player, der zum Player führt. Unter „Konten und Lautsprecher“ Anmeldungen, Spotify auf dem Pi und Bluetooth.
 - **System:** Zustand der Datenquellen (Zustand, letzte Antwort, Abfrageintervall), optionaler YouTube-API-Schlüssel, Start-Suchwort und „Einrichtung erneut starten“.
 - **Am Handy:** QR-Code und Kopplungscode, Adresse des Pi im Heimnetz und ob ein Handy sich auch mit PIN anmelden darf.
 

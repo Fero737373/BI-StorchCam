@@ -22,9 +22,14 @@
 - `GET /api/music/ytmusic/login` (Admin): Stand der Anmeldung (`idle`, `pending`, `connected`, `error`)
 - `POST /api/music/ytmusic/cancel` (Admin): schließt das Anmeldefenster
 - `POST /api/music/ytmusic/disconnect` (Admin): löscht den gespeicherten YouTube-Music-Zugang
-- `POST /api/player/search` (Admin): `{service: "ytmusic"|"spotify", query}` → Treffer mit `kind`, `id`, `title`, `subtitle`, `cover`
+- `POST /api/player/search` (Admin): `{service: "ytmusic"|"spotify", query}` → Treffer mit `kind` (`song`, `video`, `artist`, `album`, `playlist`), `id`, `title`, `subtitle`, `cover`, `duration`
+- `POST /api/player/open` (Admin): `{service, kind: "album"|"playlist"|"artist", id}` → Seite mit `title`, `subtitle`, `cover`, `tracks` (`id`, `title`, `artist`, `cover`, `duration`, `liked`) und bei Künstlern `albums` sowie `play_id` (YouTube Music: Playlist mit allen Songs des Künstlers)
+- `POST /api/player/like` (Admin): `{service, id, liked}` setzt „Gefällt mir“ (YouTube Music `rate_song`, Spotify `/me/tracks`)
+- `POST /api/player/add` (Admin): `{service, playlist, id}` fügt den Titel einer eigenen Playlist hinzu; „Liked Music“ füllt sich nur über „Gefällt mir“
+- `GET /api/player/queue` (Admin; vom Pi selbst ohne Anmeldung): Spotify-Warteschlange zum Ansehen; YouTube Music und Radio stehen direkt im Musik-Zustand
+- `GET /api/player/level` (Admin; vom Pi selbst ohne Anmeldung): Pegel 0 bis 1 des Pi-Players für die bewegte Equalizer-Anzeige
 - `POST /api/player/playlists` (Admin): `{service}` → eigene Playlists (YouTube-Music-Bibliothek inkl. „Liked Music“ bzw. Spotify `/me/playlists`), Format wie bei der Suche
-- `POST /api/player/play` (Admin): `{service, kind, id, title?, subtitle?, cover?}` startet die Wiedergabe auf dem Pi und merkt sie für „Weiterhören“; es spielt immer nur ein Dienst
+- `POST /api/player/play` (Admin): `{service, kind, id, start?, shuffle?, title?, subtitle?, cover?}` startet die Wiedergabe und merkt sie für „Weiterhören“. Ein Song oder Video spielt allein; Album, Playlist und Künstler spielen als Warteschlange ab `start`, auf Wunsch gemischt. Es spielt immer nur ein Dienst; beim Pi-Player kommt der neue Musik-Zustand gleich als `music` zurück
 - `POST /api/radio/search` (Admin): `{query, filter}` → Sender aus Radio Browser (`filter`: `news`, `pop`, `rock`, `jazz`, `klassik`, `de`; ohne Suchwort die beliebtesten)
 - `POST /api/radio/play` (Admin): `{station}` spielt den Sender über mpv auf dem Pi, meldet das Abspielen an Radio Browser und merkt ihn für „Weiterhören“
 - `POST /api/player/sleep` (Admin; vom Bildschirm selbst auch ohne Anmeldung): `{minutes, label}` schaltet die Musik nach der Zeit aus, `0` hebt den Timer auf; das Ende steht als `sleep_end` (ms) im Musik-Zustand
@@ -33,12 +38,12 @@
 - `POST /api/pair/claim` (ohne Anmeldung): `{code}` → Sitzung wie nach einer PIN-Anmeldung; nach fünf falschen Versuchen verfällt der Code
 - `GET /api/system/info` (Admin): Version, Laufzeit, letzte Sicherung der Konfiguration, ob die Hintergrundbeleuchtung schaltbar ist, Adresse im Heimnetz
 - `POST /api/display/power` (nur vom Bildschirm selbst): `{on}` schaltet die Hintergrundbeleuchtung für den Nachtmodus
-- `POST /api/player/control` (Admin; vom Pi selbst auch ohne Anmeldung für die Knöpfe der Songkarte): `{target: "pi"|"spotify", action: "toggle"|"next"|"previous"|"stop"|"volume", value}`; beim Radio wechseln `next` und `previous` den Lieblingssender
+- `POST /api/player/control` (Admin; vom Pi selbst auch ohne Anmeldung für die Knöpfe der Songkarte): `{target: "pi"|"spotify", action, value}` mit `toggle`, `next`, `previous`, `stop`, `volume` (0–100), `seek` (Sekunden), `shuffle` (`true`/`false`), `repeat` (`off`, `all`, `one`) und nur beim Pi-Player `jump` (Position), `remove` (Position, nicht der laufende Titel) und `move` (`{from, to}`). Beim Radio wechseln `next` und `previous` den Lieblingssender. Für `pi` antwortet der Server mit dem neuen Musik-Zustand als `music`
 - `GET /api/music/spotify/pair`, `POST /api/music/spotify/pair`, `POST /api/music/spotify/unpair` (Admin): Pi als Spotify-Lautsprecher koppeln (Kopplungsadresse und QR-Code) bzw. die Kopplung löschen
 - `GET /api/bluetooth` (Admin): Adapter, Audiogeräte und laufende Aktion; ohne Adapter `available: false` mit Fehlertext
 - `POST /api/bluetooth/scan`, `/connect`, `/disconnect`, `/remove` (Admin): `{mac}`; laufen im Hintergrund, der Fortschritt steht in `GET /api/bluetooth`
 
-`GET /api/state` enthält neben Wetter (`hourly` für 25 Stunden ab der laufenden Stunde, `sun` mit Auf- und Untergang), Abfahrten (`delay`, `type` = `bus`/`tram`/`night`/`train`, `at`/`planned` als Unix-Zeit, `walk_minutes` je Haltestelle) und Musik auch `warnings` (DWD) und `health` (je Quelle `ok`, `checked_at`, `last_ok`, `error`, `interval`) für die Übersicht im Menü.
+`GET /api/state` enthält neben Wetter (`hourly` für 25 Stunden ab der laufenden Stunde, `sun` mit Auf- und Untergang), Abfahrten (`delay`, `type` = `bus`/`tram`/`night`/`train`, `at`/`planned` als Unix-Zeit, `walk_minutes` je Haltestelle) und Musik (beim Pi-Player mit `track_id`, `liked`, `shuffle`, `repeat`, `queue` als Ausschnitt mit `position`, `queue_index`, `seekable` und `equalizer`; beim Radio `recent_titles` und das Cover des laufenden Songs) auch `warnings` (DWD) und `health` (je Quelle `ok`, `checked_at`, `last_ok`, `error`, `interval`) für die Übersicht im Menü.
 
 Zugriff: Der Bildschirm selbst (Loopback) darf ohne PIN alles, wenn keine PIN verlangt ist. Andere Geräte brauchen immer eine Sitzung, entweder über einen Kopplungscode vom Bildschirm oder, wenn `server.lan_access` an ist, über die PIN.
 

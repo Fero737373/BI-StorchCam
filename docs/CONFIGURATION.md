@@ -37,7 +37,6 @@ Die JSON-Konfiguration wird gegen ein geschlossenes Schema validiert. Unbekannte
 | `stream.audio` | Ton der Kamera: aus, leise und während Musik aus (`duck`), an. `stream.muted` folgt automatisch | `off`, `duck`, `on` |
 | `stream.favorites` | gemerkte Kameras `{url, title, channel}`; die Reihenfolge bestimmt den Ersatz bei Ausfall | bis 12 |
 | `stream.auto_fallback` | bei Ausfall zum nächsten Favoriten wechseln und zurück, sobald die eigentliche Kamera wieder läuft | `true` |
-| `stream.notes` | Notizen je Kamera-Adresse, erscheinen in der Kamera-Karte | bis 10 je Kamera, 90 Zeichen |
 | `stream.autoplay` | Playerparameter für eingebettete Seiten | boolesch |
 | `admin.pin_hash` | lokaler PBKDF2-Hash | nur durch Setup setzen |
 | `admin.require_pin` | Menü nur mit PIN öffnen; im Docker-Container per `BI_STORCHCAM_REQUIRE_PIN` gesetzt | `true`, Docker: `false` |
@@ -48,6 +47,7 @@ Die JSON-Konfiguration wird gegen ein geschlossenes Schema validiert. Unbekannte
 | `music.source` | Quelle für „Läuft gerade“ oben rechts | `off`, `auto` (Spotify, sonst YouTube Music), `spotify`, `ytmusic` (Anmeldung im Menü unter Musik, siehe API_NOTES) |
 | `music.spotify.client_id` | Client-ID der eigenen Spotify-App (Redirect URI: `http://127.0.0.1:<Port>/api/music/spotify/callback`) | Text |
 | `music.radio.favorites` | Lieblingssender `{uuid, name, url, country, codec, bitrate, tags}` aus der Radio-Browser-Suche; Vor und Zurück wechseln in dieser Reihenfolge | bis 30 |
+| `music.equalizer` | Klangregler für alles, was mpv auf dem Pi spielt: `preset` (`flat`, `bass`, `pop`, `rock`, `klassik`, `sprache`, `akustik`, `nacht` oder `custom`) und `gains` in dB für 60 Hz, 150 Hz, 400 Hz, 1 kHz, 2,4 kHz und 15 kHz; der größte Anhub wird vorab abgezogen, damit nichts übersteuert | je Band -12 bis +12, Vorgabe `flat` |
 | `ui.distance` | Leseabstand zum Bildschirm in Metern; skaliert die Infoleiste (1 m kleiner, 3 m größer) | `1`, `2`, `3` |
 | `ui.layout_profile` | früheres Layoutprofil, nur noch für alte Konfigurationen; beim Umstieg auf Version 5 wird daraus `ui.distance` | `auto`, `minimal`, `standard`, `information` |
 | `ui.compact_after` | Infoleiste nach so vielen Sekunden ohne Berührung zur Kompaktleiste verkleinern; `0` = nie | 0–3600, `120` |

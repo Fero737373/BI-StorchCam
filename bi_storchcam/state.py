@@ -172,6 +172,26 @@ class StateManager:
         with self._lock:
             self._last_run.pop(name, None)
 
+    def refresh_now(self, name: str) -> Any:
+        """Einen Provider sofort abfragen, etwa nach einem Tipp auf Vor oder Zufall; liefert den neuen Wert."""
+        config, generation = self._config_and_generation()
+        for task_name, interval, task in _provider_tasks(config):
+            if task_name == name:
+                value = _fetch(name, task)
+                self._store(name, value, interval, generation)
+                return value
+        return None
+
+    def _store(self, name: str, value: Any, interval: int, generation: int) -> None:
+        with self._lock:
+            if generation != self._generation:
+                return
+            self._snapshot[name] = value
+            health = self._snapshot.setdefault("health", {})
+            health[name] = _health(name, value, interval, health.get(name))
+            self._snapshot["generated_at"] = _utc_timestamp()
+            self._last_run[name] = time.monotonic()
+
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
             return copy.deepcopy(self._snapshot)
@@ -220,14 +240,7 @@ class StateManager:
         for name, interval, task in _provider_tasks(config):
             if not self._due(name, interval, now):
                 continue
-            value = _fetch(name, task)
-            with self._lock:
-                if generation == self._generation:
-                    self._snapshot[name] = value
-                    health = self._snapshot.setdefault("health", {})
-                    health[name] = _health(name, value, interval, health.get(name))
-                    self._snapshot["generated_at"] = _utc_timestamp()
-                    self._last_run[name] = time.monotonic()
+            self._store(name, _fetch(name, task), interval, generation)
 
     def _run(self) -> None:
         self._ready.set()

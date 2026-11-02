@@ -137,3 +137,20 @@ def test_open_like_add_and_level_endpoints(config: dict, monkeypatch: pytest.Mon
         assert status == 502 and "erlaubt" in failed["error"]
         status, _headers, meter = request(address, "GET", "/api/player/level")
         assert status == 200 and meter["level"] == 0.5
+
+
+def test_control_answers_with_the_new_queue_at_once(config: dict, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Nach Verschieben oder Zufall zeigt die Oberfläche sofort die neue Reihenfolge, ohne auf die nächste Abfrage zu warten."""
+    from tests.test_new_features import FakeMpv
+
+    config["admin"]["require_pin"] = False
+    mpv = FakeMpv()
+    resolver = type("Resolver", (), {"url": lambda self, video_id: f"https://audio/{video_id}", "prefetch": lambda self, video_id: None})()
+    pi = player.PiPlayer(client_factory=lambda *_a: mpv, resolver=resolver, covers=player.RadioCovers(fetch=lambda *_a, **_k: {"results": []}))
+    monkeypatch.setattr(player, "_player", pi)
+    pi.play_tracks(songs(4))
+    with running_server(config, monkeypatch, tmp_path) as address:
+        status, _headers, result = post_json(address, "/api/player/control", {"target": "pi", "action": "move", "value": {"from": 3, "to": 1}})
+        assert status == 200 and [item["id"] for item in result["music"]["queue"]] == ["v0", "v3", "v1", "v2"]
+        status, _headers, result = post_json(address, "/api/player/control", {"target": "pi", "action": "repeat", "value": "one"})
+        assert result["music"]["repeat"] == "one" and result["music"]["controls"] == "pi"

@@ -380,3 +380,136 @@ test("YouTube and HLS streams play in the own video player instead of an iframe"
   await expect(page.locator("#chipTitle")).toHaveText("Hafen live");
   expect(cspErrors).toEqual([]);
 });
+
+const SONG = (id, title, seconds = 200) => ({ id, title, artist: "Coldplay", cover: "", duration: seconds, liked: null });
+const ALBUM_PAGE = { kind: "album", id: "MPREpara", title: "Parachutes", subtitle: "Coldplay · 2000", cover: "", tracks: [SONG("s1", "Don't Panic"), SONG("s2", "Shiver"), SONG("s3", "Yellow")], albums: [] };
+const ARTIST_PAGE = { kind: "artist", id: "UCcold", title: "Coldplay", subtitle: "Künstler", cover: "", tracks: [SONG("s3", "Yellow"), SONG("s4", "Clocks")], albums: [{ kind: "album", id: "MPREpara", title: "Parachutes", subtitle: "2000", cover: "" }], play_id: "VLOLAKsongs" };
+const SEARCH = [
+  { kind: "artist", id: "UCcold", title: "Coldplay", subtitle: "", cover: "" },
+  { kind: "song", id: "s4", title: "Clocks", subtitle: "Coldplay", cover: "", duration: 307 },
+  { kind: "album", id: "MPREpara", title: "Parachutes", subtitle: "Coldplay", cover: "" },
+];
+
+async function mockLibrary(page) {
+  const calls = [];
+  const json = (pattern, body) => page.route(pattern, (route) => {
+    calls.push([new URL(route.request().url()).pathname, route.request().postDataJSON?.() ?? null]);
+    return route.fulfill({ json: typeof body === "function" ? body(route.request()) : body });
+  });
+  await json("**/api/config", (request) => ({ path: "/tmp/config.json", config: baseConfig, youtube_key_set: false, spotify_connected: false, ytmusic_connected: true }));
+  await json("**/api/player/search", { ok: true, results: SEARCH });
+  await json("**/api/player/playlists", { ok: true, results: [{ kind: "playlist", id: "LM", title: "Liked Music", subtitle: "", cover: "" }, { kind: "playlist", id: "PLauto", title: "Autofahrt", subtitle: "48 Songs", cover: "" }] });
+  await json("**/api/player/open", (request) => ({ ok: true, results: request.postDataJSON().kind === "artist" ? ARTIST_PAGE : ALBUM_PAGE }));
+  for (const name of ["play", "control", "like", "add"]) await json(`**/api/player/${name}`, { ok: true });
+  await json("**/api/player/level", { ok: true, level: 0.6 });
+  return calls;
+}
+
+const played = (calls) => calls.filter(([path]) => path === "/api/player/play").map(([, body]) => body);
+
+test("music search opens albums and artists as pages; a song plays alone, a page plays from the tapped song", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const { cspErrors, pageErrors } = await mockBackend(page);
+  const calls = await mockLibrary(page);
+  await page.goto("/");
+  await openMenu(page);
+  await page.getByRole("tab", { name: "Musik" }).click();
+  await page.locator('#srcSeg [data-src="ytmusic"]').click();
+  await page.locator("#mQuery").fill("coldplay");
+  await page.locator("#mSearch").click();
+  await expect(page.locator("#mResults .group-head").first()).toHaveText("Künstler");
+  // Ein Song spielt nur sich selbst.
+  await page.locator("#mResults .mrow", { hasText: "Clocks" }).click();
+  await expect.poll(() => played(calls).length).toBe(1);
+  expect(played(calls)[0]).toMatchObject({ service: "ytmusic", kind: "song", id: "s4" });
+  // Ein Album öffnet eine Seite statt sofort zu spielen.
+  await page.locator("#mResults .mrow", { hasText: "Parachutes" }).click();
+  const albumPage = page.locator(".nav-page.is-sub");
+  await expect(albumPage.locator(".page-text strong")).toHaveText("Parachutes");
+  await expect(page.locator("#musicRoot")).toBeHidden();
+  expect(played(calls).length).toBe(1);
+  await albumPage.locator(".track-row").nth(1).click();
+  await expect.poll(() => played(calls).length).toBe(2);
+  expect(played(calls)[1]).toMatchObject({ kind: "album", id: "MPREpara", start: 1, shuffle: false });
+  await albumPage.getByRole("button", { name: "Zufall" }).click();
+  await expect.poll(() => played(calls).length).toBe(3);
+  expect(played(calls)[2]).toMatchObject({ kind: "album", start: 0, shuffle: true });
+  await albumPage.locator(".back-button").click();
+  await expect(page.locator("#musicRoot")).toBeVisible();
+  await expect(page.locator(".nav-page.is-sub")).toHaveCount(0);
+  // Künstler: beliebte Titel, Alben als Kacheln; „Abspielen“ spielt die Songliste des Künstlers.
+  await page.locator("#mResults .mrow", { hasText: "Coldplay" }).first().click();
+  const artistPage = page.locator(".nav-page.is-sub");
+  await expect(artistPage.locator(".tiles .tile")).toHaveCount(1);
+  await artistPage.getByRole("button", { name: "Abspielen" }).click();
+  await expect.poll(() => played(calls).length).toBe(4);
+  expect(played(calls)[3]).toMatchObject({ kind: "playlist", id: "VLOLAKsongs", start: 0 });
+  // Album aus der Künstlerseite öffnet eine weitere Seite; der Musik-Reiter führt zurück zum Anfang.
+  await artistPage.locator(".tiles .tile").click();
+  await expect(page.locator(".nav-page.is-sub")).toHaveCount(2);
+  await page.getByRole("tab", { name: "Musik" }).click();
+  await expect(page.locator(".nav-page.is-sub")).toHaveCount(0);
+  await expect(page.locator("#musicRoot")).toBeVisible();
+  expect(cspErrors).toEqual([]);
+  expect(pageErrors).toEqual([]);
+});
+
+test("player tab: queue, shuffle, repeat, seek, like, playlist and equalizer", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const queue = [SONG("s1", "Don't Panic"), SONG("s2", "Shiver"), SONG("s3", "Yellow"), SONG("s4", "Clocks")].map((track, position) => ({ position, ...track }));
+  const music = { enabled: true, ok: true, playing: true, controls: "pi", source: "ytmusic", device: "pi", title: "Shiver", artist: "Coldplay", cover: "", track_id: "s2", liked: false,
+    progress_ms: 30000, duration_ms: 200000, paused: false, volume: 60, fetched_at: Date.now(), sleep_end: 0, shuffle: false, repeat: "off", queue, queue_index: 1, seekable: true, equalizer: [0, 0, 0, 0, 0, 0] };
+  const { getSaved, cspErrors, pageErrors } = await mockBackend(page, { overrides: { music } });
+  const calls = await mockLibrary(page);
+  const controls = () => calls.filter(([path]) => path === "/api/player/control").map(([, body]) => [body.action, body.value]);
+  await page.goto("/");
+  await openMenu(page);
+  await page.getByRole("tab", { name: "Player" }).click();
+  await expect(page.locator("#ppTitle")).toHaveText("Shiver");
+  await expect(page.locator("#queueList .track-row")).toHaveCount(4);
+  await expect(page.locator("#queueList .track-row").nth(1)).toHaveClass(/is-playing/);
+  await page.locator("#queueList .track-row", { hasText: "Clocks" }).click();
+  await page.locator("#ppShuffle").click();
+  await expect(page.locator("#ppShuffle")).toHaveAttribute("aria-pressed", "true");
+  await page.locator("#ppRepeat").click();
+  await expect(page.locator("#ppRepeat")).toHaveAttribute("data-mode", "all");
+  await page.locator("#queueList .track-row", { hasText: "Yellow" }).getByRole("button", { name: "Aus der Warteschlange entfernen" }).click();
+  await page.locator("#ppSeek").fill("500");
+  await expect.poll(controls).toEqual([["jump", 3], ["shuffle", true], ["repeat", "all"], ["remove", 2], ["seek", 100]]);
+  await page.locator("#ppLike").click();
+  await expect.poll(() => calls.find(([path]) => path === "/api/player/like")?.[1]).toEqual({ service: "ytmusic", id: "s2", liked: true });
+  await page.locator("#ppAdd").click();
+  // „Liked Music“ füllt sich über das Herz und steht nicht in der Liste.
+  await expect(page.locator("#ppAddList .pick")).toHaveCount(1);
+  await page.locator("#ppAddList .pick").click();
+  await expect.poll(() => calls.find(([path]) => path === "/api/player/add")?.[1]).toEqual({ service: "ytmusic", playlist: "PLauto", id: "s2" });
+  await page.locator('#eqPresets [data-preset="bass"]').click();
+  await expect.poll(() => getSaved().music.equalizer).toEqual({ preset: "bass", gains: [6, 4, 1, 0, 0, 0] });
+  await expect(page.locator("#eqBands output").first()).toHaveText("+6");
+  // Mini-Player im Musik-Reiter führt zurück zum Player.
+  await page.getByRole("tab", { name: "Musik" }).click();
+  await expect(page.locator("#miniTitle")).toHaveText("Shiver");
+  await page.locator("#miniOpen").click();
+  await expect(page.getByRole("tab", { name: "Player" })).toHaveAttribute("aria-selected", "true");
+  expect(cspErrors).toEqual([]);
+  expect(pageErrors).toEqual([]);
+});
+
+test("popups close when tapped and the menu closes with a swipe to the left", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await mockBackend(page);
+  await page.goto("/");
+  await openMenu(page);
+  await page.getByRole("tab", { name: "Anzeige" }).click();
+  await page.locator('#distSeg [data-dist="3"]').click();
+  await expect(page.locator("#toast")).toBeVisible();
+  await page.locator("#toastText").click();
+  await expect(page.locator("#toast")).toBeHidden();
+  await page.getByRole("tab", { name: "Player" }).click();
+  const box = await page.locator("#sheetBody").boundingBox();
+  await page.mouse.move(box.x + box.width * 0.7, box.y + 60);
+  await page.mouse.down();
+  for (let step = 1; step <= 8; step += 1) await page.mouse.move(box.x + box.width * (0.7 - step * 0.07), box.y + 62, { steps: 2 });
+  await page.mouse.up();
+  await expect(page.locator("#sheet")).toBeHidden();
+});
