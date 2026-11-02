@@ -31,7 +31,7 @@ build-backend = "setuptools.build_meta"
 version = {attr = "bi_storchcam.version.__version__"}
 
 [tool.setuptools.package-data]
-bi_storchcam = ["web/*.html", "web/*.css", "web/*.js", "web/fonts/*.woff2", "web/fonts/*.txt", "web/theme/*.svg"]
+bi_storchcam = ["web/*.html", "web/*.css", "web/*.js", "web/fonts/*.woff2", "web/fonts/*.txt", "web/theme/*.svg", "web/vendor/*.js", "web/vendor/*.txt"]
 
 [tool.setuptools.packages.find]
 include = ["bi_storchcam*"]
@@ -39,6 +39,8 @@ exclude = ["tests*", "node_modules*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Einige Tests teilen Hilfsfunktionen aus tests/test_server.py; ohne Projektwurzel im Pfad bricht `pytest -q` beim Sammeln ab.
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 120

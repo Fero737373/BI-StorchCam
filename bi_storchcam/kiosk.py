@@ -94,6 +94,10 @@ def browser_arguments(kind: str, executable: str, url: str, config: dict[str, An
         "--noerrdialogs",
         "--disable-session-crashed-bubble",
         "--autoplay-policy=no-user-gesture-required",
+        # Das Video soll weiterlaufen, auch wenn ein anderes Fenster (z. B. die Google-Anmeldung) darüber liegt.
+        "--disable-background-media-suspend",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-renderer-backgrounding",
         "--disable-features=TranslateUI,MediaRouter",
         f"--user-data-dir={profile}",
     ]

@@ -9,6 +9,8 @@ BI-StorchCam besitzt genau einen Produktpfad:
 5. Erst danach startet `BrowserManager` einen Chromium-Familienprozess.
 6. Docker (`restart: unless-stopped`, Healthcheck auf `/api/health`) überwacht den Python-Prozess. `BrowserManager` überwacht den Chromium-Prozess im Container, der über den Wayland-Socket des Hosts auf dem Bildschirm erscheint.
 
-Die API lädt keine externen Provider pro Request. Configänderungen invalidieren den Zeitplan des State-Managers. Schreibzugriffe erfordern ein kurzlebiges In-Memory-Token. Die PIN liegt nur als PBKDF2-Hash in der lokalen Config.
+Der Livestream läuft im eigenen Player: `/api/stream/source` löst YouTube per yt-dlp in eine HLS-Playlist auf, `hls_proxy` reicht Playlist und Segmente signiert über den lokalen Server durch, hls.js spielt sie in einem video-Element. Chromium läuft mit Schaltern, die Medien im Hintergrund oder unter anderen Fenstern nicht anhalten.
+
+Die API lädt außer der Streamauflösung keine externen Provider pro Request. Configänderungen invalidieren den Zeitplan des State-Managers. Schreibzugriffe erfordern ein kurzlebiges In-Memory-Token. Die PIN liegt nur als PBKDF2-Hash in der lokalen Config.
 
 Provider bleiben hinter serialisierbaren Ergebnissen gekapselt. Neue Anbieter müssen die bestehende Configvalidierung, einen klaren Providernamen und einen Fetchpfad ergänzen; UI und HTTP-State benötigen dadurch keinen grundlegenden Umbau.

@@ -42,7 +42,8 @@
   "stream": {
     "url": "",
     "muted": true,
-    "autoplay": true
+    "autoplay": true,
+    "quality": "auto"
   },
   "admin": {
     "pin_hash": "",

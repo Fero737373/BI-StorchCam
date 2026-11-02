@@ -19,7 +19,7 @@ const baseConfig = {
 // Gleiche Richtlinie wie server.py, damit CSP-Verstöße auch unter dem statischen Testserver auffallen.
 const CSP = "default-src 'self'; script-src 'self'; style-src 'self'; "
   + "img-src 'self' data: https://i.ytimg.com; "
-  + "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com http://127.0.0.1:4173; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
+  + "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com http://127.0.0.1:4173; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
 
 const PROBABILITIES = [10, 20, 60, 75, 40, 15, 5, 5];
 
@@ -379,5 +379,26 @@ test("menu button opens the menu without PIN; live stream and place are chosen b
   await expect(page.locator("#placeStatus")).toContainText("Ort übernommen: Tokio");
   const saved = getSaved();
   expect([saved.location.label, saved.location.latitude, saved.location.longitude, saved.app.timezone]).toEqual(["Tokio", 35.6895, 139.6917, "Asia/Tokyo"]);
+  expect(cspErrors).toEqual([]);
+});
+
+test("YouTube and HLS streams play in the own video player instead of an iframe", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const { cspErrors } = await mockBackend(page);
+  let playlistRequests = 0;
+  await page.route("**/api/stream/source*", (route) => route.fulfill({ json: { kind: "hls", url: "/mock-hls/index.m3u8", title: "Hafen live", channel: "Hafencam", live: true, expires_in: 3600 } }));
+  await page.route("**/mock-hls/index.m3u8", (route) => {
+    playlistRequests += 1;
+    return route.fulfill({ contentType: "application/vnd.apple.mpegurl", body: "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2.0,\nseg0.ts\n" });
+  });
+  await page.route("**/mock-hls/seg0.ts", (route) => route.fulfill({ contentType: "video/mp2t", body: Buffer.alloc(188 * 8) }));
+  await page.goto("/");
+  await expect(page.locator("#stage")).toHaveClass(/has-video/);
+  await expect(page.locator("#liveVideo")).toBeVisible();
+  await expect(page.locator("#live")).toBeHidden();
+  expect(await page.locator("#live").getAttribute("src")).toBeNull();
+  await expect.poll(() => playlistRequests).toBeGreaterThan(0);
+  // Das Video nimmt keine Berührung an, ein Tippen aufs Bild kann es also nicht anhalten.
+  expect(await page.locator("#liveVideo").evaluate((video) => getComputedStyle(video).pointerEvents)).toBe("none");
   expect(cspErrors).toEqual([]);
 });

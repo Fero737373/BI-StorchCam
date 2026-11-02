@@ -24,6 +24,8 @@ THEMES = {"dark", "light", "high-contrast", "y2k", "dagobert"}
 # Tag/Nacht der Bild-Themes (Y2K, Dagobert): automatisch nach Open-Meteo oder fest.
 SKY_MODES = {"auto", "day", "night"}
 MUSIC_SOURCES = {"off", "auto", "spotify", "ytmusic"}
+# Höchste Bildhöhe im eigenen Player; „auto“ bedeutet 1080p mit höchstens 30 Bildern pro Sekunde.
+STREAM_QUALITIES = {"auto", "1080", "720", "480"}
 LAYOUT_PROFILES = {"auto", "minimal", "standard", "information"}
 UI_BLOCKS = ("clock", "weather", "transit", "system")
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
@@ -325,11 +327,15 @@ def _validate_location(location: dict[str, Any]) -> None:
 
 
 def _validate_stream(stream: dict[str, Any]) -> None:
-    _only(stream, {"url", "muted", "autoplay"}, "stream")
+    _only(stream, {"url", "muted", "autoplay", "quality"}, "stream")
+    quality = str(stream["quality"])
+    if quality not in STREAM_QUALITIES:
+        raise ConfigError("stream.quality muss auto, 1080, 720 oder 480 sein")
     stream.update({
         "url": _validate_stream_url(_string(stream["url"], "stream.url", 2048)),
         "muted": _bool(stream["muted"], "stream.muted"),
         "autoplay": _bool(stream["autoplay"], "stream.autoplay"),
+        "quality": quality,
     })
 
 

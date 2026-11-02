@@ -11,6 +11,8 @@
 - `POST /api/config/save`: authentifizierter, größenbegrenzter Schreibzugriff
 - `GET /api/station/search`: authentifizierte VRR-Suche
 - `GET /api/live/search?q=`: Live-Streams auf YouTube
+- `GET /api/stream/source`: wie der Kiosk den Stream abspielt: `{kind: "hls", url, title, channel, expires_in}` für den eigenen Player, `{kind: "embed", reason}` oder `{kind: "none"}`. `refresh=1` holt eine frische Adresse; `url=` probiert eine noch nicht gespeicherte Adresse aus (nur im Menü)
+- `GET /api/stream/hls/playlist?u=&s=` und `GET /api/stream/hls/segment?u=&s=`: reichen Playlists und Segmente der Quelle durch. Nur Adressen mit gültiger HMAC-Signatur aus einer zuvor ausgelieferten Playlist werden abgerufen; der Schlüssel entsteht bei jedem Start neu
 - `GET /api/location/search?q=`: Adress- und Ortssuche weltweit
 - `GET /api/location/timezone?lat=&lon=`: Zeitzone zu Koordinaten
 - `POST /api/music/spotify/authorize` (Admin): startet die Spotify-Anmeldung (Authorization Code mit PKCE) und liefert die Login-Adresse
@@ -35,6 +37,7 @@ Fehler werden als JSON mit passenden HTTP-Statuscodes ausgegeben. Tracebacks wer
 - Open-Meteo: aktuelles Wetter und stündliche Zukunft ab der konfigurierten Zeitzone
 - Nominatim (OpenStreetMap): Adress- und Ortssuche, Rückfall auf Open-Meteo-Geocoding
 - YouTube: Live-Suche über die öffentliche Suchseite oder optional die Data API v3
+- YouTube-Livestream im eigenen Player: yt-dlp liefert die HLS-Master-Playlist (googlevideo, gültig einige Stunden, Ablauf steht in der Adresse). Der Proxy entfernt Varianten über `stream.quality` und über 30 Bilder pro Sekunde, hls.js wählt aus dem Rest passend zur Leitung. Der Player holt zehn Minuten vor Ablauf eine neue Adresse, startet ein pausiertes Video sofort wieder und baut die Verbindung nach 20 Sekunden ohne neues Bild neu auf; nach fünf Fehlversuchen fällt er auf die Einbettung zurück
 - VRR-Haltestellenmonitor: Suche und Abfahrten in der VRR-Region
 - Spotify Web API: aktueller Song (`/me/player/currently-playing`), Suche, Wiedergabe und Steuerung (`/me/player/...`); der Refresh-Token liegt in `spotify_token.json` neben der `config.json` (Dateirechte 600). Für Steuerung und eigene Playlists braucht die Verbindung die Rechte `user-read-playback-state`, `user-modify-playback-state`, `playlist-read-private` und `playlist-read-collaborative`; ältere Verbindungen im Menü einmal neu verbinden
 - Spotify auf dem Pi: librespot 0.8 (aus raspotify 0.48.3) läuft als Spotify-Connect-Lautsprecher „StorchCam“ mit PulseAudio-Ausgabe. Gekoppelt wird per Gerätecode (`--enable-device-auth`, Adresse spotify.com/pair); die Zugangsdaten liegen in `librespot/` neben der `config.json`. Abgespielt wird über die Web API mit `device_id` dieses Lautsprechers

@@ -17,10 +17,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
-from . import bluetooth, player, spotify_connect
+from . import bluetooth, hls_proxy, player, spotify_connect
 from .admin import SessionStore, hash_pin, verify_pin
 from .config_store import ConfigError, config_path, public_config, save_config, validate_config, youtube_api_key
-from .providers import music, ytmusic
+from .providers import music, stream_source, ytmusic
 from .providers.geocoding import search_places, timezone_for
 from .providers.transit_vrr_smart import search_station
 from .providers.youtube import YouTubeError, search_live
@@ -125,6 +125,8 @@ class StorchHandler(BaseHTTPRequestHandler):
             "https://*.googleusercontent.com https://yt3.ggpht.com; "
             # YouTube fest erlaubt, damit ein im Menü gewählter Stream ohne Neuladen der Seite eingebettet werden darf.
             f"frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com{frame_origin}; "
+            # Eigener Player: hls.js hängt den Stream als blob: an das video-Element und entpackt ihn in einem Worker.
+            "media-src 'self' blob:; worker-src 'self' blob:; "
             "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
         )
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -216,6 +218,7 @@ class StorchHandler(BaseHTTPRequestHandler):
             "/api/music/ytmusic/login": self._get_ytmusic_login,
             "/api/music/spotify/pair": self._get_spotify_pair,
             "/api/bluetooth": self._get_bluetooth,
+            "/api/stream/source": self._get_stream_source,
         }
 
     def _dispatch(self, *, head_only: bool) -> None:
@@ -224,6 +227,9 @@ class StorchHandler(BaseHTTPRequestHandler):
             route = self._get_routes().get(parsed.path)
             if parsed.path == music.SPOTIFY_CALLBACK_PATH:
                 self._spotify_callback(parse_qs(parsed.query))
+                return
+            if parsed.path in {hls_proxy.PLAYLIST_PATH, hls_proxy.SEGMENT_PATH}:
+                self._serve_hls(parsed.path, parse_qs(parsed.query), head_only=head_only)
                 return
             if parsed.path.startswith("/theme/"):
                 self._serve_theme_image(parsed.path.removeprefix("/theme/"), head_only=head_only)
@@ -268,6 +274,27 @@ class StorchHandler(BaseHTTPRequestHandler):
             "youtube_key_set": bool(youtube_api_key(self._config())),
             "spotify_connected": music.spotify_connected(),
             "ytmusic_connected": ytmusic.connected(),
+        }
+
+    def _get_stream_source(self, params: QueryParams) -> dict[str, Any]:
+        """Wie der Kiosk den Stream abspielt: eigener Player (HLS über den lokalen Proxy) oder eingebettet."""
+        configured = str(self._config().get("stream", {}).get("url", ""))
+        url = _query_value(params, "url").strip() or configured
+        if url != configured:
+            # Eine noch nicht gespeicherte Adresse ausprobieren darf nur das Menü.
+            self._guard_admin()
+            if urlparse(url).scheme not in {"http", "https"}:
+                raise RequestError(HTTPStatus.BAD_REQUEST, "Stream-URL muss mit http:// oder https:// beginnen")
+        source = stream_source.resolve(url, refresh=_query_value(params, "refresh") == "1")
+        if source["kind"] != "hls":
+            return source
+        return {
+            "kind": "hls",
+            "url": hls_proxy.local_address(source["upstream"], playlist=True),
+            "title": source.get("title", ""),
+            "channel": source.get("channel", ""),
+            "live": bool(source.get("live", True)),
+            "expires_in": max(60, int(source["expires"] - time.time() - stream_source.REFRESH_MARGIN)),
         }
 
     def _get_station_search(self, params: QueryParams) -> dict[str, Any]:
@@ -586,6 +613,34 @@ class StorchHandler(BaseHTTPRequestHandler):
         if target.suffix in {".html", ".css", ".js"}:
             content_type += "; charset=utf-8"
         self._send_body(target.read_bytes(), content_type, HTTPStatus.OK, head_only=head_only)
+
+    def _serve_hls(self, path: str, params: QueryParams, *, head_only: bool) -> None:
+        try:
+            url = hls_proxy.verified_url(_query_value(params, "u"), _query_value(params, "s"))
+            if path == hls_proxy.PLAYLIST_PATH:
+                quality = self._config().get("stream", {}).get("quality", "auto")
+                body = hls_proxy.fetch_playlist(url, stream_source.max_height(quality))
+                self._send_body(body, "application/vnd.apple.mpegurl", HTTPStatus.OK, head_only=head_only)
+                return
+            upstream = hls_proxy.open_upstream(url)
+        except hls_proxy.ProxyError as exc:
+            raise RequestError(exc.status, str(exc)) from exc
+        with upstream:
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", upstream.headers.get("Content-Type") or "video/mp2t")
+            length = upstream.headers.get("Content-Length")
+            if length:
+                self.send_header("Content-Length", length)
+            self.send_header("Cache-Control", "no-store")
+            self._security_headers()
+            self.end_headers()
+            if head_only:
+                return
+            try:
+                while chunk := upstream.read(hls_proxy.CHUNK_BYTES):
+                    self.wfile.write(chunk)
+            except (BrokenPipeError, ConnectionResetError):
+                LOGGER.debug("Player hat ein Segment abgebrochen")
 
     def _serve_theme_image(self, name: str, *, head_only: bool) -> None:
         target = theme_image(name)

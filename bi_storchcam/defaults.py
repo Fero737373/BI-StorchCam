@@ -47,6 +47,7 @@ DEFAULT_CONFIG = {
         "url": "",
         "muted": True,
         "autoplay": True,
+        "quality": "auto",
     },
     "admin": {
         "pin_hash": "",

@@ -16,7 +16,10 @@
   <main class="screen" aria-label="BI-StorchCam Infoscreen">
     <section id="stage" class="stage" aria-label="Livestream" tabindex="-1">
       <iframe id="live" class="live" title="Konfigurierter Livestream" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+      <video id="liveVideo" class="live live-video" muted playsinline autoplay disablepictureinpicture disableremoteplayback aria-hidden="true"></video>
+      <canvas id="streamFreeze" class="stream-freeze" aria-hidden="true"></canvas>
       <div class="stream-shade" aria-hidden="true"></div>
+      <div id="streamNotice" class="stream-notice hidden" role="status" aria-live="polite"><span class="stream-notice-ring" aria-hidden="true"></span><span id="streamNoticeText"></span></div>
       <div id="streamEmpty" class="stream-empty has-stream" role="alert">
         <div class="empty-card">
           <svg class="empty-icon" viewBox="0 0 24 24" width="44" height="44" aria-hidden="true" focusable="false">
@@ -160,6 +163,7 @@
               <label class="toggle" for="streamAutoplay"><input id="streamAutoplay" type="checkbox"><span>Autoplay</span></label>
               <label class="toggle" for="streamMuted"><input id="streamMuted" type="checkbox"><span>Stumm starten</span></label>
             </div>
+            <label class="field" for="cfgStreamQuality"><span>Bildqualität im eigenen Player</span><select id="cfgStreamQuality"><option value="auto">Automatisch, bis 1080p</option><option value="720">720p, schont den Pi</option><option value="480">480p, für langsames Netz</option></select></label>
             <button id="reloadStreamPanel" class="button button-secondary" type="button">Stream manuell neu laden</button>
           </details>
         </section>
@@ -332,6 +336,7 @@
 
   <div id="osk" class="osk hidden" aria-label="Bildschirmtastatur"></div>
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+  <script src="vendor/hls.light.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

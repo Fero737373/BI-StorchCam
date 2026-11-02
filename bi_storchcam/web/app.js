@@ -4,6 +4,11 @@ const byId = (id) => document.getElementById(id);
 const elements = {
   body: document.body,
   live: byId("live"),
+  video: byId("liveVideo"),
+  freeze: byId("streamFreeze"),
+  stage: byId("stage"),
+  streamNotice: byId("streamNotice"),
+  streamNoticeText: byId("streamNoticeText"),
   streamEmpty: byId("streamEmpty"),
   streamStatus: byId("streamStatus"),
   streamStatusText: byId("streamStatusText"),
@@ -303,12 +308,142 @@ function setStreamView(view) {
   if (!backendDown) renderStreamView(view);
 }
 
+// Eigener Player: YouTube- und HLS-Quellen laufen in einem video-Element ohne Bedienelemente über den
+// lokalen Proxy; alles andere bleibt eingebettet. Antippen, Menü und Dialoge halten das Video nie an.
+const player = { hls: null, stream: null, source: null, generation: 0, retries: 0, retryTimer: null, refreshTimer: null, lastTime: -1, lastProgress: Date.now() };
+const PLAYER_MAX_RETRIES = 5;
+
+function videoActive() {
+  return elements.stage.classList.contains("has-video");
+}
+
+function showNotice(text) {
+  elements.streamNoticeText.textContent = text;
+  elements.streamNotice.classList.remove("hidden");
+}
+
+function hideNotice() {
+  elements.streamNotice.classList.add("hidden");
+}
+
+// Das letzte Bild bleibt über einen Wechsel oder Neuaufbau stehen, statt schwarz zu werden.
+function freezeFrame() {
+  const video = elements.video;
+  if (!videoActive() || video.readyState < 2 || !video.videoWidth) return;
+  const canvas = elements.freeze;
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  try {
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    canvas.classList.add("is-on");
+  } catch (_error) {
+    canvas.classList.remove("is-on");
+  }
+}
+
+function releaseFrame() {
+  elements.freeze.classList.remove("is-on");
+}
+
+function stopVideo() {
+  clearTimeout(player.retryTimer);
+  clearTimeout(player.refreshTimer);
+  if (player.hls) player.hls.destroy();
+  player.hls = null;
+  player.source = null;
+  elements.stage.classList.remove("has-video");
+  elements.video.removeAttribute("src");
+  releaseFrame();
+  hideNotice();
+}
+
+function playEmbed(stream) {
+  stopVideo();
+  elements.live.src = "about:blank";
+  requestAnimationFrame(() => { elements.live.src = effectiveStreamUrl(stream); });
+}
+
+async function loadSource(stream, refresh, generation) {
+  let source = { kind: "embed" };
+  try {
+    const query = new URLSearchParams();
+    if ((stream.url || "") !== (runtimeConfig?.stream?.url || "")) query.set("url", stream.url);
+    if (refresh) query.set("refresh", "1");
+    const suffix = query.toString();
+    source = await api(`/api/stream/source${suffix ? `?${suffix}` : ""}`);
+  } catch (_error) {
+    source = { kind: "embed" };
+  }
+  if (generation !== player.generation) return;
+  if (source.kind === "hls" && window.Hls?.isSupported()) {
+    playHls(source, stream, generation);
+  } else {
+    playEmbed(stream);
+  }
+}
+
+function playHls(source, stream, generation) {
+  const Hls = window.Hls;
+  freezeFrame();
+  if (player.hls) player.hls.destroy();
+  elements.live.removeAttribute("src");
+  elements.stage.classList.add("has-video");
+  const video = elements.video;
+  video.muted = !!stream.muted;
+  const hls = new Hls({
+    liveSyncDurationCount: 3,
+    liveMaxLatencyDurationCount: 10,
+    maxBufferLength: 30,
+    backBufferLength: 30,
+    capLevelToPlayerSize: true,
+    manifestLoadingMaxRetry: 4,
+    levelLoadingMaxRetry: 4,
+    fragLoadingMaxRetry: 6,
+  });
+  player.hls = hls;
+  player.source = source;
+  player.lastProgress = Date.now();
+  hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(source.url));
+  hls.on(Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}); });
+  hls.on(Hls.Events.ERROR, (_event, data) => onPlayerError(data, generation));
+  hls.attachMedia(video);
+  clearTimeout(player.refreshTimer);
+  // YouTube-Adressen laufen nach einigen Stunden ab; rechtzeitig eine frische holen.
+  if (source.expires_in) player.refreshTimer = setTimeout(() => loadSource(stream, true, generation), source.expires_in * 1000);
+  if (!video.currentTime) setStreamView({ state: "loading", full: `Livestream wird geladen${source.title ? `: ${source.title}` : ""}`, card: null });
+}
+
+function onPlayerError(data, generation) {
+  if (!data.fatal || generation !== player.generation || !player.hls) return;
+  if (data.type === window.Hls.ErrorTypes.MEDIA_ERROR && player.retries < 2) {
+    player.retries += 1;
+    player.hls.recoverMediaError();
+    return;
+  }
+  player.retries += 1;
+  freezeFrame();
+  if (player.retries > PLAYER_MAX_RETRIES) {
+    // Der eigene Player kommt nicht durch: lieber eingebettet zeigen als gar nichts.
+    showNotice("Eigener Player gestört · Stream läuft eingebettet");
+    playEmbed(player.stream);
+    return;
+  }
+  const delay = Math.min(30000, 2000 * 2 ** (player.retries - 1));
+  showNotice(`Verbindung zur Kamera unterbrochen · neuer Versuch ${player.retries} von ${PLAYER_MAX_RETRIES}`);
+  setStreamView({ state: "reconnecting", full: "Verbindung zur Kamera unterbrochen, neuer Versuch läuft", card: null });
+  clearTimeout(player.retryTimer);
+  player.retryTimer = setTimeout(() => loadSource(player.stream, true, generation), delay);
+}
+
 function configureStream(stream, force = false) {
-  const signature = JSON.stringify({ url: stream.url || "", autoplay: !!stream.autoplay, muted: !!stream.muted });
+  const signature = JSON.stringify({ url: stream.url || "", autoplay: !!stream.autoplay, muted: !!stream.muted, quality: stream.quality || "auto" });
   if (!force && signature === streamSignature) return;
   streamSignature = signature;
-  const url = effectiveStreamUrl(stream);
-  if (!url) {
+  player.generation += 1;
+  player.stream = stream;
+  player.retries = 0;
+  if (!String(stream.url || "").trim()) {
+    stopVideo();
     elements.live.removeAttribute("src");
     setStreamView({
       state: "error",
@@ -317,9 +452,27 @@ function configureStream(stream, force = false) {
     });
     return;
   }
-  setStreamView({ state: "loading", full: "Stream-Seite wird geladen", card: null });
-  elements.live.src = "about:blank";
-  requestAnimationFrame(() => { elements.live.src = url; });
+  setStreamView({ state: "loading", full: "Livestream wird vorbereitet", card: null });
+  loadSource(stream, force, player.generation);
+}
+
+// Wächter: pausiert der Browser das Video oder bleibt das Bild stehen, holt der Player es zurück.
+function watchPlayer() {
+  const video = elements.video;
+  if (!player.hls || !videoActive()) return;
+  if (video.paused) video.play().catch(() => {});
+  if (video.currentTime !== player.lastTime) {
+    player.lastTime = video.currentTime;
+    player.lastProgress = Date.now();
+    return;
+  }
+  const stalled = Date.now() - player.lastProgress;
+  if (stalled > 8000 && !player.retryTimer) showNotice("Bild hängt · Verbindung wird geprüft");
+  if (stalled > 20000) {
+    player.lastProgress = Date.now();
+    freezeFrame();
+    loadSource(player.stream, true, player.generation);
+  }
 }
 
 function formatMaybe(value, suffix = "") {
@@ -684,7 +837,7 @@ async function refreshState() {
     elements.body.classList.remove("is-loading");
   } catch (error) {
     backendDown = true;
-    const showCard = !!streamView.card || !elements.live.getAttribute("src");
+    const showCard = !!streamView.card || (!elements.live.getAttribute("src") && !videoActive());
     renderStreamView({
       state: "error",
       full: "Lokales Backend nicht erreichbar",
@@ -782,6 +935,7 @@ function fillForm(config) {
   byId("cfgStream").value = config.stream.url || "";
   byId("streamAutoplay").checked = !!config.stream.autoplay;
   byId("streamMuted").checked = !!config.stream.muted;
+  byId("cfgStreamQuality").value = config.stream.quality === "1080" ? "auto" : (config.stream.quality || "auto");
   byId("cfgLabel").value = config.location.label || "";
   byId("cfgLat").value = config.location.latitude;
   byId("cfgLon").value = config.location.longitude;
@@ -1333,6 +1487,7 @@ function collectConfig() {
   config.stream.url = byId("cfgStream").value.trim();
   config.stream.autoplay = byId("streamAutoplay").checked;
   config.stream.muted = byId("streamMuted").checked;
+  config.stream.quality = byId("cfgStreamQuality").value;
   config.location.label = byId("cfgLabel").value.trim();
   config.location.latitude = Number(byId("cfgLat").value);
   config.location.longitude = Number(byId("cfgLon").value);
@@ -1644,6 +1799,25 @@ elements.live.addEventListener("error", () => {
     card: { title: "Stream nicht erreichbar", text: "Die Stream-Seite meldet einen Fehler. Die Einbettung ist möglicherweise blockiert." },
   });
 });
+elements.video.addEventListener("playing", () => {
+  player.retries = 0;
+  clearTimeout(player.retryTimer);
+  player.retryTimer = null;
+  releaseFrame();
+  hideNotice();
+  const title = player.source?.title;
+  setStreamView({ state: "playing", full: `Livestream läuft im eigenen Player${title ? `: ${title}` : ""}`, card: null });
+});
+// Niemand soll das Kamerabild anhalten können; pausiert es trotzdem, läuft es sofort weiter.
+elements.video.addEventListener("pause", () => {
+  if (videoActive() && player.hls) elements.video.play().catch(() => {});
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden || !player.hls) return;
+  elements.video.play().catch(() => {});
+  const live = player.hls.liveSyncPosition;
+  if (Number.isFinite(live) && elements.video.currentTime < live - 15) elements.video.currentTime = live;
+});
 byId("streamReload").addEventListener("click", () => {
   if (runtimeConfig?.stream) configureStream(runtimeConfig.stream, true);
   refreshState();
@@ -1769,4 +1943,5 @@ updateClock();
 setInterval(() => { updateClock(); updateMusicProgress(); }, 1000);
 refreshState();
 setInterval(refreshState, 5000);
+setInterval(watchPlayer, 2000);
 handleMusicReturn();

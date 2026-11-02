@@ -17,7 +17,7 @@ Produktive Referenzscreenshots werden nach dem ersten bestandenen Pi-Hardwaretes
 ## Funktionen
 
 - eine einzige Web-Kiosk-Architektur und ein zentraler Einstiegspunkt
-- vollflächiger Livestream ohne Einblendungen; nur bei Fehlern erscheint ein Hinweis
+- vollflächiger Livestream im eigenen Player: YouTube- und HLS-Quellen laufen in einem video-Element ohne YouTube-Bedienelemente; Antippen, Menü und Dialoge halten das Bild nicht an, bei Aussetzern bleibt das letzte Bild stehen und der Player verbindet sich selbst neu. Andere Seiten werden wie bisher eingebettet
 - Infoleiste unten aus Milchglas: Uhr mit Datum und Systemzeile, Wetter mit Stundenleiste der Regenwahrscheinlichkeit und die nächsten drei Abfahrten
 - Layoutprofile `minimal`, `standard`, `information` und Viewport-Auswahl über `auto`; ausgeschaltete Blöcke verschwinden samt Trenner
 - Themes `dark`, `light`, `high-contrast`, alle Texte mit mindestens 4,5:1 Kontrast, dazu `y2k` mit Wolken am Tag und Sternenhimmel bei Nacht sowie `dagobert` im Comic-Stil (Geldspeicher, fallende Taler, Sternenhimmel)
@@ -42,7 +42,8 @@ BI-StorchCam läuft als Docker-Container (getestet auf Raspberry Pi OS / Debian 
 
 ## Bekannte Einschränkungen
 
-- Eine fremde Stream-Plattform kann Einbettung per CSP oder `X-Frame-Options` blockieren. Ein geladenes `iframe` wird deshalb nicht als bestätigte Wiedergabe bezeichnet.
+- YouTube-Livestreams löst die App mit yt-dlp in eine HLS-Adresse auf (braucht im Container Deno, siehe Dockerfile). Ändert YouTube etwas, das yt-dlp noch nicht kennt, fällt die App auf die Einbettung zurück; ein Update von yt-dlp behebt das meist. Das Abspielen außerhalb des YouTube-Players weicht von den YouTube-Nutzungsbedingungen ab; für den privaten Kiosk ist das eine bewusste Entscheidung.
+- Andere Stream-Plattformen kann die App nur einbetten; sie können das per CSP oder `X-Frame-Options` blockieren. Ein geladenes `iframe` wird deshalb nicht als bestätigte Wiedergabe bezeichnet.
 - ÖPNV basiert aktuell auf dem VRR-Haltestellenmonitor. Andere Regionen werden nicht allgemein als unterstützt beworben.
 - Wayland-Displayrotation wird nicht automatisch verändert. Hardwareprofile wenden Rotation nur sicher unter X11 an.
 - Windows stellt Temperaturwerte nur dar, wenn sie tatsächlich verfügbar sind; andernfalls erscheint `–` beziehungsweise „nicht verfügbar“.
@@ -50,7 +51,7 @@ BI-StorchCam läuft als Docker-Container (getestet auf Raspberry Pi OS / Debian 
 
 ## Externe Dienste
 
-Für Live-Daten benötigt BI-StorchCam Netzwerkzugriff zu Open-Meteo (Wetter, Ortssuche, Zeitzone), Nominatim/OpenStreetMap (Adresssuche), dem VRR-Haltestellenmonitor, für die Musikanzeige zu Spotify bzw. YouTube Music (Google) und für die Livestream-Suche zu YouTube (öffentliche Suchseite bzw. YouTube Data API, Vorschaubilder von i.ytimg.com). Der Stream benötigt Zugriff auf die konfigurierte Streamdomain. Die App enthält keine Cloud-Benutzerverwaltung und sendet keine lokale PIN.
+Für Live-Daten benötigt BI-StorchCam Netzwerkzugriff zu YouTube und googlevideo.com (Livestream über den lokalen Proxy), Open-Meteo (Wetter, Ortssuche, Zeitzone), Nominatim/OpenStreetMap (Adresssuche), dem VRR-Haltestellenmonitor, für die Musikanzeige zu Spotify bzw. YouTube Music (Google) und für die Livestream-Suche zu YouTube (öffentliche Suchseite bzw. YouTube Data API, Vorschaubilder von i.ytimg.com). Der Stream benötigt Zugriff auf die konfigurierte Streamdomain. Die App enthält keine Cloud-Benutzerverwaltung und sendet keine lokale PIN.
 
 ## Docker
 
@@ -129,6 +130,8 @@ BI-StorchCam verarbeitet Standort, Stream-URL und Haltestellen lokal. Externe An
 - Wetter: [Open-Meteo](https://open-meteo.com/)
 - Adresssuche: [Nominatim](https://nominatim.org/), Daten © [OpenStreetMap-Mitwirkende](https://www.openstreetmap.org/copyright)
 - ÖPNV: VRR-Haltestellenmonitor
+
+- Videoplayer: [hls.js](https://github.com/video-dev/hls.js) 1.7.3, Apache-2.0, liegt unter `bi_storchcam/web/vendor/`
 
 Marken und Logos werden nicht unnötig eingebunden.
 
